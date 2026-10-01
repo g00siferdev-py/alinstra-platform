@@ -54,10 +54,22 @@ Better Auth has one global `session.expiresIn` (set to 7 days). Admin sessions a
 
 | Action | Limit |
 | --- | --- |
-| Login failures | 5 failed password attempts per normalized email + client IP, fixed 15-minute window. A successful password (including a 2FA challenge) clears the counter. Lockout returns 429. |
+| Login failures | 5 failed password attempts per normalized email + trusted client IP, fixed 15-minute window. A second counter locks the account after 20 failures in an hour, regardless of IP. A successful password (including a 2FA challenge) clears both counters. Lockout returns 429. |
 | Password reset requests | 3 requests per email per 15 minutes. The response stays generic. |
 
-Better Auth's built-in limiter counts requests per IP, not failed passwords per account, so login lockout is our own counter (Redis when `REDIS_URL` is set, in-memory when `LOCKOUT_STORE=memory` for tests). Client IP comes from the first `X-Forwarded-For` hop, then `X-Real-IP`. Production is behind Railway, which must be the only path to the app so that header is the proxy's value.
+`POST /sign-in/email` must include an email in a JSON or form body. If the email cannot be read, the handler returns 400 and does not call Better Auth, so the attempt cannot skip the counters.
+
+Better Auth's built-in limiter counts requests per IP, not failed passwords per account, so login lockout is our own counter (Redis when `REDIS_URL` is set, in-memory when `LOCKOUT_STORE=memory` for tests). Better Auth's limiter is configured with `advanced.ipAddress.ipAddressHeaders: ["x-real-ip"]`. The auth handler copies the trusted client IP into that header and removes `X-Forwarded-For` before Better Auth sees the request.
+
+**Client IP (checked against Railway docs on 2026-10-01).** [Public networking specs](https://docs.railway.com/networking/public-networking/specs-and-limits) list `X-Real-IP` as the header for the client's remote IP. They do not list `X-Forwarded-For`. Railway staff on Station say the edge overwrites `X-Real-IP`, strips a visitor-supplied `X-Forwarded-For`, and that the leftmost remaining value is the connecting IP, with a possible extra internal hop. They have also reported a CDN bug where `X-Real-IP` became the Fastly edge address. We do not trust the leftmost `X-Forwarded-For` entry, because a client can prepend it when a proxy appends.
+
+Resolution order:
+
+1. `X-Real-IP` when it is present (the value Railway documents and overwrites).
+2. Otherwise `X-Forwarded-For`, counting `TRUSTED_PROXY_HOPS` entries from the right (default `1`, so the rightmost address is the client).
+3. `local` when neither header is present (dev and tests).
+
+The app must only be reachable through Railway's proxy in production. Railway does not publish a stable proxy CIDR, so Better Auth's `trustedProxies` list is not used.
 
 ### Migrations
 
@@ -78,3 +90,11 @@ Vendor choice (Better Stack vs UptimeRobot) is deferred until the first real dep
 - Local and test email uses the console transport. Production must set `EMAIL_TRANSPORT=resend`.
 - Bootstrap admin: `ADMIN_EMAIL` plus `ADMIN_INITIAL_PASSWORD` (seed only). The address is never hardcoded. Re-running seed does not reset an existing password.
 - pnpm version is `10.28.2` (`packageManager` in the root `package.json`, docs, and CI).
+
+### Production secret guard
+
+When `NODE_ENV=production` and the process is not inside `next build` (`NEXT_PHASE=phase-production-build`), startup refuses if `BETTER_AUTH_SECRET` or `ENCRYPTION_KEY` contains `placeholder`, `change-me`, or `build-`, or if `ENCRYPTION_KEY` does not base64-decode to 32 bytes. Docker build placeholders are inline on the web image build command and are not `ENV` in the runtime image. The worker image does not bake secrets at all.
+
+### Direct Prisma in the apps
+
+`apps/web` and `apps/worker` cannot import `prisma` or `createPrismaClient` from `@alinstra/db` (ESLint `no-restricted-imports`). Tenant data goes through the scoped repositories. Two commented exceptions: `GET /api/health` (connection probe) and the worker email jobs (invite row update). `@alinstra/auth` still uses Prisma for Better Auth's adapter and invite acceptance.

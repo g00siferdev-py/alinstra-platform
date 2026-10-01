@@ -1,10 +1,16 @@
 # Status
 
-Phase 0 — foundations and deployment. Implementation is complete and ready for review. Do not start Phase 1 until Daniel signs off.
+Phase 0 — foundations and deployment. Review fixes are committed locally and waiting for another look before push. Do not start Phase 1 until Daniel signs off.
+
+## Review fixes (not pushed)
+
+- Docker build secrets are not stored in the runtime image. Production startup rejects placeholder `BETTER_AUTH_SECRET` / `ENCRYPTION_KEY` values and a key that is not 32 bytes.
+- Login lockout uses Railway's `X-Real-IP`, then the rightmost trusted `X-Forwarded-For` hop (`TRUSTED_PROXY_HOPS`). A per-account limit of 20 failures per hour applies even if the IP changes. `POST /sign-in/email` returns 400 when the email cannot be read.
+- ESLint blocks direct `prisma` imports in the web app and worker, with exceptions for health and worker jobs.
 
 ## Verified locally
 
-- `pnpm lint`, `pnpm typecheck`, and `pnpm test` (cache bypassed): 14 tests passed, including clientId isolation and invite binding
+- `pnpm lint`, `pnpm typecheck`, and `pnpm test` (cache bypassed): 23 tests passed, including the production secret guard, spoofed `X-Forwarded-For`, the per-account lockout, and clientId isolation
 - `GET /api/health` returns `{"ok":true,"db":"up","redis":"up"}`
 - Login, forgot-password, and invite pages render
 - Seeded admin sign-in succeeds; a wrong password returns 401

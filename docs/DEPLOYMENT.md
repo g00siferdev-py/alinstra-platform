@@ -78,6 +78,8 @@ Seed the admin once per environment, from a one-off command with `ADMIN_EMAIL` a
 pnpm db:seed
 ```
 
+Enroll admin two-factor at `/account/security` immediately after the first sign-in, then delete `ADMIN_INITIAL_PASSWORD` from the Railway service variables. Seed does not reset an existing password, and the initial password should not stay in the environment.
+
 ## Cloudflare DNS
 
 Grey cloud (DNS only) first. Add records only for `app` and `staging`, plus Resend when email is verified. Leave the apex alone.
