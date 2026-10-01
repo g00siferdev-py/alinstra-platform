@@ -58,7 +58,10 @@ export const businessSchema = z.object({
 });
 
 export const coverageSchema = z.object({
-  unansweredAfterRings: z.coerce.number().int().min(1).max(20).optional(),
+  unansweredAfterRings: z.preprocess(
+    (value) => (value === "" || value === undefined || value === null ? undefined : value),
+    z.coerce.number().int().min(1).max(20).optional(),
+  ),
   lunchHours: optionalText,
   afterHours: optionalText,
   weekends: optionalText,
@@ -68,7 +71,7 @@ export const coverageSchema = z.object({
 
 export const featuresSchema = z.object({
   messages: optionalText,
-  bookingMode: z.enum(["direct_calendar", "request_only"]).optional(),
+  bookingMode: z.preprocess(emptyToUndefined, z.enum(["direct_calendar", "request_only"]).optional()),
   textConfirmations: z.boolean().optional(),
   textReminders: z.boolean().optional(),
   liveTransfer: z.boolean().optional(),
@@ -77,7 +80,7 @@ export const featuresSchema = z.object({
 });
 
 export const voiceSchema = z.object({
-  voiceId: z.enum(["voice_1", "voice_2", "voice_3", "voice_4"]).optional(),
+  voiceId: z.preprocess(emptyToUndefined, z.enum(["voice_1", "voice_2", "voice_3", "voice_4"]).optional()),
   greeting: optionalText,
   tone: optionalText,
   languages: optionalText,
@@ -92,7 +95,7 @@ export const knowledgeFieldsSchema = z.object({
 });
 
 export const phoneSchema = z.object({
-  mode: z.enum(["new_number", "forward"]).optional(),
+  mode: z.preprocess(emptyToUndefined, z.enum(["new_number", "forward"]).optional()),
   carrier: optionalText,
   currentNumber: optionalText,
   notes: optionalText,

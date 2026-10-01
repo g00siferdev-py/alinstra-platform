@@ -1,4 +1,4 @@
-import type { Prisma } from "./generated/prisma/client";
+import { Prisma } from "./generated/prisma/client";
 import { prisma } from "./client";
 import { recordChange, type Actor } from "./changes";
 import {
@@ -17,8 +17,19 @@ import {
 } from "./domain";
 import { assertTenantContext, type TenantContext } from "./tenant";
 
+function stripEmptyStrings(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(stripEmptyStrings);
+  if (!value || typeof value !== "object") return value;
+  const next: Record<string, unknown> = {};
+  for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+    if (typeof entry === "string" && entry.trim() === "") continue;
+    next[key] = stripEmptyStrings(entry);
+  }
+  return next;
+}
+
 function asPayload(value: unknown): WizardPayload {
-  return wizardPayloadSchema.parse(value);
+  return wizardPayloadSchema.parse(stripEmptyStrings(value));
 }
 
 function json(value: unknown): Prisma.InputJsonValue {
@@ -139,11 +150,11 @@ async function applyStep(tx: Prisma.TransactionClient, clientId: string, step: n
     await tx.knowledgeBase.updateMany({
       where: { clientId, status: "draft" },
       data: {
-        hours: fields.hours ?? null,
-        services: fields.services ?? null,
-        faqs: fields.faqs ?? null,
-        policies: fields.policies ?? null,
-        staff: fields.staff ?? null,
+        hours: fields.hours ?? Prisma.DbNull,
+        services: fields.services ?? Prisma.DbNull,
+        faqs: fields.faqs ?? Prisma.DbNull,
+        policies: fields.policies ?? Prisma.DbNull,
+        staff: fields.staff ?? Prisma.DbNull,
       },
     });
   }

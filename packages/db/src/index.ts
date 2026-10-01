@@ -13,6 +13,7 @@ export {
   MAX_DOCUMENTS_PER_VERSION,
   MAX_EXTRACTED_CHARS,
   MAX_FILE_BYTES,
+  emptyWizardPayload,
   healthcareRequired,
   wizardPayloadSchema,
 } from "./domain";
