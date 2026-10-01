@@ -1,48 +1,37 @@
 # Status
 
-Phase 0 — foundations and deployment. Review fixes are committed locally and waiting for another look before push. Do not start Phase 1 until Daniel signs off.
-
-## Review fixes (not pushed)
-
-- Docker build secrets are not stored in the runtime image. Production startup rejects placeholder `BETTER_AUTH_SECRET` / `ENCRYPTION_KEY` values and a key that is not 32 bytes.
-- Login lockout uses Railway's `X-Real-IP`, then the rightmost trusted `X-Forwarded-For` hop (`TRUSTED_PROXY_HOPS`). A per-account limit of 20 failures per hour applies even if the IP changes. `POST /sign-in/email` returns 400 when the email cannot be read.
-- ESLint blocks direct `prisma` imports in the web app and worker, with exceptions for health and worker jobs.
+Phase 1 — wizard, knowledge files, plans, and the client portal shell. Committed locally. Do not push until Daniel asks. Do not start Phase 2.
 
 ## Verified locally
 
-- `pnpm lint`, `pnpm typecheck`, and `pnpm test` (cache bypassed): 23 tests passed, including the production secret guard, spoofed `X-Forwarded-For`, the per-account lockout, and clientId isolation
-- `GET /api/health` returns `{"ok":true,"db":"up","redis":"up"}`
-- Login, forgot-password, and invite pages render
-- Seeded admin sign-in succeeds; a wrong password returns 401
-- `/home` shows the two-factor gate and hides invite tools until enrollment
-- `/account/security` renders the authenticator setup form for an admin without 2FA
+- `pnpm lint`, `pnpm typecheck`, and `pnpm test`: 31 tests passed
+- Isolation: a client user cannot read another client's draft, knowledge, documents, or change log. A storage key is always under that client's id.
+- Extraction: truncated text, a malformed or oversized DOCX fails as `ExtractionFailed`, and the timeout helper rejects
+- Production env guard still rejects placeholder secrets. Staging and production also require R2 (`STORAGE_DRIVER=s3`)
 
-## Shipped in Phase 0
+## Shipped in Phase 1
 
-- pnpm 10.28.2 + Turborepo monorepo, `@alinstra/*` packages
-- Prisma 7.10.0 schema: Better Auth tables, minimal `Client`, custom `Invite`
-- Scoped repositories and Vitest isolation tests
-- Better Auth email/password, invite-only signup, password reset, admin TOTP
-- Session caps and login / reset rate limits (`docs/DECISIONS.md`)
-- BullMQ email worker (`send-invite-email`, `send-password-reset-email`)
-- `GET /api/health`, Sentry with `sendDefaultPii: false` and body scrubbing
-- Seed from `ADMIN_EMAIL`
-- GitHub Actions CI (lint, typecheck, tests, Postgres)
-- Railway config: migrate on the web service only
-- `docs/DECISIONS.md`, `docs/DEPLOYMENT.md`, this file
+- `Plan`, expanded `Client`, `WizardDraft`, `KnowledgeBase`, `KnowledgeDocument`, `ChangeLog`
+- Scoped repositories and isolation tests for the new tenant-scoped tables
+- Change log written in the same transaction as the change
+- 11-step admin wizard with autosave, per-step validation, and submit that stays `lead`
+- Private uploads (local disk in dev, R2 presign in staging/production) and authenticated downloads
+- Worker job `extract-knowledge-text` (60s timeout, 200,000 character cap)
+- Admin client list (Wizard submitted badge), client detail (invite, discard, users, change log), `/admin/plans`
+- Portal home, team (owner only), and read-only My Business for owner and staff
 
 ## Explicitly deferred
 
-- Uptime monitor vendor (placeholder in `docs/DEPLOYMENT.md`)
-- Railway project creation and Cloudflare records (Daniel, using `docs/DEPLOYMENT.md`)
+- Retell, Stripe, Twilio, calendar, demo mode, and provisioning
+- Uptime monitor vendor
+- Railway project creation and Cloudflare records
 - First staging database restore drill
-- Phase 1 wizard, portal, and integrations
 
 ## How to run
 
-See the root `README.md`. Admin sign-in requires two-factor enrollment at `/account/security` before client and invite tools are available.
+See the root `README.md`. Admin sign-in still requires two-factor enrollment at `/account/security` before `/admin/clients` and `/admin/plans`.
 
 ## How to resume
 
-1. Read `docs/DECISIONS.md` and this file.
-2. Phase 1 starts only after review of Phase 0.
+1. Read `docs/DECISIONS.md`, `docs/phase-1-plan.md`, and this file.
+2. Phase 2 starts only after review of Phase 1.

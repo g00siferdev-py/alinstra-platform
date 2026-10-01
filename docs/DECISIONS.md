@@ -69,7 +69,7 @@ Resolution order:
 2. Otherwise `X-Forwarded-For`, counting `TRUSTED_PROXY_HOPS` entries from the right (default `1`, so the rightmost address is the client).
 3. `local` when neither header is present (dev and tests).
 
-The app must only be reachable through Railway's proxy in production. Railway does not publish a stable proxy CIDR, so Better Auth's `trustedProxies` list is not used.
+The app must only be reachable through Railway's proxy in production. Railway does not publish a stable proxy CIDR, so Better Auth's `trustedProxies` list is not used. The handler rebuilds the request from its URL, method, headers, and body before Better Auth sees it. Reusing Next's request object with new headers throws.
 
 ### Migrations
 
@@ -97,4 +97,36 @@ When `NODE_ENV=production` and the process is not inside `next build` (`NEXT_PHA
 
 ### Direct Prisma in the apps
 
-`apps/web` and `apps/worker` cannot import `prisma` or `createPrismaClient` from `@alinstra/db` (ESLint `no-restricted-imports`). Tenant data goes through the scoped repositories. Two commented exceptions: `GET /api/health` (connection probe) and the worker email jobs (invite row update). `@alinstra/auth` still uses Prisma for Better Auth's adapter and invite acceptance.
+`apps/web` and `apps/worker` cannot import `prisma` or `createPrismaClient` from `@alinstra/db` (ESLint `no-restricted-imports`). Tenant data goes through the scoped repositories. Commented exceptions: `GET /api/health` (connection probe), the worker invite email job, and `extract-knowledge-text` (extraction status for one document id). `@alinstra/auth` still uses Prisma for Better Auth's adapter and invite acceptance.
+
+## 2026-10-01 — Phase 1
+
+### Files
+
+Cloudflare R2, one private bucket per environment. Local disk uses `UPLOAD_DIR` (default `.data/uploads`, gitignored). A relative path is resolved from the monorepo root so the web app and the worker share one directory. Staging and production set `STORAGE_DRIVER=s3` with an R2 endpoint. The bucket is never public. Production startup refuses `local` storage and a missing bucket, endpoint, or key.
+
+Object keys are `clients/{clientId}/knowledge/{documentId}`. Keys must start with `clients/` and cannot contain `..` or a backslash.
+
+Uploads do not use a Next.js server action (the default body cap is 1 MB). The browser posts metadata to `POST /api/knowledge/uploads`. Locally the file is then `PUT` to the app route. On R2 the same route returns a presigned PUT, and a follow-up POST confirms the object. Size, extension, content type, and magic bytes are checked on the server either way. Limits: 10 MB per file, 50 MB per client, 25 files per knowledge version. Allowed types: PDF, DOCX, TXT, CSV.
+
+Downloads go through `GET /api/knowledge/documents/[id]`. The handler loads the row with the caller's tenant context first. A missing or other-client row is 404. Only then does it redirect to a presigned GET that expires in 5 minutes, or stream the local file. `knowledgeDocuments.getById` returns null for another client's document; that is covered by the Phase 1 isolation tests.
+
+### Extraction
+
+`extract-knowledge-text` runs in the worker. Timeout is 60 seconds. Extracted text is capped at 200,000 characters and `extractedTextTruncated` is set when the rest is dropped. A malformed or oversized DOCX (zip) fails that document and does not crash the worker. PDF uses `unpdf`, DOCX uses `mammoth` after a zip check, TXT and CSV must be valid UTF-8.
+
+### Wizard and portal
+
+Submit keeps status `lead`, sets `wizardSubmittedAt`, and stores `portalOwnerEmail`. It does not create an invite. The admin client detail page has "Send portal invite", which uses the existing admin invite flow. The client list shows a "Wizard submitted" badge.
+
+Healthcare industries are `dental` and `medical_office`. Those auto-check `healthcareSensitive` unless an admin has edited the flag. Submit is blocked until `complianceReviewDone` is checked and `complianceReviewNote` is non-empty.
+
+Street address is optional. Default timezone is `America/New_York`. Extra configuration-change fee seeds at 4900 cents and is editable on `/admin/plans`. Seeded plan prices are not overwritten on a later seed (`update: {}`).
+
+Discarding an unsubmitted draft sets `archivedAt` and `discardedAt` and writes `wizard.discarded` in the same transaction. Object deletes run after that commit. A failed delete is logged without the file body.
+
+`client_staff` can open My Business, read-only. Team stays `client_owner` only.
+
+Website import, voice audio, phone purchasing, and the agent prompt are stored as notes or labels. Phase 1 does not call Retell, Stripe, Twilio, or a calendar API.
+
+Auth and database tests share one Postgres database and both truncate it. `@alinstra/auth` tests run after `@alinstra/db` tests so one suite cannot truncate the other's rows.
