@@ -1,10 +1,11 @@
-import { ADMIN_SESSION_MS, auth } from "@alinstra/auth";
+import { ADMIN_SESSION_MS, auth, readAllowedSession } from "@alinstra/auth";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 export async function getSession() {
   const headerList = await headers();
-  const session = await auth.api.getSession({ headers: headerList });
+  const session = await readAllowedSession(headerList);
+  if (session === "blocked") redirect("/login?notice=unavailable");
   if (!session) return null;
   if (session.user.role === "admin") {
     const created = new Date(session.session.createdAt).getTime();

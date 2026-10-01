@@ -1,5 +1,5 @@
 import { ClientActions } from "@/components/client-actions";
-import { changeLogs, clients, knowledgeBases, knowledgeDocuments, plans, users } from "@alinstra/db";
+import { changeLogs, clientCanBeRemoved, clients, knowledgeBases, knowledgeDocuments, plans, users } from "@alinstra/db";
 import { requireAdmin } from "@/lib/session";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -24,7 +24,13 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
           <h1 className="text-2xl font-semibold">{client.name}</h1>
           <p className="text-sm text-[var(--muted)]">{client.status}{client.wizardSubmittedAt ? " · Wizard submitted" : ""}</p>
         </div>
-        <ClientActions clientId={client.id} name={client.name} email={client.portalOwnerEmail} canDiscard={!client.wizardSubmittedAt} />
+        <ClientActions
+          clientId={client.id}
+          name={client.name}
+          email={client.portalOwnerEmail}
+          canDiscard={!client.wizardSubmittedAt}
+          canRemove={clientCanBeRemoved(client.status)}
+        />
       </header>
       {!client.wizardSubmittedAt ? <Link href={`/admin/clients/${client.id}/wizard`}>Continue wizard</Link> : null}
       <section className="rounded-xl border border-[var(--line)] p-4">

@@ -3,6 +3,7 @@ import { prisma } from "./client";
 import { recordChange, type Actor } from "./changes";
 import {
   businessSchema,
+  clientCanBeRemoved,
   complianceSchema,
   coverageSchema,
   emptyWizardPayload,
@@ -280,17 +281,40 @@ export async function removeClient(ctx: Actor, clientId: string) {
   assertTenantContext(ctx);
   if (ctx.role !== "admin") throw new Error("Only admin can remove a client");
   const documents = await prisma.knowledgeDocument.findMany({
-    where: { clientId },
-    select: { storageKey: true },
+    where: { clientId, extractionStatus: { not: "deleted" } },
+    select: { id: true, storageKey: true },
   });
   await prisma.$transaction(async (tx) => {
     const client = await tx.client.findFirst({ where: { id: clientId, archivedAt: null } });
     if (!client) throw new Error("That client is not available.");
-    await tx.client.update({ where: { id: clientId }, data: { archivedAt: new Date() } });
+    if (!clientCanBeRemoved(client.status)) {
+      throw new Error("Only a lead or demo client can be removed.");
+    }
+    const removedAt = new Date();
+    await tx.client.update({ where: { id: clientId }, data: { archivedAt: removedAt } });
     await tx.wizardDraft.updateMany({
       where: { clientId, discardedAt: null },
-      data: { discardedAt: new Date() },
+      data: { discardedAt: removedAt },
     });
+    await tx.invite.updateMany({
+      where: { clientId, acceptedAt: null, revokedAt: null },
+      data: { revokedAt: removedAt },
+    });
+    const people = await tx.user.findMany({ where: { clientId }, select: { id: true } });
+    if (people.length > 0) {
+      await tx.session.deleteMany({ where: { userId: { in: people.map((person) => person.id) } } });
+    }
+    for (const document of documents) {
+      await tx.knowledgeDocument.update({
+        where: { id: document.id },
+        data: {
+          storageKey: `deleted/${document.id}`,
+          extractionStatus: "deleted",
+          extractedText: null,
+          extractionError: null,
+        },
+      });
+    }
     await recordChange(tx, {
       clientId,
       actor: ctx,
@@ -300,7 +324,7 @@ export async function removeClient(ctx: Actor, clientId: string) {
       summary: `Removed ${client.name}`,
     });
   });
-  return documents.map((document) => document.storageKey);
+  return documents.map((document) => document.storageKey).filter((key) => key.startsWith("clients/"));
 }
 
 export function changeLogs(ctx: TenantContext) {

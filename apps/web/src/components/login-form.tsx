@@ -5,8 +5,8 @@ import { Button, ErrorText, Input, Label } from "@/components/ui";
 import Link from "next/link";
 import { useState, type FormEvent } from "react";
 
-export function LoginForm() {
-  const [error, setError] = useState<string | null>(null);
+export function LoginForm({ notice }: { notice?: string | null }) {
+  const [error, setError] = useState<string | null>(notice ?? null);
   const [pending, setPending] = useState(false);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
@@ -20,7 +20,9 @@ export function LoginForm() {
     });
     setPending(false);
     if (result.error) {
-      setError(result.error.status === 429 ? "Too many attempts. Try again later." : "Email or password is incorrect.");
+      if (result.error.status === 429) setError("Too many attempts. Try again later.");
+      else if (result.error.status === 403) setError("This account cannot be used.");
+      else setError("Email or password is incorrect.");
       return;
     }
     window.location.href = "/home";

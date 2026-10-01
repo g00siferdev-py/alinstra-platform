@@ -25,6 +25,11 @@ export const MAX_EXTRACTED_CHARS = 200_000;
 export const EXTRACT_TIMEOUT_MS = 60_000;
 export const DEFAULT_TIMEZONE = "America/New_York";
 export const EXTRA_CHANGE_FEE_CENTS = 4900;
+export const REMOVABLE_CLIENT_STATUSES = ["lead", "demo"] as const;
+
+export function clientCanBeRemoved(status: string): boolean {
+  return (REMOVABLE_CLIENT_STATUSES as readonly string[]).includes(status);
+}
 
 export const ALLOWED_DOCUMENT_TYPES = {
   "application/pdf": "pdf",

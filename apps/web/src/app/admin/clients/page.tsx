@@ -1,5 +1,5 @@
 import { RemoveClientButton } from "@/components/client-actions";
-import { clients, plans } from "@alinstra/db";
+import { clientCanBeRemoved, clients, plans } from "@alinstra/db";
 import { requireAdmin } from "@/lib/session";
 import Link from "next/link";
 
@@ -22,7 +22,7 @@ export default async function ClientsPage() {
               {client.planId ? <span className="ml-2 text-sm">{planName.get(client.planId)}</span> : null}
               {client.wizardSubmittedAt ? <span className="ml-2 rounded bg-[var(--accent)] px-2 py-0.5 text-xs text-[var(--accent-ink)]">Wizard submitted</span> : null}
             </Link>
-            <RemoveClientButton clientId={client.id} name={client.name} />
+            {clientCanBeRemoved(client.status) ? <RemoveClientButton clientId={client.id} name={client.name} /> : null}
           </li>
         ))}
       </ul>

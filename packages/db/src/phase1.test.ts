@@ -178,6 +178,9 @@ describe("phase 1 tenancy", () => {
     expect(visible.map((client) => client.id)).not.toContain(clientB.id);
     expect(await prisma.changeLog.count({ where: { action: "client.removed", clientId: clientB.id } })).toBe(1);
     expect((await prisma.wizardDraft.findFirst({ where: { clientId: clientB.id } }))?.discardedAt).not.toBeNull();
+    const stored = await prisma.knowledgeDocument.findUnique({ where: { id: document.id } });
+    expect(stored?.extractionStatus).toBe("deleted");
+    expect(stored?.storageKey.startsWith("clients/")).toBe(false);
 
     const plan = await prisma.plan.findFirstOrThrow({ where: { code: "starter" } });
     const draft = await prisma.wizardDraft.findFirstOrThrow({ where: { clientId: clientA.id } });
@@ -200,5 +203,31 @@ describe("phase 1 tenancy", () => {
     });
     await removeClient(admin, clientA.id);
     expect(await clients({ role: "admin" }).list()).toHaveLength(0);
+
+    const live = await startWizard(admin, "Live");
+    await prisma.client.update({ where: { id: live.id }, data: { status: "active" } });
+    await expect(removeClient(admin, live.id)).rejects.toThrow(/lead or demo/);
+    expect(await clients({ role: "admin" }).getById(live.id)).not.toBeNull();
+
+    const owner = await prisma.user.create({
+      data: { id: "owner_live", name: "Owner", email: "owner-live@example.com", role: "client_owner", clientId: live.id },
+    });
+    await prisma.session.create({
+      data: { id: "sess_live", token: "tok_live", expiresAt: new Date(Date.now() + 60_000), userId: owner.id },
+    });
+    await prisma.invite.create({
+      data: {
+        email: "pending-live@example.com",
+        role: "client_staff",
+        clientId: live.id,
+        tokenHash: "hash_live",
+        expiresAt: new Date(Date.now() + 60_000),
+        createdById: admin.id,
+      },
+    });
+    await prisma.client.update({ where: { id: live.id }, data: { status: "demo" } });
+    await removeClient(admin, live.id);
+    expect(await prisma.session.count({ where: { userId: owner.id } })).toBe(0);
+    expect((await prisma.invite.findFirst({ where: { email: "pending-live@example.com" } }))?.revokedAt).not.toBeNull();
   });
 });

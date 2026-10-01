@@ -13,6 +13,8 @@ export {
   MAX_DOCUMENTS_PER_VERSION,
   MAX_EXTRACTED_CHARS,
   MAX_FILE_BYTES,
+  REMOVABLE_CLIENT_STATUSES,
+  clientCanBeRemoved,
   emptyWizardPayload,
   healthcareRequired,
   wizardPayloadSchema,

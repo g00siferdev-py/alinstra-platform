@@ -6,6 +6,7 @@ import { prismaAdapter } from "better-auth/adapters/prisma";
 import { twoFactor } from "better-auth/plugins";
 import { ADMIN_SESSION_MS, CLIENT_SESSION_SECONDS, CLIENT_SESSION_UPDATE_AGE_SECONDS, MIN_PASSWORD_LENGTH } from "./constants";
 import { redisSecondaryStorage } from "./redis-storage";
+import { sessionBlockedForUser } from "./client-access";
 
 function useMemoryLimits(): boolean {
   const env = getEnv();
@@ -91,6 +92,7 @@ export const auth = betterAuth({
         before: async (session) => {
           const userId = (session as SessionWrite).userId;
           if (!userId) return { data: session };
+          if (await sessionBlockedForUser(userId)) return false;
           const user = await prisma.user.findUnique({ where: { id: userId }, select: { role: true } });
           if (user?.role !== "admin") return { data: session };
           return {

@@ -1,11 +1,14 @@
-import { randomBytes } from "node:crypto";
-import { prisma } from "@alinstra/db";
+import { createHash, randomBytes } from "node:crypto";
+import { prisma, removeClient } from "@alinstra/db";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { acceptInvite, createInvite } from "./invites";
 import { resetMemoryCounter } from "./counter";
 import { LOGIN_LOCKOUT } from "./constants";
 import { getCounter } from "./counter";
 import { clearLoginFailures, loginLocked, recordLoginFailure } from "./lockout";
+import { handleAuthRequest } from "./handler";
+import { readAllowedSession } from "./session-access";
+import { createCredentialUser } from "./users";
 
 async function resetDatabase(): Promise<void> {
   await prisma.$executeRawUnsafe(
@@ -99,5 +102,73 @@ describe("login lockout", () => {
     await clearLoginFailures(email, ip);
     expect(await loginLocked(email, ip)).toBe(false);
     expect(getCounter()).toBeTruthy();
+  });
+});
+
+describe("archived client access", () => {
+  beforeEach(async () => {
+    await resetDatabase();
+    resetMemoryCounter();
+  });
+
+  it("does not keep a session and does not accept a pending invite", async () => {
+    const client = await prisma.client.create({ data: { name: "Gone", status: "lead" } });
+    const admin = await prisma.user.create({
+      data: { id: "admin_arch", name: "Admin", email: "admin-arch@example.com", role: "admin" },
+    });
+    const owner = await createCredentialUser({
+      email: "gone@example.com",
+      name: "Gone",
+      password: "correct-horse-battery",
+      role: "client_owner",
+      clientId: client.id,
+    });
+    const token = randomBytes(32).toString("base64url");
+    await prisma.invite.create({
+      data: {
+        email: "staff-gone@example.com",
+        role: "client_staff",
+        clientId: client.id,
+        tokenHash: createHash("sha256").update(token).digest("hex"),
+        expiresAt: new Date(Date.now() + 60_000),
+        createdById: admin.id,
+      },
+    });
+
+    const signedIn = await handleAuthRequest(
+      new Request("http://localhost:3000/api/auth/sign-in/email", {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: "http://localhost:3000" },
+        body: JSON.stringify({ email: "gone@example.com", password: "correct-horse-battery" }),
+      }),
+    );
+    expect(signedIn.status).toBe(200);
+    const cookies = signedIn.headers.getSetCookie();
+    const pair = cookies.map((value) => value.split(";")[0] ?? "").find((value) => value.includes("session_token"));
+    expect(pair).toBeTruthy();
+
+    await prisma.client.update({ where: { id: client.id }, data: { archivedAt: new Date() } });
+    const blocked = await readAllowedSession(new Headers({ cookie: pair ?? "" }));
+    expect(blocked).toBe("blocked");
+    expect(await prisma.session.count({ where: { userId: owner.id } })).toBe(0);
+    await prisma.client.update({ where: { id: client.id }, data: { archivedAt: null } });
+
+    await removeClient({ id: admin.id, role: "admin" }, client.id);
+    const session = await readAllowedSession(new Headers({ cookie: pair ?? "" }));
+    expect(session).toBeNull();
+    expect(await prisma.session.count({ where: { userId: owner.id } })).toBe(0);
+
+    const again = await handleAuthRequest(
+      new Request("http://localhost:3000/api/auth/sign-in/email", {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: "http://localhost:3000" },
+        body: JSON.stringify({ email: "gone@example.com", password: "correct-horse-battery" }),
+      }),
+    );
+    expect(again.status).toBe(403);
+    expect(await prisma.session.count({ where: { userId: owner.id } })).toBe(0);
+    await expect(acceptInvite({ token, name: "Staff", password: "correct-horse-battery" })).rejects.toThrow(
+      /invalid or has expired/,
+    );
   });
 });

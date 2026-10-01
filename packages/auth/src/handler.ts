@@ -7,6 +7,8 @@ import {
   recordLoginFailure,
   recordPasswordResetRequest,
 } from "./lockout";
+import { ARCHIVED_CLIENT_MESSAGE, sessionBlockedForUser } from "./client-access";
+import { prisma } from "@alinstra/db";
 
 function authPath(request: Request): string {
   const { pathname } = new URL(request.url);
@@ -73,6 +75,16 @@ export async function handleAuthRequest(request: Request): Promise<Response> {
 
   if (path === "/sign-in/email" && email && (await loginLocked(email, ip))) {
     return tooMany();
+  }
+
+  if (path === "/sign-in/email" && email) {
+    const user = await prisma.user.findUnique({
+      where: { email: email.toLowerCase() },
+      select: { id: true },
+    });
+    if (user && (await sessionBlockedForUser(user.id))) {
+      return Response.json({ message: ARCHIVED_CLIENT_MESSAGE }, { status: 403 });
+    }
   }
 
   if ((path === "/request-password-reset" || path === "/forget-password") && email) {

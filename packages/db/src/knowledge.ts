@@ -52,14 +52,14 @@ export function knowledgeDocuments(ctx: TenantContext) {
     list(clientId: string) {
       assertClientAccess(ctx, clientId);
       return prisma.knowledgeDocument.findMany({
-        where: { clientId, ...clientFilter },
+        where: { clientId, extractionStatus: { not: "deleted" }, ...clientFilter },
         select: documentSelect,
         orderBy: { createdAt: "asc" },
       });
     },
     getById(id: string) {
       return prisma.knowledgeDocument.findFirst({
-        where: { id, ...clientFilter },
+        where: { id, extractionStatus: { not: "deleted" }, ...clientFilter },
         select: documentSelect,
       });
     },

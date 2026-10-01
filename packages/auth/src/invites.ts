@@ -69,6 +69,11 @@ export async function acceptInvite(input: {
     throw new AuthError("This invite is invalid or has expired.");
   }
 
+  const client = await prisma.client.findUnique({ where: { id: invite.clientId }, select: { archivedAt: true } });
+  if (!client || client.archivedAt) {
+    throw new AuthError("This invite is invalid or has expired.");
+  }
+
   const existing = await prisma.user.findUnique({ where: { email: invite.email } });
   if (existing) throw new AuthError("An account with this email already exists.");
 
