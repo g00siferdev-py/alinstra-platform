@@ -1,0 +1,6 @@
+# Web service only. Set this file as the Railway config path for the web service.
+# Migrations run here, once, before the new web instance starts.
+
+[deploy]
+preDeployCommand = "pnpm --filter @alinstra/db exec prisma migrate deploy"
+startCommand = "pnpm --filter @alinstra/web start"

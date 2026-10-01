@@ -1,9 +1,16 @@
-# Local infrastructure for Phase 0 foundations.
-# Postgres + Redis are required day one. Web/worker containers land with the rest of Phase 0.
+# Local Phase 0 stack: Postgres, Redis, web, and worker.
 #
-# Usage:
-#   docker compose up -d
-#   docker compose down
+# Fast path (host processes, recommended while coding):
+#   docker compose up -d postgres redis
+#   pnpm db:migrate && pnpm db:seed
+#   pnpm dev:web
+#   pnpm dev:worker
+#
+# Full stack:
+#   docker compose up -d --build
+#
+# Apply migrations from the host before the web container serves traffic.
+# The worker never runs migrations.
 
 services:
   postgres:
@@ -37,6 +44,46 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    container_name: alinstra-web
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: development
+      EMAIL_TRANSPORT: console
+      DATABASE_URL: postgresql://alinstra:alinstra@postgres:5432/alinstra?schema=public
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: .
+      dockerfile: apps/worker/Dockerfile
+    container_name: alinstra-worker
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: development
+      EMAIL_TRANSPORT: console
+      DATABASE_URL: postgresql://alinstra:alinstra@postgres:5432/alinstra?schema=public
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 
 volumes:
   alinstra_pg_data:

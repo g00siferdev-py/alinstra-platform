@@ -1,0 +1,53 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: alinstra
+          POSTGRES_PASSWORD: alinstra
+          POSTGRES_DB: alinstra
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U alinstra -d alinstra"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      NODE_ENV: test
+      APP_URL: http://localhost:3000
+      BETTER_AUTH_URL: http://localhost:3000
+      ADMIN_EMAIL: admin@example.com
+      ADMIN_INITIAL_PASSWORD: ci-admin-password
+      DATABASE_URL: postgresql://alinstra:alinstra@localhost:5432/alinstra?schema=public
+      REDIS_URL: redis://localhost:6379
+      EMAIL_FROM: notifications@alinstra.com
+      EMAIL_TRANSPORT: console
+      LOCKOUT_STORE: memory
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Create test secrets
+        run: |
+          echo "BETTER_AUTH_SECRET=$(node -e "console.log(require('crypto').randomBytes(32).toString('base64'))")" >> "$GITHUB_ENV"
+          echo "ENCRYPTION_KEY=$(node -e "console.log(require('crypto').randomBytes(32).toString('base64'))")" >> "$GITHUB_ENV"
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @alinstra/db generate
+      - run: pnpm db:migrate:deploy
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test

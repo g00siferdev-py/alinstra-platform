@@ -1,0 +1,5 @@
+# Worker service. Do not add a pre-deploy migration command.
+# Schema changes are applied by the web service before traffic moves.
+
+[deploy]
+startCommand = "pnpm --filter @alinstra/worker start"
