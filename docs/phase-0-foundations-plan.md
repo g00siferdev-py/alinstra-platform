@@ -1,6 +1,6 @@
 # Phase 0: Foundations & Deployment — Plan
 
-**Status:** Draft for approval (no code yet)  
+**Status:** Approved — implementation in progress (see `docs/STATUS.md`)  
 **Scope:** Foundations & Deployment only — no product features beyond auth/scaffold/infra  
 **Repo:** `g00siferdev-py/alinstra-platform` (`origin/main` @ `1eb215d`)  
 **Brief:** `RECEPTIONIST_DASHBOARD_BRIEF.md` — **on `origin/main` @ `1eb215d`** (source of truth)  
@@ -84,7 +84,7 @@ alinstra-platform/
 | Tool | Version (pin) | Role |
 |---|---|---|
 | Node.js | **22.x LTS** (`>=20.9` required by Next) | Runtime |
-| pnpm | **10.11.5** (or current 10.x at install) | Package manager / workspaces |
+| pnpm | **10.28.2** | Package manager / workspaces |
 | Turborepo | **2.11.5** | Task orchestration |
 | TypeScript | **5.9.3** (strict) | Language |
 | ESLint | **9.x** (align with Next ESLint flat config at scaffold) | Lint |

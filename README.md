@@ -2,71 +2,71 @@
 
 Operations platform for Alinstra Technologies (AI receptionist dashboard).
 
-> **Phase 0 status:** plan is in-repo for review. This commit is a **minimal monorepo scaffold** only — auth, Prisma depth, BullMQ jobs, and Railway deploy are **not** implemented until the plan is approved to proceed.
+Phase 0 (foundations) is implemented on this branch. Product features start at Phase 1. Decisions: [`docs/DECISIONS.md`](./docs/DECISIONS.md). Current state: [`docs/STATUS.md`](./docs/STATUS.md). Deploy steps: [`docs/DEPLOYMENT.md`](./docs/DEPLOYMENT.md).
 
-## Review the Phase 0 plan
-
-Read: [`docs/phase-0-foundations-plan.md`](./docs/phase-0-foundations-plan.md)
-
-Source of truth for product scope: [`RECEPTIONIST_DASHBOARD_BRIEF.md`](./RECEPTIONIST_DASHBOARD_BRIEF.md)
+Source of truth for product scope: [`RECEPTIONIST_DASHBOARD_BRIEF.md`](./RECEPTIONIST_DASHBOARD_BRIEF.md).
 
 ## Prerequisites
 
-- **Node.js** `>=20.9` (22.x LTS preferred)
-- **pnpm** 10.x (`corepack enable` then `corepack prepare pnpm@10.28.2 --activate`, or install via npm)
-- **Docker Desktop** (or Docker Engine + Compose) for Postgres + Redis
-
-> On this Windows machine, Docker Desktop / WSL were not installed at scaffold time. Install Docker Desktop first if `docker compose` is unavailable.
+- **Node.js** 22.x LTS (`>=20.9` required)
+- **pnpm** 10.28.2 (`corepack enable` then `corepack prepare pnpm@10.28.2 --activate`)
+- **Docker Desktop** with the WSL 2 backend, for Postgres and Redis
 
 ## Local setup
 
 ```bash
-# 1. Install workspace deps
 pnpm install
-
-# 2. Env file (never commit .env)
 cp .env.example .env
-# Edit ADMIN_EMAIL and BETTER_AUTH_SECRET before seeding (seed lands in full Phase 0)
-
-# 3. Start Postgres + Redis
-docker compose up -d
-
-# 4. Smoke the stubs (replaced by real Next.js / worker in full Phase 0)
-pnpm --filter @alinstra/web dev
-pnpm --filter @alinstra/worker dev
 ```
 
-Turbo shortcuts (once apps are real):
+Edit `.env` before seeding:
+
+- `BETTER_AUTH_SECRET` — `openssl rand -base64 32`
+- `ENCRYPTION_KEY` — `openssl rand -base64 32` (32 bytes; see `docs/DECISIONS.md`)
+- `ADMIN_EMAIL` and `ADMIN_INITIAL_PASSWORD` (12+ characters)
 
 ```bash
-pnpm dev          # turbo run dev across apps
-pnpm build
-pnpm lint
-pnpm test
+docker compose up -d postgres redis
+pnpm db:generate
+pnpm db:migrate
+pnpm db:seed
+pnpm dev:web
+pnpm dev:worker
 ```
 
-## Layout (target)
+Web: http://localhost:3000. Health: http://localhost:3000/api/health.
+
+`pnpm dev` runs both through Turborepo. Email in local development is printed to the worker log (`EMAIL_TRANSPORT=console`).
+
+`docker compose up -d --build` also builds web and worker containers. Apply migrations from the host first. The worker never migrates.
+
+## Scripts
+
+| Command | What it does |
+| --- | --- |
+| `pnpm dev` | Web and worker |
+| `pnpm lint` | ESLint |
+| `pnpm typecheck` | `tsc --noEmit` |
+| `pnpm test` | Vitest, including `clientId` isolation |
+| `pnpm db:migrate` | `prisma migrate dev` |
+| `pnpm db:migrate:deploy` | `prisma migrate deploy` (Railway web pre-deploy) |
+| `pnpm db:seed` | Create the admin from `ADMIN_EMAIL` |
+
+## Layout
 
 ```text
-apps/web          # Next.js App Router (stub for now)
-apps/worker       # BullMQ worker (stub for now)
-packages/*        # @alinstra/* shared packages (tsconfig starter only for now)
-docs/             # Decisions, status, deployment + Phase 0 plan
-docker-compose.yml
+apps/web          Next.js App Router
+apps/worker       BullMQ consumer (email jobs)
+packages/config   Env, logs, Sentry scrubbing
+packages/crypto   AES-256-GCM for app-owned secrets
+packages/db       Prisma schema, migrations, scoped repositories
+packages/auth     Better Auth, invites, lockout
+packages/email    Resend or console
+packages/queue    BullMQ queue and payload schemas
 ```
 
-## What this scaffold does / does not do
+## Hostnames
 
-| Included now | Deferred until plan “go” |
-|---|---|
-| pnpm + Turborepo workspace | Better Auth (login, invite, 2FA, reset) |
-| `apps/web` + `apps/worker` stubs | Prisma schema + migrations + scoped repos |
-| `.gitignore`, `.env.example` | BullMQ jobs + email (Resend / console) |
-| Compose: Postgres 16 + Redis 7 | `/api/health`, Sentry, seed script |
-| Plan MD in `docs/` | Railway staging/production + `DEPLOYMENT.md` depth |
-
-## Hostnames (locked; do not touch apex)
-
-- Production: `app.alinstra.com`
-- Staging: `staging.alinstra.com`
-- Marketing apex `alinstra.com` is out of scope for this repo
+- Production: `app.alinstra.com` (`main`)
+- Staging: `staging.alinstra.com` (`staging`)
+- Marketing apex `alinstra.com` is out of scope
