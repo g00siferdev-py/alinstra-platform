@@ -1,4 +1,5 @@
 import { log } from "@alinstra/config";
+// Exception: liveness probe, not tenant data. See docs/DECISIONS.md.
 import { prisma } from "@alinstra/db";
 import { getRedis } from "@alinstra/queue";
 

@@ -1,5 +1,6 @@
 import { getEnv, log, scrubSentryEvent, type SentryLikeEvent } from "@alinstra/config";
 import { decryptString } from "@alinstra/crypto";
+// Exception: invite email jobs update the invite row directly. See docs/DECISIONS.md.
 import { prisma } from "@alinstra/db";
 import { sendEmail } from "@alinstra/email";
 import {
