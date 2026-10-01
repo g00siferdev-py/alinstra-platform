@@ -1,0 +1,43 @@
+# Local infrastructure for Phase 0 foundations.
+# Postgres + Redis are required day one. Web/worker containers land with the rest of Phase 0.
+#
+# Usage:
+#   docker compose up -d
+#   docker compose down
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: alinstra-postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: alinstra
+      POSTGRES_PASSWORD: alinstra
+      POSTGRES_DB: alinstra
+    volumes:
+      - alinstra_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U alinstra -d alinstra"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: alinstra-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - alinstra_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  alinstra_pg_data:
+  alinstra_redis_data:

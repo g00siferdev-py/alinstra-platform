@@ -1,0 +1,48 @@
+# Dependencies
+node_modules/
+
+# Env / secrets — never commit real env files
+.env
+.env.*
+!.env.example
+
+# Builds / caches
+.turbo/
+.next/
+dist/
+build/
+coverage/
+out/
+*.tsbuildinfo
+
+# Prisma
+packages/db/generated/
+packages/db/src/generated/
+
+# Logs / debug
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+*.swo
+
+# Test / temp
+.tmp/
+.temp/
+tmp/
+
+# Docker / local overrides
+docker-compose.override.yml
+
+# Sentry / Railway local
+.sentryclirc
+.railway/

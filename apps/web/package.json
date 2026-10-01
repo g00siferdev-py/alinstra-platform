@@ -1,0 +1,12 @@
+{
+  "name": "@alinstra/web",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "node ./scripts/dev.mjs",
+    "build": "node -e \"console.log('@alinstra/web: build stub — Next.js arrives with full Phase 0')\"",
+    "lint": "node -e \"console.log('@alinstra/web: lint stub')\"",
+    "test": "node -e \"console.log('@alinstra/web: test stub')\"",
+    "typecheck": "node -e \"console.log('@alinstra/web: typecheck stub')\""
+  }
+}

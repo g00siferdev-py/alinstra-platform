@@ -1,0 +1,21 @@
+{
+  "name": "alinstra-platform",
+  "private": true,
+  "packageManager": "pnpm@10.28.2",
+  "engines": {
+    "node": ">=20.9.0"
+  },
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "typecheck": "turbo run typecheck",
+    "dev:web": "pnpm --filter @alinstra/web dev",
+    "dev:worker": "pnpm --filter @alinstra/worker dev"
+  },
+  "devDependencies": {
+    "turbo": "2.11.5",
+    "typescript": "5.9.3"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "name": "@alinstra/worker",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "node ./scripts/dev.mjs",
+    "build": "node -e \"console.log('@alinstra/worker: build stub — BullMQ worker arrives with full Phase 0')\"",
+    "lint": "node -e \"console.log('@alinstra/worker: lint stub')\"",
+    "test": "node -e \"console.log('@alinstra/worker: test stub')\"",
+    "typecheck": "node -e \"console.log('@alinstra/worker: typecheck stub')\""
+  }
+}
