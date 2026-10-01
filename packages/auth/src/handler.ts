@@ -42,13 +42,20 @@ async function readEmail(request: Request): Promise<string | null> {
   return null;
 }
 
-/** Better Auth reads `x-real-ip`. Replace forwarded headers with the IP we already trusted. */
-export function withTrustedClientIp(request: Request, ip: string): Request {
+/** Better Auth reads `x-real-ip`. Copy the request so Next's request object is not reused. */
+export async function withTrustedClientIp(request: Request, ip: string): Promise<Request> {
   const headers = new Headers(request.headers);
   headers.delete("x-forwarded-for");
   if (ip === "local") headers.delete("x-real-ip");
   else headers.set("x-real-ip", ip);
-  return new Request(request, { headers });
+  if (request.method === "GET" || request.method === "HEAD") {
+    return new Request(request.url, { method: request.method, headers });
+  }
+  return new Request(request.url, {
+    method: request.method,
+    headers,
+    body: await request.arrayBuffer(),
+  });
 }
 
 function tooMany(): Response {
@@ -73,7 +80,7 @@ export async function handleAuthRequest(request: Request): Promise<Response> {
     await recordPasswordResetRequest(email);
   }
 
-  const response = await auth.handler(withTrustedClientIp(request, ip));
+  const response = await auth.handler(await withTrustedClientIp(request, ip));
 
   if (path === "/sign-in/email" && email) {
     if (response.status === 401) await recordLoginFailure(email, ip);
