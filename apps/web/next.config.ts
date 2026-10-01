@@ -13,6 +13,7 @@ const nextConfig: NextConfig = {
     "@alinstra/db",
     "@alinstra/email",
     "@alinstra/queue",
+    "@alinstra/storage",
   ],
   serverExternalPackages: ["@prisma/client", "@prisma/adapter-pg", "pg", "bullmq", "ioredis"],
 };
