@@ -48,9 +48,9 @@ export default tseslint.config(
     },
   },
   {
-    // Exceptions: /api/health probes the database, and the worker updates invite
-    // rows for email jobs. Neither is a tenant-scoped read. See docs/DECISIONS.md.
-    files: ["apps/web/src/app/api/health/route.ts", "apps/worker/src/index.ts"],
+    // Exceptions: /api/health probes the database. Invite and extraction jobs
+    // update rows that are not tenant-scoped reads. See docs/DECISIONS.md.
+    files: ["apps/web/src/app/api/health/route.ts", "apps/worker/src/jobs/send-invite-email.ts", "apps/worker/src/jobs/extract-knowledge-text.ts"],
     rules: {
       "no-restricted-imports": "off",
     },

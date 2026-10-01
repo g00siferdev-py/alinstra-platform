@@ -12,8 +12,13 @@ export const sendPasswordResetEmail = z.object({
   url: z.string().url(),
 });
 
+export const extractKnowledgeText = z.object({
+  documentId: z.string().min(1),
+});
+
 export type SendInviteEmail = z.infer<typeof sendInviteEmail>;
 export type SendPasswordResetEmail = z.infer<typeof sendPasswordResetEmail>;
+export type ExtractKnowledgeText = z.infer<typeof extractKnowledgeText>;
 
 export const EMAIL_QUEUE = "email";
 
@@ -64,6 +69,16 @@ export async function enqueueSendPasswordReset(data: SendPasswordResetEmail): Pr
   const payload = sendPasswordResetEmail.parse(data);
   await queue().add("send-password-reset-email", payload, {
     attempts: 5,
+    backoff: { type: "exponential", delay: 2000 },
+    removeOnComplete: 100,
+    removeOnFail: 100,
+  });
+}
+
+export async function enqueueExtractKnowledge(data: ExtractKnowledgeText): Promise<void> {
+  const payload = extractKnowledgeText.parse(data);
+  await queue().add("extract-knowledge-text", payload, {
+    attempts: 3,
     backoff: { type: "exponential", delay: 2000 },
     removeOnComplete: 100,
     removeOnFail: 100,

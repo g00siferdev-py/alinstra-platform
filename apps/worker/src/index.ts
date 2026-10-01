@@ -1,16 +1,10 @@
 import { getEnv, log, scrubSentryEvent, type SentryLikeEvent } from "@alinstra/config";
-import { decryptString } from "@alinstra/crypto";
-// Exception: invite email jobs update the invite row directly. See docs/DECISIONS.md.
-import { prisma } from "@alinstra/db";
-import { sendEmail } from "@alinstra/email";
-import {
-  bullConnection,
-  EMAIL_QUEUE,
-  sendInviteEmail,
-  sendPasswordResetEmail,
-} from "@alinstra/queue";
+import { bullConnection, EMAIL_QUEUE, extractKnowledgeText, sendInviteEmail, sendPasswordResetEmail } from "@alinstra/queue";
 import * as Sentry from "@sentry/node";
 import { Worker } from "bullmq";
+import { extractKnowledge } from "./jobs/extract-knowledge-text";
+import { sendInvite } from "./jobs/send-invite-email";
+import { sendPasswordReset } from "./jobs/send-password-reset-email";
 
 const env = getEnv();
 
@@ -23,41 +17,20 @@ Sentry.init({
   },
 });
 
-async function sendInvite(inviteId: string): Promise<void> {
-  const invite = await prisma.invite.findUnique({ where: { id: inviteId } });
-  if (!invite || invite.acceptedAt || invite.revokedAt || !invite.tokenCipher) return;
-  const token = decryptString(invite.tokenCipher, env.ENCRYPTION_KEY);
-  const url = `${env.APP_URL}/invite/${token}`;
-  await sendEmail({
-    to: invite.email,
-    subject: "You're invited to Alinstra",
-    text: `Accept your invite: ${url}\nThis link expires and can be used once.`,
-  });
-  await prisma.invite.update({
-    where: { id: invite.id },
-    data: { emailSentAt: new Date(), tokenCipher: null },
-  });
-}
-
-async function sendPasswordReset(to: string, url: string): Promise<void> {
-  await sendEmail({
-    to,
-    subject: "Reset your Alinstra password",
-    text: `Set a new password: ${url}\nIf you did not ask for this, you can ignore the message.`,
-  });
-}
-
 const worker = new Worker(
   EMAIL_QUEUE,
   async (job) => {
     if (job.name === "send-invite-email") {
-      const payload = sendInviteEmail.parse(job.data);
-      await sendInvite(payload.inviteId);
+      await sendInvite(sendInviteEmail.parse(job.data).inviteId);
       return;
     }
     if (job.name === "send-password-reset-email") {
       const payload = sendPasswordResetEmail.parse(job.data);
       await sendPasswordReset(payload.to, payload.url);
+      return;
+    }
+    if (job.name === "extract-knowledge-text") {
+      await extractKnowledge(extractKnowledgeText.parse(job.data).documentId);
       return;
     }
     log("warn", "unknown job", { job: job.name });
@@ -74,7 +47,6 @@ log("info", "worker listening", { queue: EMAIL_QUEUE });
 
 async function shutdown(): Promise<void> {
   await worker.close();
-  await prisma.$disconnect();
   process.exit(0);
 }
 
