@@ -2,7 +2,7 @@ export { prisma, createPrismaClient } from "./client";
 export { clients, createClient, users } from "./repositories";
 export { plans, seedPlans, updatePlan } from "./plans";
 export { confirmDocument, knowledgeBases, knowledgeDocuments, reserveDocument } from "./knowledge";
-export { changeLogs, continueWizard, discardWizard, saveWizardDraft, startWizard, submitWizard, wizardDrafts } from "./wizard";
+export { changeLogs, continueWizard, discardWizard, removeClient, saveWizardDraft, startWizard, submitWizard, wizardDrafts } from "./wizard";
 export {
   DEFAULT_TIMEZONE,
   EXTRA_CHANGE_FEE_CENTS,

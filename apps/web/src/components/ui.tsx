@@ -24,7 +24,7 @@ export function Input(props: InputHTMLAttributes<HTMLInputElement>) {
 export function Button(props: ButtonHTMLAttributes<HTMLButtonElement>) {
   return (
     <button
-      className="rounded-md bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--accent-ink)] disabled:opacity-60"
+      className="cursor-pointer rounded-md bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--accent-ink)] disabled:cursor-not-allowed disabled:opacity-60"
       {...props}
     />
   );

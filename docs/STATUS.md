@@ -17,7 +17,7 @@ Phase 1 — wizard, knowledge files, plans, and the client portal shell. Committ
 - 11-step admin wizard with autosave, per-step validation, and submit that stays `lead`
 - Private uploads (local disk in dev, R2 presign in staging/production) and authenticated downloads
 - Worker job `extract-knowledge-text` (60s timeout, 200,000 character cap)
-- Admin client list (Wizard submitted badge), client detail (invite, discard, users, change log), `/admin/plans`
+- Admin client list (Wizard submitted badge, remove), client detail (invite, discard, remove, users, change log), `/admin/plans`
 - Portal home, team (owner only), and read-only My Business for owner and staff
 
 ## Explicitly deferred

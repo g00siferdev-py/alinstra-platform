@@ -40,6 +40,7 @@ const emptyToUndefined = (value: unknown) => {
 };
 
 const optionalText = z.preprocess(emptyToUndefined, z.string().max(500).optional());
+const longText = z.preprocess(emptyToUndefined, z.string().max(10_000).optional());
 
 export const businessSchema = z.object({
   name: z.string().trim().min(1).max(200),
@@ -87,11 +88,11 @@ export const voiceSchema = z.object({
 });
 
 export const knowledgeFieldsSchema = z.object({
-  hours: optionalText,
-  services: optionalText,
-  faqs: optionalText,
-  policies: optionalText,
-  staff: optionalText,
+  hours: longText,
+  services: longText,
+  faqs: longText,
+  policies: longText,
+  staff: longText,
 });
 
 export const phoneSchema = z.object({

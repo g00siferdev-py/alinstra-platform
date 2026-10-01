@@ -125,6 +125,8 @@ Street address is optional. Default timezone is `America/New_York`. Extra config
 
 Discarding an unsubmitted draft sets `archivedAt` and `discardedAt` and writes `wizard.discarded` in the same transaction. Object deletes run after that commit. A failed delete is logged without the file body.
 
+Removing a client archives any active client, submitted or not, marks a remaining draft discarded, and writes `client.removed` in the same transaction. Uploaded objects are deleted after that commit. The list and detail pages ask for confirmation first. Client roles cannot remove a client.
+
 `client_staff` can open My Business, read-only. Team stays `client_owner` only.
 
 Website import, voice audio, phone purchasing, and the agent prompt are stored as notes or labels. Phase 1 does not call Retell, Stripe, Twilio, or a calendar API.

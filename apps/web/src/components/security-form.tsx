@@ -2,6 +2,7 @@
 
 import { authClient } from "@/lib/auth-client";
 import { Button, ErrorText, Input, Label } from "@/components/ui";
+import { QRCodeSVG } from "qrcode.react";
 import { useState, type FormEvent } from "react";
 
 type EnableResult = { totpURI: string; backupCodes: string[] };
@@ -64,10 +65,14 @@ export function SecurityForm() {
     );
   }
 
+  const secret = new URL(setup.totpURI).searchParams.get("secret");
   return (
     <div className="grid gap-4">
-      <p className="text-sm">Add this key to your authenticator app, then enter a code. Store the backup codes somewhere safe. They are shown once.</p>
-      <p className="break-all rounded-md bg-[var(--bg)] p-3 text-xs">{setup.totpURI}</p>
+      <p className="text-sm">Scan this with your authenticator app, then enter a code. Store the backup codes somewhere safe. They are shown once.</p>
+      <div className="flex justify-center rounded-md bg-white p-3">
+        <QRCodeSVG value={setup.totpURI} size={196} marginSize={2} aria-label="Authenticator setup code" />
+      </div>
+      {secret ? <p className="break-all text-xs text-[var(--muted)]">Can&apos;t scan? Enter this key: {secret}</p> : null}
       <ul className="grid grid-cols-2 gap-1 font-mono text-xs">
         {setup.backupCodes.map((code) => (
           <li key={code}>{code}</li>

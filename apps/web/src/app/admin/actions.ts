@@ -5,6 +5,7 @@ import { log } from "@alinstra/config";
 import {
   continueWizard,
   discardWizard,
+  removeClient,
   saveWizardDraft,
   startWizard,
   submitWizard,
@@ -104,6 +105,26 @@ export async function discardWizardAction(clientId: string): Promise<ActionState
   } catch (error) {
     rethrowRedirect(error);
     return { error: error instanceof Error ? error.message : "Could not discard the draft." };
+  }
+  redirect("/admin/clients");
+}
+
+export async function removeClientAction(clientId: string): Promise<ActionState> {
+  const session = await requireAdmin();
+  try {
+    const keys = await removeClient(adminActor(session), clientId);
+    const storage = getStorage();
+    for (const key of keys) {
+      await storage.delete(key).catch((error: unknown) => {
+        log("error", "removed client object delete failed", {
+          clientId,
+          message: error instanceof Error ? error.message : "delete failed",
+        });
+      });
+    }
+  } catch (error) {
+    rethrowRedirect(error);
+    return { error: error instanceof Error ? error.message : "Could not remove the client." };
   }
   redirect("/admin/clients");
 }

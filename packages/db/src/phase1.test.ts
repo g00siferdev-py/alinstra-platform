@@ -3,7 +3,8 @@ import { prisma } from "./client";
 import { reserveDocument, knowledgeDocuments } from "./knowledge";
 import { seedPlans, updatePlan } from "./plans";
 import type { Actor } from "./changes";
-import { startWizard, submitWizard, wizardDrafts } from "./wizard";
+import { startWizard, submitWizard, removeClient, wizardDrafts } from "./wizard";
+import { clients } from "./repositories";
 
 async function resetDatabase(): Promise<void> {
   await prisma.$executeRawUnsafe(
@@ -154,5 +155,50 @@ describe("phase 1 tenancy", () => {
     expect(submitted.portalOwnerEmail).toBe("owner@example.com");
     expect(await prisma.invite.count()).toBe(0);
     expect(await prisma.changeLog.count({ where: { action: "wizard.submitted", clientId: client.id } })).toBe(1);
+  });
+
+  it("removes a client from the list and records the change", async () => {
+    const clientA = await startWizard(admin, "Alpha");
+    const clientB = await startWizard(admin, "Beta");
+    const document = await reserveDocument(admin, {
+      clientId: clientB.id,
+      filename: "notes.txt",
+      contentType: "text/plain",
+      byteSize: 4,
+    });
+    await expect(removeClient({ id: "staff", role: "client_staff", clientId: clientA.id }, clientB.id)).rejects.toThrow(
+      /admin/,
+    );
+
+    const keys = await removeClient(admin, clientB.id);
+    expect(keys).toEqual([document.storageKey]);
+    expect(await clients({ role: "admin" }).getById(clientB.id)).toBeNull();
+    const visible = await clients({ role: "admin" }).list();
+    expect(visible.map((client) => client.id)).toContain(clientA.id);
+    expect(visible.map((client) => client.id)).not.toContain(clientB.id);
+    expect(await prisma.changeLog.count({ where: { action: "client.removed", clientId: clientB.id } })).toBe(1);
+    expect((await prisma.wizardDraft.findFirst({ where: { clientId: clientB.id } }))?.discardedAt).not.toBeNull();
+
+    const plan = await prisma.plan.findFirstOrThrow({ where: { code: "starter" } });
+    const draft = await prisma.wizardDraft.findFirstOrThrow({ where: { clientId: clientA.id } });
+    await submitWizard(admin, {
+      clientId: clientA.id,
+      updatedAt: draft.updatedAt.toISOString(),
+      payload: {
+        version: 1,
+        business: {
+          name: "Alpha",
+          industry: "hvac",
+          contactName: "Ada",
+          contactEmail: "ada@example.com",
+          timezone: "America/New_York",
+        },
+        plan: { planId: plan.id, setupFeeWaived: false },
+        portalOwnerEmail: "owner@example.com",
+        compliance: { aiDisclosure: true },
+      },
+    });
+    await removeClient(admin, clientA.id);
+    expect(await clients({ role: "admin" }).list()).toHaveLength(0);
   });
 });

@@ -276,6 +276,33 @@ export async function discardWizard(ctx: Actor, clientId: string) {
   return documents.map((document) => document.storageKey);
 }
 
+export async function removeClient(ctx: Actor, clientId: string) {
+  assertTenantContext(ctx);
+  if (ctx.role !== "admin") throw new Error("Only admin can remove a client");
+  const documents = await prisma.knowledgeDocument.findMany({
+    where: { clientId },
+    select: { storageKey: true },
+  });
+  await prisma.$transaction(async (tx) => {
+    const client = await tx.client.findFirst({ where: { id: clientId, archivedAt: null } });
+    if (!client) throw new Error("That client is not available.");
+    await tx.client.update({ where: { id: clientId }, data: { archivedAt: new Date() } });
+    await tx.wizardDraft.updateMany({
+      where: { clientId, discardedAt: null },
+      data: { discardedAt: new Date() },
+    });
+    await recordChange(tx, {
+      clientId,
+      actor: ctx,
+      action: "client.removed",
+      entityType: "client",
+      entityId: clientId,
+      summary: `Removed ${client.name}`,
+    });
+  });
+  return documents.map((document) => document.storageKey);
+}
+
 export function changeLogs(ctx: TenantContext) {
   assertTenantContext(ctx);
   return {

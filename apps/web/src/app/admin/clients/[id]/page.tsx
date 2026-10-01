@@ -24,7 +24,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
           <h1 className="text-2xl font-semibold">{client.name}</h1>
           <p className="text-sm text-[var(--muted)]">{client.status}{client.wizardSubmittedAt ? " · Wizard submitted" : ""}</p>
         </div>
-        <ClientActions clientId={client.id} email={client.portalOwnerEmail} canDiscard={!client.wizardSubmittedAt} />
+        <ClientActions clientId={client.id} name={client.name} email={client.portalOwnerEmail} canDiscard={!client.wizardSubmittedAt} />
       </header>
       {!client.wizardSubmittedAt ? <Link href={`/admin/clients/${client.id}/wizard`}>Continue wizard</Link> : null}
       <section className="rounded-xl border border-[var(--line)] p-4">
