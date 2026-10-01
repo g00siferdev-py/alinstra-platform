@@ -43,7 +43,7 @@ export function ClientActions({
       {email ? (
         <Button
           onClick={() => {
-            void sendPortalInviteAction(clientId, email).then((result) => {
+            void sendPortalInviteAction(clientId).then((result) => {
               if (result?.error) setError(result.error);
               else setMessage("Invite queued.");
             });

@@ -3,6 +3,7 @@
 import { AuthError, createInvite } from "@alinstra/auth";
 import { log } from "@alinstra/config";
 import {
+  clients,
   continueWizard,
   discardWizard,
   removeClient,
@@ -129,9 +130,12 @@ export async function removeClientAction(clientId: string): Promise<ActionState>
   redirect("/admin/clients");
 }
 
-export async function sendPortalInviteAction(clientId: string, email: string): Promise<ActionState> {
+export async function sendPortalInviteAction(clientId: string): Promise<ActionState> {
   const session = await requireAdmin();
   try {
+    const client = await clients({ role: "admin" }).getById(clientId);
+    const email = client?.portalOwnerEmail?.trim();
+    if (!email) return { error: "This client has no owner email on file." };
     await createInvite({
       actor: { id: session.user.id, role: "admin" },
       email,

@@ -117,7 +117,7 @@ Downloads go through `GET /api/knowledge/documents/[id]`. The handler loads the 
 
 ### Wizard and portal
 
-Submit keeps status `lead`, sets `wizardSubmittedAt`, and stores `portalOwnerEmail`. It does not create an invite. The admin client detail page has "Send portal invite", which uses the existing admin invite flow. The client list shows a "Wizard submitted" badge.
+Submit keeps status `lead`, sets `wizardSubmittedAt`, and stores `portalOwnerEmail`. It does not create an invite. The admin client detail page has "Send portal invite", which uses the existing admin invite flow and the owner email stored on the client. The browser does not choose that address. The client list shows a "Wizard submitted" badge.
 
 Healthcare industries are `dental` and `medical_office`. Those auto-check `healthcareSensitive` unless an admin has edited the flag. Submit is blocked until `complianceReviewDone` is checked and `complianceReviewNote` is non-empty.
 
