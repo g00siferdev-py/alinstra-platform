@@ -1,0 +1,24 @@
+{
+  "name": "@alinstra/config",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./scrub": "./src/log.ts"
+  },
+  "scripts": {
+    "lint": "pnpm -w exec eslint packages/config/src",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@alinstra/tsconfig": "workspace:*",
+    "@types/node": "22.19.1",
+    "typescript": "5.9.3",
+    "vitest": "4.1.0"
+  }
+}

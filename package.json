@@ -12,10 +12,17 @@
     "test": "turbo run test",
     "typecheck": "turbo run typecheck",
     "dev:web": "pnpm --filter @alinstra/web dev",
-    "dev:worker": "pnpm --filter @alinstra/worker dev"
+    "dev:worker": "pnpm --filter @alinstra/worker dev",
+    "db:generate": "pnpm --filter @alinstra/db generate",
+    "db:migrate": "pnpm --filter @alinstra/db migrate",
+    "db:migrate:deploy": "pnpm --filter @alinstra/db migrate:deploy",
+    "db:seed": "pnpm --filter @alinstra/auth seed"
   },
   "devDependencies": {
+    "@eslint/js": "9.36.0",
+    "eslint": "9.36.0",
     "turbo": "2.11.5",
-    "typescript": "5.9.3"
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.46.0"
   }
 }

@@ -1,0 +1,7 @@
+{
+  "extends": "@alinstra/tsconfig/bundler.json",
+  "compilerOptions": {
+    "types": ["node"]
+  },
+  "include": ["src"]
+}

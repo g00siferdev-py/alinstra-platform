@@ -1,0 +1,125 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+/// Better Auth user. `clientId` is null for admin.
+model User {
+  id               String      @id
+  name             String
+  email            String
+  emailVerified    Boolean     @default(false)
+  image            String?
+  role             String
+  clientId         String?
+  twoFactorEnabled Boolean?    @default(false)
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+  client           Client?     @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  sessions         Session[]
+  accounts         Account[]
+  twoFactor        TwoFactor?
+
+  @@unique([email])
+  @@index([clientId])
+  @@map("user")
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime
+  token     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([token])
+  @@index([userId])
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([userId])
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+  @@map("verification")
+}
+
+/// TOTP secret and backup codes are ciphertext produced by Better Auth (see DECISIONS.md).
+model TwoFactor {
+  id                      String    @id
+  secret                  String
+  backupCodes             String
+  userId                  String    @unique
+  user                    User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  verified                Boolean?  @default(true)
+  failedVerificationCount Int?      @default(0)
+  lockedUntil             DateTime?
+
+  @@index([secret])
+  @@map("twoFactor")
+}
+
+model Client {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  users     User[]
+  invites   Invite[]
+
+  @@map("client")
+}
+
+/// Custom invite. Not Better Auth's organization plugin.
+model Invite {
+  id          String    @id @default(cuid())
+  email       String
+  role        String
+  clientId    String
+  client      Client    @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  tokenHash   String    @unique
+  tokenCipher String?
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  revokedAt   DateTime?
+  emailSentAt DateTime?
+  createdById String
+  createdAt   DateTime  @default(now())
+
+  @@index([clientId])
+  @@index([email])
+  @@map("invite")
+}

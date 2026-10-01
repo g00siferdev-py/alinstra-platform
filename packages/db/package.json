@@ -1,0 +1,32 @@
+{
+  "name": "@alinstra/db",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "generate": "prisma generate",
+    "migrate": "prisma migrate dev",
+    "migrate:deploy": "prisma migrate deploy",
+    "lint": "pnpm -w exec eslint packages/db/src packages/db/prisma.config.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "build": "prisma generate"
+  },
+  "dependencies": {
+    "@prisma/adapter-pg": "7.10.0",
+    "@prisma/client": "7.10.0",
+    "dotenv": "17.2.3",
+    "pg": "8.16.3"
+  },
+  "devDependencies": {
+    "@alinstra/tsconfig": "workspace:*",
+    "@types/node": "22.19.1",
+    "@types/pg": "8.15.5",
+    "prisma": "7.10.0",
+    "typescript": "5.9.3",
+    "vitest": "4.1.0"
+  }
+}

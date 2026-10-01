@@ -1,0 +1,20 @@
+{
+  "name": "@alinstra/crypto",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "lint": "pnpm -w exec eslint packages/crypto/src",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@alinstra/tsconfig": "workspace:*",
+    "@types/node": "22.19.1",
+    "typescript": "5.9.3",
+    "vitest": "4.1.0"
+  }
+}

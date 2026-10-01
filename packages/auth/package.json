@@ -1,28 +1,30 @@
 {
-  "name": "@alinstra/worker",
+  "name": "@alinstra/auth",
   "version": "0.0.0",
   "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
   "scripts": {
-    "dev": "tsx watch src/index.ts",
-    "start": "tsx src/index.ts",
-    "build": "tsc --noEmit",
-    "lint": "pnpm -w exec eslint apps/worker/src",
+    "seed": "tsx src/seed.ts",
+    "lint": "pnpm -w exec eslint packages/auth/src",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run",
+    "build": "tsc --noEmit"
   },
   "dependencies": {
     "@alinstra/config": "workspace:*",
     "@alinstra/crypto": "workspace:*",
     "@alinstra/db": "workspace:*",
-    "@alinstra/email": "workspace:*",
     "@alinstra/queue": "workspace:*",
-    "@sentry/node": "10.22.0",
-    "bullmq": "6.3.10",
-    "tsx": "4.20.6"
+    "better-auth": "1.7.7",
+    "ioredis": "6.0.0"
   },
   "devDependencies": {
     "@alinstra/tsconfig": "workspace:*",
     "@types/node": "22.19.1",
+    "tsx": "4.20.6",
     "typescript": "5.9.3",
     "vitest": "4.1.0"
   }

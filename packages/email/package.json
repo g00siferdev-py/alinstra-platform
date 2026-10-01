@@ -1,0 +1,25 @@
+{
+  "name": "@alinstra/email",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "lint": "pnpm -w exec eslint packages/email/src",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests",
+    "build": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@alinstra/config": "workspace:*",
+    "resend": "6.1.2"
+  },
+  "devDependencies": {
+    "@alinstra/tsconfig": "workspace:*",
+    "@types/node": "22.19.1",
+    "typescript": "5.9.3",
+    "vitest": "4.1.0"
+  }
+}
