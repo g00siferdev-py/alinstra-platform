@@ -1,5 +1,5 @@
 import { knowledgeDocuments, type TenantContext } from "@alinstra/db";
-import { getStorage } from "@alinstra/storage";
+import { attachmentDisposition, getStorage } from "@alinstra/storage";
 import { getSession } from "@/lib/session";
 import { NextResponse } from "next/server";
 
@@ -19,15 +19,16 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
   const { id } = await context.params;
   const document = await knowledgeDocuments(ctx).getById(id);
   if (!document) return NextResponse.json({ message: "Document not found." }, { status: 404 });
-  const filename = document.originalFilename.replaceAll('"', "");
-  const signed = await getStorage().presignGet(document.storageKey);
+  const disposition = attachmentDisposition(document.originalFilename);
+  const signed = await getStorage().presignGet(document.storageKey, disposition);
   if (signed) return NextResponse.redirect(signed);
   const bytes = await getStorage().get(document.storageKey);
   return new Response(new Uint8Array(bytes), {
     headers: {
       "content-type": document.contentType,
-      "content-disposition": `attachment; filename="${filename}"`,
+      "content-disposition": disposition,
       "cache-control": "private, no-store",
+      "x-content-type-options": "nosniff",
     },
   });
 }

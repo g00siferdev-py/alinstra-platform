@@ -19,8 +19,13 @@ export type StoredObject = {
   delete(key: string): Promise<void>;
   byteSize(key: string): Promise<number | null>;
   presignPut(key: string, contentType: string, byteSize: number): Promise<string | null>;
-  presignGet(key: string): Promise<string | null>;
+  presignGet(key: string, contentDisposition?: string): Promise<string | null>;
 };
+
+export function attachmentDisposition(filename: string): string {
+  const cleaned = filename.replace(/[^\w. -]/g, "_").slice(0, 180).trim() || "download";
+  return `attachment; filename="${cleaned}"`;
+}
 
 function safeKey(key: string): string {
   if (!key.startsWith("clients/") || key.includes("..") || key.includes("\\")) {
@@ -68,7 +73,7 @@ function localDriver(root: string): StoredObject {
     async presignPut() {
       return null;
     },
-    async presignGet() {
+    async presignGet(_key, _contentDisposition) {
       return null;
     },
   };
@@ -121,10 +126,16 @@ function s3Driver(): StoredObject {
         { expiresIn: PRESIGN_SECONDS },
       );
     },
-    async presignGet(key) {
-      return getSignedUrl(client, new GetObjectCommand({ Bucket: bucket, Key: safeKey(key) }), {
-        expiresIn: PRESIGN_SECONDS,
-      });
+    async presignGet(key, contentDisposition) {
+      return getSignedUrl(
+        client,
+        new GetObjectCommand({
+          Bucket: bucket,
+          Key: safeKey(key),
+          ResponseContentDisposition: contentDisposition,
+        }),
+        { expiresIn: PRESIGN_SECONDS },
+      );
     },
   };
 }

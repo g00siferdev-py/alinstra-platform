@@ -109,7 +109,7 @@ Object keys are `clients/{clientId}/knowledge/{documentId}`. Keys must start wit
 
 Uploads do not use a Next.js server action (the default body cap is 1 MB). The browser posts metadata to `POST /api/knowledge/uploads`. Locally the file is then `PUT` to the app route. On R2 the same route returns a presigned PUT, and a follow-up POST confirms the object. Size, extension, content type, and magic bytes are checked on the server either way. Limits: 10 MB per file, 50 MB per client, 25 files per knowledge version. Allowed types: PDF, DOCX, TXT, CSV.
 
-Downloads go through `GET /api/knowledge/documents/[id]`. The handler loads the row with the caller's tenant context first. A missing or other-client row is 404. Only then does it redirect to a presigned GET that expires in 5 minutes, or stream the local file. `knowledgeDocuments.getById` returns null for another client's document; that is covered by the Phase 1 isolation tests.
+Downloads go through `GET /api/knowledge/documents/[id]`. The handler loads the row with the caller's tenant context first. A missing or other-client row is 404. Only then does it redirect to a presigned GET that expires in 5 minutes, or stream the local file. The presigned GET sets `ResponseContentDisposition` to `attachment` with a filename limited to letters, numbers, spaces, dots, and dashes. The local stream sets the same disposition and `x-content-type-options: nosniff`. `knowledgeDocuments.getById` returns null for another client's document; that is covered by the Phase 1 isolation tests.
 
 ### Extraction
 
