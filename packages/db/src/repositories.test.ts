@@ -7,7 +7,7 @@ import type { TenantContext } from "./tenant";
 
 async function resetDatabase(): Promise<void> {
   await prisma.$executeRawUnsafe(
-    `TRUNCATE TABLE "session", "account", "twoFactor", "verification", "invite", "user", "client" CASCADE`,
+    `TRUNCATE TABLE "change_log", "knowledge_document", "knowledge_base", "wizard_draft", "session", "account", "twoFactor", "verification", "invite", "user", "client", "plan" CASCADE`,
   );
 }
 
@@ -97,5 +97,14 @@ describe("repository contract", () => {
     }
     const factories = [...source.matchAll(/^export function (\w+)\(ctx: TenantContext\)/gm)];
     expect(factories.map((match) => match[1]).sort()).toEqual(["clients", "users"]);
+    for (const file of ["plans.ts", "knowledge.ts", "wizard.ts"]) {
+      const extra = readFileSync(resolve(import.meta.dirname, file), "utf8");
+      const exported = [...extra.matchAll(/^export (?:async )?function (\w+)\(([^)]*)\)/gm)];
+      expect(exported.length, file).toBeGreaterThan(0);
+      for (const match of exported) {
+        if (match[1] === "seedPlans") continue;
+        expect(match[2], `${file} ${match[1]}`).toMatch(/ctx: (?:TenantContext|Actor)/);
+      }
+    }
   });
 });

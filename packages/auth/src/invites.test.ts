@@ -9,7 +9,7 @@ import { clearLoginFailures, loginLocked, recordLoginFailure } from "./lockout";
 
 async function resetDatabase(): Promise<void> {
   await prisma.$executeRawUnsafe(
-    `TRUNCATE TABLE "session", "account", "twoFactor", "verification", "invite", "user", "client" CASCADE`,
+    `TRUNCATE TABLE "change_log", "knowledge_document", "knowledge_base", "wizard_draft", "session", "account", "twoFactor", "verification", "invite", "user", "client", "plan" CASCADE`,
   );
 }
 

@@ -1,8 +1,10 @@
 import { getEnv, log } from "@alinstra/config";
-import { prisma } from "@alinstra/db";
+import { prisma, seedPlans } from "@alinstra/db";
 import { createCredentialUser } from "./users";
 
 async function main(): Promise<void> {
+  await seedPlans();
+  log("info", "plans seeded");
   const env = getEnv();
   const email = env.ADMIN_EMAIL.toLowerCase();
   const existing = await prisma.user.findUnique({ where: { email } });

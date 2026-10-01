@@ -92,15 +92,150 @@ model TwoFactor {
   @@map("twoFactor")
 }
 
-model Client {
-  id        String   @id @default(cuid())
-  name      String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  users     User[]
-  invites   Invite[]
+model Plan {
+  id                      String   @id @default(cuid())
+  code                    String   @unique
+  name                    String
+  monthlyPriceCents       Int
+  includedMinutes         Int
+  overagePerMinuteCents   Int
+  setupFeeCents           Int
+  includedChangesPerMonth Int?
+  extraChangeFeeCents     Int
+  recallMonthlyCents      Int
+  recallPerBookingCents   Int
+  active                  Boolean  @default(true)
+  sortOrder               Int
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+  clients                 Client[]
 
+  @@map("plan")
+}
+
+model Client {
+  id                              String    @id @default(cuid())
+  name                            String
+  industry                        String?
+  contactName                     String?
+  contactPhone                    String?
+  contactEmail                    String?
+  addressLine1                    String?
+  addressLine2                    String?
+  city                            String?
+  region                          String?
+  postalCode                      String?
+  country                         String?
+  timezone                        String    @default("America/New_York")
+  websiteUrl                      String?
+  notes                           String?
+  websiteNotes                    String?
+  portalOwnerEmail                String?
+  status                          String    @default("lead")
+  wizardSubmittedAt               DateTime?
+  archivedAt                      DateTime?
+  planId                          String?
+  plan                            Plan?     @relation(fields: [planId], references: [id], onDelete: SetNull)
+  overrideMonthlyPriceCents       Int?
+  overrideIncludedMinutes         Int?
+  overrideOveragePerMinuteCents   Int?
+  overrideSetupFeeCents           Int?
+  overrideIncludedChangesPerMonth Int?
+  setupFeeWaived                  Boolean   @default(false)
+  coverage                        Json?
+  features                        Json?
+  voice                           Json?
+  phone                           Json?
+  compliance                      Json?
+  createdAt                       DateTime  @default(now())
+  updatedAt                       DateTime  @updatedAt
+  users                           User[]
+  invites                         Invite[]
+  wizardDraft                     WizardDraft?
+  knowledgeBases                  KnowledgeBase[]
+  knowledgeDocuments              KnowledgeDocument[]
+  changeLogs                      ChangeLog[]
+
+  @@index([status])
+  @@index([archivedAt])
   @@map("client")
+}
+
+model WizardDraft {
+  id          String    @id @default(cuid())
+  clientId    String    @unique
+  client      Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  currentStep Int       @default(1)
+  payload     Json
+  createdById String
+  discardedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@map("wizard_draft")
+}
+
+model KnowledgeBase {
+  id        String              @id @default(cuid())
+  clientId  String
+  client    Client              @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  version   Int
+  status    String
+  hours     Json?
+  services  Json?
+  faqs      Json?
+  policies  Json?
+  staff     Json?
+  createdAt DateTime            @default(now())
+  updatedAt DateTime            @updatedAt
+  documents KnowledgeDocument[]
+
+  @@unique([clientId, version])
+  @@index([clientId])
+  @@map("knowledge_base")
+}
+
+model KnowledgeDocument {
+  id                     String         @id @default(cuid())
+  clientId               String
+  client                 Client         @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  knowledgeBaseId        String
+  knowledgeBase          KnowledgeBase  @relation(fields: [knowledgeBaseId], references: [id], onDelete: Cascade)
+  storageKey             String
+  originalFilename       String
+  contentType            String
+  byteSize               Int
+  extractedText          String?        @db.Text
+  extractedTextTruncated Boolean        @default(false)
+  extractionStatus       String         @default("pending")
+  extractionError        String?
+  createdAt              DateTime       @default(now())
+  updatedAt              DateTime       @updatedAt
+
+  @@index([clientId])
+  @@index([knowledgeBaseId])
+  @@map("knowledge_document")
+}
+
+/// clientId is null only for catalog edits (plan prices).
+model ChangeLog {
+  id                  String   @id @default(cuid())
+  clientId            String?
+  client              Client?  @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  actorUserId         String
+  actorRole           String
+  action              String
+  entityType          String
+  entityId            String
+  summary             String
+  before              Json?
+  after               Json?
+  impersonating       Boolean  @default(false)
+  impersonatedUserId  String?
+  createdAt           DateTime @default(now())
+
+  @@index([clientId, createdAt])
+  @@map("change_log")
 }
 
 /// Custom invite. Not Better Auth's organization plugin.

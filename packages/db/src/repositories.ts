@@ -43,12 +43,15 @@ export function clients(ctx: TenantContext) {
   const scope = clientWhere(ctx);
   return {
     list() {
-      return prisma.client.findMany({ where: scope, orderBy: { createdAt: "desc" } });
+      return prisma.client.findMany({
+        where: { ...scope, archivedAt: null },
+        orderBy: { createdAt: "desc" },
+      });
     },
     getById(id: string) {
       if (ctx.role !== "admin" && id !== ctx.clientId) return Promise.resolve(null);
       if (ctx.role === "admin" && ctx.clientId && id !== ctx.clientId) return Promise.resolve(null);
-      return prisma.client.findFirst({ where: { id, ...scope } });
+      return prisma.client.findFirst({ where: { id, ...scope, archivedAt: null } });
     },
   };
 }
