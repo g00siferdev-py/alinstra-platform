@@ -16,15 +16,39 @@ function authPath(request: Request): string {
   return pathname.slice(index + marker.length) || "/";
 }
 
+function emailFromUnknown(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
 async function readEmail(request: Request): Promise<string | null> {
   const contentType = request.headers.get("content-type") ?? "";
-  if (!contentType.includes("application/json")) return null;
   try {
-    const body = (await request.clone().json()) as { email?: unknown };
-    return typeof body.email === "string" ? body.email : null;
+    if (contentType.includes("application/json")) {
+      const body = (await request.clone().json()) as { email?: unknown };
+      return emailFromUnknown(body.email);
+    }
+    if (
+      contentType.includes("application/x-www-form-urlencoded") ||
+      contentType.includes("multipart/form-data")
+    ) {
+      const form = await request.clone().formData();
+      return emailFromUnknown(form.get("email"));
+    }
   } catch {
     return null;
   }
+  return null;
+}
+
+/** Better Auth reads `x-real-ip`. Replace forwarded headers with the IP we already trusted. */
+export function withTrustedClientIp(request: Request, ip: string): Request {
+  const headers = new Headers(request.headers);
+  headers.delete("x-forwarded-for");
+  if (ip === "local") headers.delete("x-real-ip");
+  else headers.set("x-real-ip", ip);
+  return new Request(request, { headers });
 }
 
 function tooMany(): Response {
@@ -36,6 +60,10 @@ export async function handleAuthRequest(request: Request): Promise<Response> {
   const email = request.method === "POST" ? await readEmail(request) : null;
   const ip = clientIp(request);
 
+  if (path === "/sign-in/email" && request.method === "POST" && !email) {
+    return Response.json({ message: "Email is required." }, { status: 400 });
+  }
+
   if (path === "/sign-in/email" && email && (await loginLocked(email, ip))) {
     return tooMany();
   }
@@ -45,7 +73,7 @@ export async function handleAuthRequest(request: Request): Promise<Response> {
     await recordPasswordResetRequest(email);
   }
 
-  const response = await auth.handler(request);
+  const response = await auth.handler(withTrustedClientIp(request, ip));
 
   if (path === "/sign-in/email" && email) {
     if (response.status === 401) await recordLoginFailure(email, ip);

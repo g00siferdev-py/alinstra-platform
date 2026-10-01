@@ -69,6 +69,13 @@ export const auth = betterAuth({
     max: 100,
     storage: useMemoryLimits() ? "memory" : "secondary-storage",
   },
+  advanced: {
+    ipAddress: {
+      // Railway sets and overwrites X-Real-IP. handleAuthRequest copies our
+      // resolved client IP into this header and drops X-Forwarded-For first.
+      ipAddressHeaders: ["x-real-ip"],
+    },
+  },
   secondaryStorage: useMemoryLimits() ? undefined : redisSecondaryStorage(getRedis()),
   plugins: [
     twoFactor({
