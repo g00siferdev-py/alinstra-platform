@@ -1,4 +1,4 @@
-import { unzipSync } from "fflate";
+import { Unzip, UnzipInflate, type UnzipFile } from "fflate";
 import mammoth from "mammoth";
 import { extractText, getDocumentProxy } from "unpdf";
 
@@ -20,20 +20,50 @@ function truncate(text: string, maxChars: number): { text: string; truncated: bo
   return { text: text.slice(0, maxChars), truncated: true };
 }
 
-function readDocx(bytes: Buffer, maxUncompressed: number): Buffer {
-  let entries: Record<string, Uint8Array>;
+function readDocx(bytes: Buffer, maxUncompressed: number): void {
+  const unzipper = new Unzip();
+  unzipper.register(UnzipInflate);
+  let total = 0;
+  let failed = false;
+  let sawDocument = false;
+
+  unzipper.onfile = (file: UnzipFile) => {
+    if (file.name.replaceAll("\\", "/") === "word/document.xml") sawDocument = true;
+    const declared = file.originalSize;
+    if (failed || (typeof declared === "number" && total + declared > maxUncompressed)) {
+      failed = true;
+      file.terminate();
+      return;
+    }
+    file.ondata = (error, data) => {
+      if (failed || error || !data) {
+        failed = true;
+        return;
+      }
+      total += data.byteLength;
+      if (total > maxUncompressed) {
+        failed = true;
+        file.terminate();
+      }
+    };
+    try {
+      file.start();
+    } catch {
+      failed = true;
+    }
+  };
+
+  const input = new Uint8Array(bytes);
   try {
-    entries = unzipSync(new Uint8Array(bytes));
+    const chunkSize = 256;
+    for (let offset = 0; offset < input.length && !failed; offset += chunkSize) {
+      const next = Math.min(offset + chunkSize, input.length);
+      unzipper.push(input.subarray(offset, next), next === input.length);
+    }
   } catch {
     throw new ExtractionFailed("The document could not be read.");
   }
-  let total = 0;
-  for (const entry of Object.values(entries)) {
-    total += entry.byteLength;
-    if (total > maxUncompressed) throw new ExtractionFailed("The document could not be read.");
-  }
-  if (!entries["word/document.xml"]) throw new ExtractionFailed("The document could not be read.");
-  return bytes;
+  if (failed || !sawDocument) throw new ExtractionFailed("The document could not be read.");
 }
 
 export async function extractDocumentText(

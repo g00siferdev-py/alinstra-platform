@@ -113,7 +113,7 @@ Downloads go through `GET /api/knowledge/documents/[id]`. The handler loads the 
 
 ### Extraction
 
-`extract-knowledge-text` runs in the worker. Timeout is 60 seconds. Extracted text is capped at 200,000 characters and `extractedTextTruncated` is set when the rest is dropped. A malformed or oversized DOCX (zip) fails that document and does not crash the worker. PDF uses `unpdf`, DOCX uses `mammoth` after a zip check, TXT and CSV must be valid UTF-8.
+`extract-knowledge-text` runs in the worker. Timeout is 60 seconds. Extracted text is capped at 200,000 characters and `extractedTextTruncated` is set when the rest is dropped. A malformed or oversized DOCX (zip) fails that document and does not crash the worker. The zip check streams with fflate `Unzip`: a declared `originalSize` over the cap is rejected before inflation, and a running uncompressed total aborts decompression once it passes the cap. PDF uses `unpdf`, DOCX uses `mammoth` after that check, TXT and CSV must be valid UTF-8.
 
 ### Wizard and portal
 
