@@ -39,6 +39,7 @@ Thumbs.db
 .tmp/
 .temp/
 tmp/
+.data/
 
 # Docker / local overrides
 docker-compose.override.yml

@@ -1,0 +1,29 @@
+{
+  "name": "@alinstra/storage",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "lint": "pnpm -w exec eslint packages/storage/src",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "build": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@alinstra/config": "workspace:*",
+    "@aws-sdk/client-s3": "3.901.0",
+    "@aws-sdk/s3-request-presigner": "3.901.0",
+    "fflate": "0.8.2",
+    "mammoth": "1.11.0",
+    "unpdf": "1.4.0"
+  },
+  "devDependencies": {
+    "@alinstra/tsconfig": "workspace:*",
+    "@types/node": "22.19.1",
+    "typescript": "5.9.3",
+    "vitest": "4.1.0"
+  }
+}

@@ -69,6 +69,11 @@ describe("production secret guard", () => {
       NODE_ENV: "production",
       BETTER_AUTH_SECRET: realSecret,
       ENCRYPTION_KEY: realKey,
+      STORAGE_DRIVER: "s3",
+      S3_ENDPOINT: "https://example.r2.cloudflarestorage.com",
+      S3_BUCKET: "alinstra-production",
+      S3_ACCESS_KEY_ID: "r2-access",
+      S3_SECRET_ACCESS_KEY: "r2-secret",
     });
     expect(getEnv().ENCRYPTION_KEY).toBe(realKey);
 

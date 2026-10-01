@@ -20,6 +20,13 @@ const envSchema = z.object({
   // Default 1: the rightmost address is the client, so a visitor-supplied
   // leftmost value is ignored. See docs/DECISIONS.md.
   TRUSTED_PROXY_HOPS: z.coerce.number().int().min(0).max(10).default(1),
+  STORAGE_DRIVER: z.enum(["local", "s3"]).default("local"),
+  UPLOAD_DIR: z.string().default(".data/uploads"),
+  S3_ENDPOINT: z.string().default(""),
+  S3_BUCKET: z.string().default(""),
+  S3_ACCESS_KEY_ID: z.string().default(""),
+  S3_SECRET_ACCESS_KEY: z.string().default(""),
+  S3_REGION: z.string().default("auto"),
 });
 
 export type Env = z.infer<typeof envSchema>;
@@ -45,6 +52,15 @@ function assertProductionSecrets(env: Env): void {
   }
   if (encryptionKeyByteLength(env.ENCRYPTION_KEY) !== 32) {
     throw new Error("Refusing to start: ENCRYPTION_KEY must decode to 32 bytes");
+  }
+  if (
+    env.STORAGE_DRIVER !== "s3" ||
+    !env.S3_ENDPOINT ||
+    !env.S3_BUCKET ||
+    !env.S3_ACCESS_KEY_ID ||
+    !env.S3_SECRET_ACCESS_KEY
+  ) {
+    throw new Error("Refusing to start: production file storage must be a private S3 bucket");
   }
 }
 

@@ -16,6 +16,7 @@
     "@alinstra/db": "workspace:*",
     "@alinstra/email": "workspace:*",
     "@alinstra/queue": "workspace:*",
+    "@alinstra/storage": "workspace:*",
     "@sentry/node": "10.22.0",
     "bullmq": "6.3.10",
     "tsx": "4.20.6"
