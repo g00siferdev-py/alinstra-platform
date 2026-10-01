@@ -1,8 +1,17 @@
 import { getEnv, log, scrubSentryEvent, type SentryLikeEvent } from "@alinstra/config";
-import { bullConnection, EMAIL_QUEUE, extractKnowledgeText, sendInviteEmail, sendPasswordResetEmail } from "@alinstra/queue";
+import { EXTRACT_TIMEOUT_MS } from "@alinstra/db";
+import {
+  bullConnection,
+  EMAIL_QUEUE,
+  extractKnowledgeText,
+  KNOWLEDGE_QUEUE,
+  sendInviteEmail,
+  sendPasswordResetEmail,
+} from "@alinstra/queue";
 import * as Sentry from "@sentry/node";
-import { Worker } from "bullmq";
-import { extractKnowledge } from "./jobs/extract-knowledge-text";
+import { UnrecoverableError, Worker } from "bullmq";
+import { markExtractionFailed } from "./jobs/extract-knowledge-text";
+import { runIsolatedJob } from "./jobs/run-isolated";
 import { sendInvite } from "./jobs/send-invite-email";
 import { sendPasswordReset } from "./jobs/send-password-reset-email";
 
@@ -17,7 +26,9 @@ Sentry.init({
   },
 });
 
-const worker = new Worker(
+const connection = bullConnection();
+
+const email = new Worker(
   EMAIL_QUEUE,
   async (job) => {
     if (job.name === "send-invite-email") {
@@ -29,24 +40,45 @@ const worker = new Worker(
       await sendPasswordReset(payload.to, payload.url);
       return;
     }
-    if (job.name === "extract-knowledge-text") {
-      await extractKnowledge(extractKnowledgeText.parse(job.data).documentId);
-      return;
-    }
     log("warn", "unknown job", { job: job.name });
   },
-  { connection: bullConnection(), concurrency: 5 },
+  { connection, concurrency: 5 },
 );
 
-worker.on("failed", (job, error) => {
-  log("error", "job failed", { job: job?.name ?? "unknown", error: error.name });
-  Sentry.captureException(error);
-});
+const knowledge = new Worker(
+  KNOWLEDGE_QUEUE,
+  async (job) => {
+    const { documentId } = extractKnowledgeText.parse(job.data);
+    try {
+      await runIsolatedJob(
+        new URL("./jobs/extract-knowledge-thread.ts", import.meta.url),
+        { documentId },
+        EXTRACT_TIMEOUT_MS,
+        { transpile: true },
+      );
+    } catch (error) {
+      await markExtractionFailed(documentId, "Extraction timed out.");
+      log("error", "knowledge extraction killed", {
+        documentId,
+        error: error instanceof Error ? error.name : "unknown",
+      });
+      throw new UnrecoverableError("Extraction timed out.");
+    }
+  },
+  { connection, concurrency: 1 },
+);
 
-log("info", "worker listening", { queue: EMAIL_QUEUE });
+for (const worker of [email, knowledge]) {
+  worker.on("failed", (job, error) => {
+    log("error", "job failed", { job: job?.name ?? "unknown", error: error.name });
+    Sentry.captureException(error);
+  });
+}
+
+log("info", "worker listening", { queues: [EMAIL_QUEUE, KNOWLEDGE_QUEUE].join(",") });
 
 async function shutdown(): Promise<void> {
-  await worker.close();
+  await Promise.all([email.close(), knowledge.close()]);
   process.exit(0);
 }
 

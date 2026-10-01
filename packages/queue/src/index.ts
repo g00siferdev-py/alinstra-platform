@@ -21,6 +21,7 @@ export type SendPasswordResetEmail = z.infer<typeof sendPasswordResetEmail>;
 export type ExtractKnowledgeText = z.infer<typeof extractKnowledgeText>;
 
 export const EMAIL_QUEUE = "email";
+export const KNOWLEDGE_QUEUE = "knowledge";
 
 let redis: Redis | undefined;
 
@@ -47,17 +48,25 @@ export function bullConnection(): ConnectionOptions {
 }
 
 let emailQueue: Queue | undefined;
+let knowledgeQueue: Queue | undefined;
 
-function queue(): Queue {
+function emailJobs(): Queue {
   if (!emailQueue) {
     emailQueue = new Queue(EMAIL_QUEUE, { connection: bullConnection() });
   }
   return emailQueue;
 }
 
+function knowledgeJobs(): Queue {
+  if (!knowledgeQueue) {
+    knowledgeQueue = new Queue(KNOWLEDGE_QUEUE, { connection: bullConnection() });
+  }
+  return knowledgeQueue;
+}
+
 export async function enqueueSendInvite(data: SendInviteEmail): Promise<void> {
   const payload = sendInviteEmail.parse(data);
-  await queue().add("send-invite-email", payload, {
+  await emailJobs().add("send-invite-email", payload, {
     attempts: 5,
     backoff: { type: "exponential", delay: 2000 },
     removeOnComplete: 100,
@@ -67,7 +76,7 @@ export async function enqueueSendInvite(data: SendInviteEmail): Promise<void> {
 
 export async function enqueueSendPasswordReset(data: SendPasswordResetEmail): Promise<void> {
   const payload = sendPasswordResetEmail.parse(data);
-  await queue().add("send-password-reset-email", payload, {
+  await emailJobs().add("send-password-reset-email", payload, {
     attempts: 5,
     backoff: { type: "exponential", delay: 2000 },
     removeOnComplete: 100,
@@ -77,7 +86,7 @@ export async function enqueueSendPasswordReset(data: SendPasswordResetEmail): Pr
 
 export async function enqueueExtractKnowledge(data: ExtractKnowledgeText): Promise<void> {
   const payload = extractKnowledgeText.parse(data);
-  await queue().add("extract-knowledge-text", payload, {
+  await knowledgeJobs().add("extract-knowledge-text", payload, {
     attempts: 3,
     backoff: { type: "exponential", delay: 2000 },
     removeOnComplete: 100,
@@ -87,6 +96,9 @@ export async function enqueueExtractKnowledge(data: ExtractKnowledgeText): Promi
 
 export async function closeQueue(): Promise<void> {
   await emailQueue?.close();
+  await knowledgeQueue?.close();
+  emailQueue = undefined;
+  knowledgeQueue = undefined;
   if (redis) {
     redis.disconnect();
     redis = undefined;
