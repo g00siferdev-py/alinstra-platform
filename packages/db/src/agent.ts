@@ -491,6 +491,19 @@ export async function applyQuickUpdate(ctx: Actor, input: QuickUpdateInput): Pro
   });
 }
 
+export async function previewHeldUpdate(ctx: Actor, id: string): Promise<PromptPreview> {
+  assertAdmin(ctx);
+  const row = await prisma.quickUpdate.findFirst({ where: { id, status: "held" } });
+  if (!row) throw new Error("That update is not waiting for review.");
+  const input = parseQuick(row.payload);
+  return prisma.$transaction(async (tx) => {
+    const loaded = await load(tx, row.clientId);
+    const patch = patchFor(loaded.knowledge, input);
+    const rendered = renderPrompt(withPatch(loaded.input, loaded.knowledge, patch));
+    return { prompt: rendered.text, truncated: rendered.truncated, held: true, holdReason: row.holdReason };
+  });
+}
+
 export async function approveQuickUpdate(ctx: Actor, id: string): Promise<{ prompt: string; truncated: boolean }> {
   assertAdmin(ctx);
   return prisma.$transaction(async (tx) => {

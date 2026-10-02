@@ -14,6 +14,7 @@ export {
   changeRequests,
   diffAgentConfigs,
   previewChangeRequest,
+  previewHeldUpdate,
   previewQuickUpdate,
   previewWizardPrompt,
   quickUpdates,
@@ -22,6 +23,7 @@ export {
   rollbackAgentConfig,
   submitChangeRequest,
 } from "./agent";
+export { faqItems, type QuickUpdateInput } from "@alinstra/agent";
 export {
   DEFAULT_TIMEZONE,
   EXTRA_CHANGE_FEE_CENTS,

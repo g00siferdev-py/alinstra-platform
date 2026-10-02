@@ -1,5 +1,5 @@
 import { SignOutButton } from "@/components/home-forms";
-import { clients, plans, type TenantContext } from "@alinstra/db";
+import { changeRequests, clients, plans, quickUpdates, type TenantContext } from "@alinstra/db";
 import { requireUser } from "@/lib/session";
 import Link from "next/link";
 
@@ -12,6 +12,8 @@ export default async function HomePage() {
   let clientName: string | null = null;
   let planName: string | null = null;
   let minutes = 0;
+  let heldUpdates: Array<{ id: string; clientId: string; kind: string }> = [];
+  let pendingRequests: Array<{ id: string; clientId: string; category: string }> = [];
   if (clientId && (role === "client_owner" || role === "client_staff")) {
     const ctx: TenantContext = { role, clientId };
     const client = await clients(ctx).getById(clientId);
@@ -19,6 +21,14 @@ export default async function HomePage() {
     clientName = client?.name ?? null;
     planName = plan?.name ?? null;
     minutes = client?.overrideIncludedMinutes ?? plan?.includedMinutes ?? 0;
+  }
+  if (isAdmin && !needsTwoFactor) {
+    const [held, pending] = await Promise.all([
+      quickUpdates({ role: "admin" }).listHeld(),
+      changeRequests({ role: "admin" }).listPending(),
+    ]);
+    heldUpdates = held.map((row) => ({ id: row.id, clientId: row.clientId, kind: row.kind }));
+    pendingRequests = pending.map((row) => ({ id: row.id, clientId: row.clientId, category: row.category }));
   }
 
   return (
@@ -54,6 +64,25 @@ export default async function HomePage() {
         </section>
       ) : null}
 
+      {isAdmin && !needsTwoFactor ? (
+        <section className="grid gap-3 rounded-xl border border-[var(--line)] bg-[var(--card)] p-6 text-sm">
+          <h2 className="text-lg font-medium">Waiting on review</h2>
+          {pendingRequests.length === 0 && heldUpdates.length === 0 ? <p className="text-[var(--muted)]">No pending requests or held updates.</p> : null}
+          <ul className="grid gap-1">
+            {pendingRequests.map((request) => (
+              <li key={request.id}>
+                <Link href={`/admin/clients/${request.clientId}/changes`}>Change request · {request.category}</Link>
+              </li>
+            ))}
+            {heldUpdates.map((update) => (
+              <li key={update.id}>
+                <Link href={`/admin/clients/${update.clientId}/changes`}>Held quick update · {update.kind}</Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
       {clientName ? (
         <section className="rounded-xl border border-[var(--line)] bg-[var(--card)] p-6">
           <h2 className="text-lg font-medium">{clientName}</h2>
@@ -64,6 +93,7 @@ export default async function HomePage() {
           <p className="text-sm">Messages: 0 · not connected yet</p>
           <div className="mt-4 flex flex-wrap gap-3 text-sm">
             <Link href="/home/business">My business</Link>
+            {session.user.role === "client_owner" ? <Link href="/home/changes">Change requests</Link> : null}
             {session.user.role === "client_owner" ? <Link href="/home/team">Team</Link> : null}
           </div>
         </section>

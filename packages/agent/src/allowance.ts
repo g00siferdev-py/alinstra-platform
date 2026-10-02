@@ -21,9 +21,9 @@ function partsInZone(date: Date, timeZone: string): ZonedParts {
   const bag: Record<string, string> = {};
   for (const part of dtf.formatToParts(date)) bag[part.type] = part.value;
   let hour = Number(bag.hour);
-  let day = Number(bag.day);
-  let month = Number(bag.month);
-  let year = Number(bag.year);
+  const day = Number(bag.day);
+  const month = Number(bag.month);
+  const year = Number(bag.year);
   if (hour === 24) hour = 0;
   return {
     year,

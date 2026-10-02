@@ -33,6 +33,10 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
         />
       </header>
       {!client.wizardSubmittedAt ? <Link href={`/admin/clients/${client.id}/wizard`}>Continue wizard</Link> : null}
+      <div className="flex flex-wrap gap-3 text-sm">
+        <Link href={`/admin/clients/${client.id}/agent`}>Agent config</Link>
+        <Link href={`/admin/clients/${client.id}/changes`}>Change requests</Link>
+      </div>
       <section className="rounded-xl border border-[var(--line)] p-4">
         <h2 className="mb-2 font-medium">Overview</h2>
         <p className="text-sm">Industry: {client.industry ?? "—"}</p>

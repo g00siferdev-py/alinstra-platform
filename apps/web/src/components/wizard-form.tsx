@@ -1,6 +1,6 @@
 "use client";
 
-import { continueWizardAction, discardWizardAction, saveDraftAction, submitWizardAction } from "@/app/admin/actions";
+import { continueWizardAction, discardWizardAction, previewWizardPromptAction, saveDraftAction, submitWizardAction } from "@/app/admin/actions";
 import { Button, ErrorText, Input } from "@/components/ui";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -205,6 +205,10 @@ export function WizardForm({
           <div>
             <FieldLabel label="Business name" hint="The name callers should hear and the name stored on the client record." />
             <Input value={business.name ?? ""} onChange={(event) => setPayload({ ...payload, business: { ...business, name: event.target.value } })} />
+          </div>
+          <div>
+            <FieldLabel label="Name pronunciation (optional)" hint="How the receptionist should say the business name, such as uh-LIN-struh." />
+            <Input value={business.namePronunciation ?? ""} onChange={(event) => setPayload({ ...payload, business: { ...business, namePronunciation: event.target.value } })} />
           </div>
           <div>
             <FieldLabel label="Industry" hint="Used for defaults. Dental and medical office are marked healthcare-sensitive unless you change that later." />
@@ -432,7 +436,7 @@ export function WizardForm({
         <div className="grid gap-2 text-sm">
           <p>Business: {business.name} ({business.industry})</p>
           <p>Owner email: {payload.portalOwnerEmail}</p>
-          <p className="text-[var(--muted)]">The agent prompt is generated in a later phase. This submit does not call a voice, phone, or billing provider.</p>
+          <PromptPreview clientId={clientId} payload={payload} />
           <Button disabled={pending} onClick={() => { saveLock.current = true; setPending(true); void submitWizardAction({ clientId, payload, updatedAt: updatedRef.current }).then((result) => { saveLock.current = false; setPending(false); if (result?.error) setError(result.error); }); }}>Submit wizard</Button>
         </div>
       ) : null}
@@ -442,6 +446,33 @@ export function WizardForm({
         {step < 11 ? <Button disabled={pending} onClick={() => void continueStep()}>{pending ? "Saving…" : "Continue"}</Button> : null}
         <Button onClick={() => void discardWizardAction(clientId)}>Discard draft</Button>
       </div>
+    </div>
+  );
+}
+
+function PromptPreview({ clientId, payload }: { clientId: string; payload: Payload }) {
+  const [text, setText] = useState("Loading the prompt preview…");
+  const [truncated, setTruncated] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    void previewWizardPromptAction({ clientId, payload }).then((result) => {
+      if (cancelled) return;
+      if (result.error) {
+        setText(result.error);
+        setTruncated(false);
+        return;
+      }
+      setText(result.prompt ?? "");
+      setTruncated(Boolean(result.truncated));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [clientId, payload]);
+  return (
+    <div className="grid gap-2">
+      {truncated ? <p>Some reference material was cut to fit the prompt size limit.</p> : null}
+      <pre className="max-h-80 overflow-auto whitespace-pre-wrap rounded-md border border-[var(--line)] bg-[var(--card)] p-3 text-xs">{text}</pre>
     </div>
   );
 }

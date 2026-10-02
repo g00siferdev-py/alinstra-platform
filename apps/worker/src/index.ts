@@ -5,6 +5,7 @@ import {
   EMAIL_QUEUE,
   extractKnowledgeText,
   KNOWLEDGE_QUEUE,
+  sendAdminNotice,
   sendInviteEmail,
   sendPasswordResetEmail,
 } from "@alinstra/queue";
@@ -12,6 +13,7 @@ import * as Sentry from "@sentry/node";
 import { UnrecoverableError, Worker } from "bullmq";
 import { markExtractionFailed } from "./jobs/extract-knowledge-text";
 import { runIsolatedJob } from "./jobs/run-isolated";
+import { deliverAdminNotice } from "./jobs/send-admin-notice";
 import { sendInvite } from "./jobs/send-invite-email";
 import { sendPasswordReset } from "./jobs/send-password-reset-email";
 
@@ -38,6 +40,11 @@ const email = new Worker(
     if (job.name === "send-password-reset-email") {
       const payload = sendPasswordResetEmail.parse(job.data);
       await sendPasswordReset(payload.to, payload.url);
+      return;
+    }
+    if (job.name === "send-admin-notice") {
+      const payload = sendAdminNotice.parse(job.data);
+      await deliverAdminNotice(payload.subject, payload.text);
       return;
     }
     log("warn", "unknown job", { job: job.name });

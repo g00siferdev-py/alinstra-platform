@@ -8,6 +8,7 @@ import {
   discardWizard,
   removeClient,
   saveWizardDraft,
+  previewWizardPrompt,
   startWizard,
   submitWizard,
   updatePlan,
@@ -145,6 +146,16 @@ export async function sendPortalInviteAction(clientId: string): Promise<ActionSt
     return { ok: true };
   } catch (error) {
     return { error: error instanceof AuthError ? error.message : "Could not send the invite." };
+  }
+}
+
+export async function previewWizardPromptAction(input: { clientId: string; payload: unknown }) {
+  const session = await requireAdmin();
+  try {
+    const result = await previewWizardPrompt(adminActor(session), input);
+    return { prompt: result.prompt, truncated: result.truncated };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Could not preview the prompt." };
   }
 }
 

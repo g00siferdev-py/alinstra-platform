@@ -16,9 +16,15 @@ export const extractKnowledgeText = z.object({
   documentId: z.string().min(1),
 });
 
+export const sendAdminNotice = z.object({
+  subject: z.string().min(1).max(200),
+  text: z.string().min(1).max(5000),
+});
+
 export type SendInviteEmail = z.infer<typeof sendInviteEmail>;
 export type SendPasswordResetEmail = z.infer<typeof sendPasswordResetEmail>;
 export type ExtractKnowledgeText = z.infer<typeof extractKnowledgeText>;
+export type SendAdminNotice = z.infer<typeof sendAdminNotice>;
 
 export const EMAIL_QUEUE = "email";
 export const KNOWLEDGE_QUEUE = "knowledge";
@@ -77,6 +83,16 @@ export async function enqueueSendInvite(data: SendInviteEmail): Promise<void> {
 export async function enqueueSendPasswordReset(data: SendPasswordResetEmail): Promise<void> {
   const payload = sendPasswordResetEmail.parse(data);
   await emailJobs().add("send-password-reset-email", payload, {
+    attempts: 5,
+    backoff: { type: "exponential", delay: 2000 },
+    removeOnComplete: 100,
+    removeOnFail: 100,
+  });
+}
+
+export async function enqueueSendAdminNotice(data: SendAdminNotice): Promise<void> {
+  const payload = sendAdminNotice.parse(data);
+  await emailJobs().add("send-admin-notice", payload, {
     attempts: 5,
     backoff: { type: "exponential", delay: 2000 },
     removeOnComplete: 100,
