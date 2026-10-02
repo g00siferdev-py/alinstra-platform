@@ -11,7 +11,7 @@ Phase 2 is on branch `phase-2` and is not merged. Main and staging stay at the P
 
 ## CI
 - GitHub Actions runs install, prisma generate, migrate deploy, lint, typecheck, and test against Postgres 16 and Redis 7 service containers. Fixed 2026-10-01: Turborepo strict env mode hid DATABASE_URL from tasks, and CI had no Redis.
-- Remote GitHub Actions is unverified. `gh` is not installed, so the runs on GitHub were not watched. The same sequence was run from a fresh clone of `231db47` and passed locally (37 tests). Phase 2 has not been pushed to a host that runs that workflow yet.
+- Remote GitHub Actions is unverified. `gh` is not installed, so the runs on GitHub were not watched. A fresh clone of this `phase-2` branch passed the CI sequence locally against `alinstra_test` (lint, typecheck, and 58 tests).
 
 ## Phase 2 (branch `phase-2`, not merged)
 

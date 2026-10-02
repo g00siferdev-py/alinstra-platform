@@ -164,5 +164,5 @@ The admin notice email is queued only when a quick update applies immediately. T
 
 - Existing AgentConfig rows change `status` when a newer version becomes active. The prompt and settings on that row stay as written. Full immutability, including status, would need a separate "current" pointer.
 - The admin email is not sent when an admin approves a held update or a change request. Those show on the admin home.
-- Remote GitHub Actions was not watched. The GitHub CLI is not installed. A fresh clone of `231db47` passed the CI sequence locally.
+- Remote GitHub Actions was not watched. The GitHub CLI is not installed. A fresh clone of `phase-2` passed the CI sequence locally against `alinstra_test`.
 
