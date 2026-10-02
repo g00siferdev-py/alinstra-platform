@@ -275,6 +275,7 @@ model AgentConfig {
   promptTruncated  Boolean        @default(false)
   templateId       String
   templateVersion  String
+  referenceToken   String?
   knowledgeBaseId  String?
   knowledgeBase    KnowledgeBase? @relation(fields: [knowledgeBaseId], references: [id], onDelete: SetNull)
   knowledgeVersion Int?

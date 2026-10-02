@@ -1,7 +1,7 @@
 "use client";
 
 import { continueWizardAction, discardWizardAction, previewWizardPromptAction, saveDraftAction, submitWizardAction } from "@/app/admin/actions";
-import { Button, ErrorText, Input } from "@/components/ui";
+import { Button, ErrorText, FileDropzone, Input } from "@/components/ui";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
@@ -38,6 +38,15 @@ type Payload = {
 };
 
 type DocumentRow = { id: string; originalFilename: string; extractionStatus: string; extractionError: string | null };
+
+function greetingPreview(business: string, assistantName: string, mode: string, recordingNotice: boolean): string {
+  const name = assistantName.trim() || "Ava";
+  const spoken =
+    mode === "upfront"
+      ? `Thank you for calling ${business}. This is ${name}, ${business}'s virtual assistant.`
+      : `Thank you for calling ${business}. This is ${name}.`;
+  return recordingNotice ? `${spoken} This call may be recorded.` : spoken;
+}
 
 function contentTypeFor(filename: string): string {
   const extension = filename.toLowerCase().split(".").pop();
@@ -105,6 +114,9 @@ export function WizardForm({
   const [updatedAt, setUpdatedAt] = useState(initialUpdatedAt);
   const updatedRef = useRef(updatedAt);
   const [error, setError] = useState<string | null>(null);
+  const [uploadingName, setUploadingName] = useState<string | null>(null);
+  const [uploadedName, setUploadedName] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const saveLock = useRef(false);
 
@@ -154,7 +166,9 @@ export function WizardForm({
   }
 
   async function upload(file: File) {
-    setError(null);
+    setUploadError(null);
+    setUploadedName(null);
+    setUploadingName(file.name);
     const started = await fetch("/api/knowledge/uploads", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -167,7 +181,8 @@ export function WizardForm({
     });
     const body = (await started.json()) as { message?: string; mode?: string; url?: string; documentId?: string };
     if (!started.ok || !body.url || !body.documentId) {
-      setError(body.message ?? "Upload failed.");
+      setUploadingName(null);
+      setUploadError(body.message ?? "Upload failed.");
       return;
     }
     const stored = await fetch(body.url, {
@@ -177,16 +192,20 @@ export function WizardForm({
     });
     if (!stored.ok) {
       const failed = (await stored.json()) as { message?: string };
-      setError(failed.message ?? "Upload failed.");
+      setUploadingName(null);
+      setUploadError(failed.message ?? "Upload failed.");
       return;
     }
     if (body.mode === "presigned") {
       const confirmed = await fetch(`/api/knowledge/uploads/${body.documentId}`, { method: "POST" });
       if (!confirmed.ok) {
-        setError("Upload could not be confirmed.");
+        setUploadingName(null);
+        setUploadError("Upload could not be confirmed.");
         return;
       }
     }
+    setUploadingName(null);
+    setUploadedName(file.name);
     router.refresh();
   }
 
@@ -339,9 +358,17 @@ export function WizardForm({
             </select>
           </div>
           <div>
-            <FieldLabel label="Greeting" hint="The first words the caller should hear, including the business name if you want it spoken." />
-            <Input value={payload.voice.greeting ?? ""} onChange={(event) => setPayload({ ...payload, voice: { ...payload.voice, greeting: event.target.value } })} />
+            <FieldLabel label="Assistant name" hint="The name the caller hears. The default is Ava." />
+            <Input value={payload.voice.assistantName ?? "Ava"} onChange={(event) => setPayload({ ...payload, voice: { ...payload.voice, assistantName: event.target.value } })} />
           </div>
+          <div>
+            <FieldLabel label="Disclosure" hint="On request, the assistant says it is a virtual assistant only when asked. Upfront says so in the greeting." />
+            <select className="w-full cursor-pointer rounded-md border border-[var(--line)] px-3 py-2 text-sm" value={payload.voice.disclosureMode || "on_request"} onChange={(event) => setPayload({ ...payload, voice: { ...payload.voice, disclosureMode: event.target.value } })}>
+              <option value="on_request">When asked</option>
+              <option value="upfront">In the greeting</option>
+            </select>
+          </div>
+          <p className="text-sm text-[var(--muted)]">{greetingPreview(business.name || "the business", payload.voice.assistantName ?? "Ava", payload.voice.disclosureMode || "on_request", payload.compliance.recordingNotice !== false)}</p>
           <div>
             <FieldLabel label="Tone" hint="How the receptionist should sound, such as warm, brief, or formal." />
             <Input value={payload.voice.tone ?? ""} onChange={(event) => setPayload({ ...payload, voice: { ...payload.voice, tone: event.target.value } })} />
@@ -371,7 +398,12 @@ export function WizardForm({
           ))}
           <div>
             <FieldLabel label="Files" hint="PDF, DOCX, TXT, or CSV. Up to 10 MB each, 25 files, and 50 MB total for this client. Text is extracted after upload." />
-            <input className="cursor-pointer text-sm file:cursor-pointer" type="file" accept=".pdf,.docx,.txt,.csv" onChange={(event) => { const file = event.target.files?.[0]; if (file) void upload(file); }} />
+            <FileDropzone
+              uploadingName={uploadingName}
+              successName={uploadedName}
+              error={uploadError}
+              onFile={(file) => void upload(file)}
+            />
           </div>
           <ul className="text-sm">
             {documents.map((document) => (

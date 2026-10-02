@@ -9,6 +9,7 @@ import {
 } from "./lockout";
 import { ARCHIVED_CLIENT_MESSAGE, sessionBlockedForUser } from "./client-access";
 import { prisma } from "@alinstra/db";
+import { reenrollAdminTwoFactor, sessionRole } from "./two-factor-admin";
 
 function authPath(request: Request): string {
   const { pathname } = new URL(request.url);
@@ -90,6 +91,14 @@ export async function handleAuthRequest(request: Request): Promise<Response> {
   if ((path === "/request-password-reset" || path === "/forget-password") && email) {
     if (await passwordResetLimited(email)) return tooMany();
     await recordPasswordResetRequest(email);
+  }
+
+  if (path === "/two-factor/disable" && request.method === "POST" && (await sessionRole(request)) === "admin") {
+    return Response.json({ message: "Admins cannot turn off two-factor authentication." }, { status: 403 });
+  }
+
+  if (path === "/two-factor/re-enroll" && request.method === "POST") {
+    return reenrollAdminTwoFactor(request);
   }
 
   const response = await auth.handler(await withTrustedClientIp(request, ip));

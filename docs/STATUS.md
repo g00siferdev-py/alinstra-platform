@@ -1,25 +1,26 @@
 # Status
 
-Phase 2 is on branch `phase-2` and is not merged. Main and staging stay at the Phase 1 CI fix (`231db47`).
+Phase 2 is merged into `main`. `staging` points at `main`.
 
 ## Verified locally
 
-- Phase 2 branch: `pnpm test` passed 58 tests (prompt rendering, allowance, isolation, plus the Phase 0–1 suites). `pnpm lint` and `pnpm typecheck` were run on this branch after those tests.
+- Phase 2: `pnpm test` passed 60 tests (prompt rendering, admin two-factor, allowance, isolation, plus the Phase 0–1 suites). `pnpm lint` and `pnpm typecheck` were run on this branch after those tests.
 - Isolation: a client user cannot read another client's draft, knowledge, documents, or change log. A storage key is always under that client's id.
 - Extraction: truncated text, a malformed or oversized DOCX fails as `ExtractionFailed`, and the timeout helper rejects
 - Production env guard still rejects placeholder secrets. Staging and production also require R2 (`STORAGE_DRIVER=s3`)
 
 ## CI
 - GitHub Actions runs install, prisma generate, migrate deploy, lint, typecheck, and test against Postgres 16 and Redis 7 service containers. Fixed 2026-10-01: Turborepo strict env mode hid DATABASE_URL from tasks, and CI had no Redis.
-- Remote GitHub Actions is unverified. `gh` is not installed, so the runs on GitHub were not watched. A fresh clone of this `phase-2` branch passed the CI sequence locally against `alinstra_test` (lint, typecheck, and 58 tests).
+- Remote GitHub Actions is unverified. `gh` is not installed, so the runs on GitHub were not watched. A fresh clone of `phase-2` passed the CI sequence locally against `alinstra_test` (lint, typecheck, and 60 tests).
 
-## Phase 2 (branch `phase-2`, not merged)
+## Phase 2
 
-- `@alinstra/agent` renders the receptionist prompt from structured data. Templates: general, HVAC, veterinary. No model or external API calls.
+- `@alinstra/agent` renders receptionist template version 3. The greeting uses the assistant name (default Ava) and disclosure mode. Honest-on-request is always on. Upfront disclosure is optional and defaults off. The recording notice stays on by default. `{{current_time}}` is filled by the voice platform in Phase 3. Reference blocks use a random token stored on the config. No model or external API calls.
 - Wizard step 11 shows that prompt. Submit creates AgentConfig version 1 as draft. `platformAgentId` stays null.
 - Owners can quick-update hours, closures, staff and transfer numbers, and one FAQ. Sensitive wording is held. A safe change creates a new active config and queues an admin email.
 - Owners can submit a text change request. Allowance is the calendar month in the client timezone. A client with no plan and no override gets 0 included requests. Past the allowance, the extra fee is stored after confirmation. Billing is still Phase 3.
 - Admin client pages: Agent Config (versions, diff, preview, activate, rollback) and Change Requests. Approving a request edits the receptionist fields and publishes a new version. The request text is not copied into the prompt. Rollback forks the knowledge base from the chosen version. Admin home lists held updates and pending requests.
+- Admins cannot turn off two-factor authentication. They replace an authenticator with a current code, and two-factor stays on. Client users can still disable optional two-factor.
 - Tests use the `alinstra_test` database and refuse to truncate any other database.
 - Portal: My Business is editable for owners. Staff stay read-only. Owners have Change Requests.
 
@@ -49,5 +50,5 @@ See the root `README.md`. Admin sign-in still requires two-factor enrollment at 
 ## How to resume
 
 1. Read `docs/DECISIONS.md`, `docs/phase-2-plan.md`, and this file.
-2. Phase 2 is on `phase-2`. Do not merge until Daniel reviews the items under "Needs Daniel's review".
+2. Phase 2 is on `main`. The items under "Needs Daniel's review" in `docs/DECISIONS.md` are still open.
 3. Phase 3 (billing, provisioning, live-client churn) has not started.

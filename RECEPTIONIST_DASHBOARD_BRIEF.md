@@ -117,10 +117,10 @@ A single guided form, usable live during a sales or discovery call. Drafts auto-
 3. **Plan** — Starter / Professional / Premium; overrides allowed (custom minutes, price, waived setup fee)
 4. **Coverage** — missed calls after N rings, lunch hours, after hours, weekends/holidays, hold overflow
 5. **Features** — FAQs, messages (SMS/email to chosen staff), booking (direct-to-calendar or request-only), text confirmations, text reminders, live transfer, emergency handling, recall add-on
-6. **Voice & personality** — voice picker with audio previews, greeting, tone, languages
+6. **Voice & personality** — voice picker with audio previews, assistant name (default Ava), disclosure (when asked, or in the greeting), tone, languages. The greeting is built from the business name, assistant name, and disclosure mode.
 7. **Knowledge base** — upload files (PDF, DOCX, TXT, CSV) and/or paste text; structured editors for hours, services & prices, FAQs, policies, staff
 8. **Phone setup** — new number or forwarding mode; client's carrier/phone system
-9. **Compliance** — AI disclosure (always on), recording notice (default on), healthcare/privacy-sensitive flag (blocks Submit until compliance review is marked done), recall consent confirmation
+9. **Compliance** — honest-on-request always on; upfront disclosure optional per client (default off). Recording notice (default on). Healthcare/privacy-sensitive flag (blocks Submit until compliance review is marked done), recall consent confirmation
 10. **Client portal access** — client owner email for invite
 11. **Review & Submit** — full summary with a preview of the generated agent prompt
 
@@ -193,7 +193,7 @@ A demo converts to a full client with one click, carrying everything into the wi
 
 Default checklist (editable); simulated calls where the voice platform supports them, otherwise manual:
 
-- Greeting correct; AI disclosure and recording notice present
+- Greeting correct for the disclosure mode; honesty rule present; recording notice present when recording is on
 - Answers hours, location, and 3 FAQs correctly
 - Books an appointment that appears on the calendar
 - Refuses to invent unknown prices or services

@@ -110,7 +110,14 @@ export function ChangeRequestReview({
       <TextField label="Policies" value={fields.policies} onChange={(value) => setText("policies", value)} />
       <TextField label="Staff" value={fields.staff} onChange={(value) => setText("staff", value)} />
       <TextField label="Notices" value={fields.notices} onChange={(value) => setText("notices", value)} />
-      <TextField label="Greeting" value={fields.greeting} onChange={(value) => setText("greeting", value)} />
+      <TextField label="Assistant name" value={fields.assistantName} onChange={(value) => setText("assistantName", value)} />
+      <label className="grid gap-1">
+        <span className="font-medium">Disclosure</span>
+        <select className="rounded-md border border-[var(--line)] px-3 py-2" value={fields.disclosureMode} onChange={(event) => setText("disclosureMode", event.target.value)}>
+          <option value="on_request">When asked</option>
+          <option value="upfront">In the greeting</option>
+        </select>
+      </label>
       <label className="grid gap-1">
         <span className="font-medium">Voice</span>
         <select className="rounded-md border border-[var(--line)] px-3 py-2" value={fields.voiceId} onChange={(event) => setText("voiceId", event.target.value)}>

@@ -1,6 +1,7 @@
 import {
   CHANGE_CATEGORIES,
   allowanceState,
+  buildGreeting,
   calendarMonthRange,
   diffFields,
   diffLines,
@@ -79,10 +80,13 @@ function recordingOn(compliance: unknown): boolean {
   return value !== false;
 }
 
-function greetingOf(voice: unknown, businessName: string): string {
-  const greeting = asRecord(voice).greeting;
-  if (typeof greeting === "string" && greeting.trim()) return greeting;
-  return `Thank you for calling ${businessName}.`;
+function personaOf(voice: unknown): { assistantName: string; disclosureMode: "on_request" | "upfront" } {
+  const row = asRecord(voice);
+  const name = typeof row.assistantName === "string" ? row.assistantName.trim() : "";
+  return {
+    assistantName: name || "Ava",
+    disclosureMode: row.disclosureMode === "upfront" ? "upfront" : "on_request",
+  };
 }
 
 function emergencyOf(features: unknown): string | null {
@@ -104,7 +108,15 @@ type KnowledgeShape = {
 type DocShape = { id: string; originalFilename: string; extractedText: string | null };
 
 function toInput(
-  client: { name: string; industry: string | null; namePronunciation: string | null; voice: unknown; features: unknown; compliance: unknown },
+  client: {
+    name: string;
+    industry: string | null;
+    namePronunciation: string | null;
+    timezone?: string | null;
+    voice: unknown;
+    features: unknown;
+    compliance: unknown;
+  },
   knowledge: KnowledgeShape | null,
   documents: DocShape[],
 ): PromptInput {
@@ -113,12 +125,22 @@ function toInput(
     filename: document.originalFilename,
     text: document.extractedText ?? "",
   }));
+  const persona = personaOf(client.voice);
+  const recordingNotice = recordingOn(client.compliance);
   return {
     businessName: client.name,
     namePronunciation: client.namePronunciation,
     industry: client.industry,
-    greeting: greetingOf(client.voice, client.name),
-    recordingNotice: recordingOn(client.compliance),
+    assistantName: persona.assistantName,
+    disclosureMode: persona.disclosureMode,
+    timezone: client.timezone || "America/New_York",
+    greeting: buildGreeting({
+      businessName: client.name,
+      assistantName: persona.assistantName,
+      disclosureMode: persona.disclosureMode,
+      recordingNotice,
+    }),
+    recordingNotice,
     hours: plain(knowledge?.hours) ?? faqsToText(knowledge?.hours),
     services: plain(knowledge?.services) ?? faqsToText(knowledge?.services),
     faqs: faqsToText(knowledge?.faqs),
@@ -160,6 +182,10 @@ function settingsOf(
     staff: input.staff ?? "",
     notices: input.notices ?? "",
     emergency: input.emergency ?? "",
+    assistantName: input.assistantName ?? "Ava",
+    disclosureMode: input.disclosureMode ?? "on_request",
+    timezone: input.timezone ?? "",
+    referenceToken: rendered.referenceToken,
     features: (snapshot?.features ?? {}) as Prisma.InputJsonValue,
     coverage: (snapshot?.coverage ?? {}) as Prisma.InputJsonValue,
   };
@@ -215,6 +241,7 @@ async function insertConfig(
       documentIds: args.documentIds,
       voice: jsonOr(args.voice),
       greeting: args.input.greeting ?? null,
+      referenceToken: rendered.referenceToken,
       tools: rendered.tools,
       settings: settingsOf(args.input, rendered, { features: args.features, coverage: args.coverage }),
       platformAgentId: null,
@@ -401,13 +428,24 @@ export async function previewWizardPrompt(ctx: Actor, input: { clientId: string;
     const voice = payload.voice ?? asRecord(loaded.client.voice);
     const compliance = { ...asRecord(loaded.client.compliance), ...asRecord(payload.compliance) };
     const features = { ...asRecord(loaded.client.features), ...asRecord(payload.features) };
+    const persona = personaOf(voice);
+    const recordingNotice = recordingOn(compliance);
+    const businessName = business.name || loaded.client.name;
     const promptInput: PromptInput = {
       ...loaded.input,
-      businessName: business.name || loaded.client.name,
+      businessName,
       industry: business.industry ?? loaded.client.industry,
       namePronunciation: business.namePronunciation ?? loaded.client.namePronunciation,
-      greeting: greetingOf(voice, business.name || loaded.client.name),
-      recordingNotice: recordingOn(compliance),
+      assistantName: persona.assistantName,
+      disclosureMode: persona.disclosureMode,
+      timezone: loaded.client.timezone || "America/New_York",
+      greeting: buildGreeting({
+        businessName,
+        assistantName: persona.assistantName,
+        disclosureMode: persona.disclosureMode,
+        recordingNotice,
+      }),
+      recordingNotice,
       emergency: emergencyOf(features),
       hours: knowledge.hours ?? loaded.input.hours,
       services: knowledge.services ?? loaded.input.services,
@@ -696,6 +734,8 @@ export type ReceptionistFields = {
   staff: string;
   notices: string;
   greeting: string;
+  assistantName: string;
+  disclosureMode: string;
   voiceId: string;
   tone: string;
   languages: string;
@@ -744,6 +784,8 @@ function fieldsOf(loaded: { client: { name: string; voice: unknown; coverage: un
     staff: fieldText(loaded.knowledge?.staff),
     notices: fieldText(loaded.knowledge?.notices),
     greeting: typeof voice.greeting === "string" ? voice.greeting : "",
+    assistantName: typeof voice.assistantName === "string" && voice.assistantName.trim() ? voice.assistantName : "Ava",
+    disclosureMode: voice.disclosureMode === "upfront" ? "upfront" : "on_request",
     voiceId,
     tone: typeof voice.tone === "string" ? voice.tone : "",
     languages: typeof voice.languages === "string" ? voice.languages : "",
@@ -786,6 +828,8 @@ function parseReceptionistFields(value: unknown): ReceptionistFields {
     staff: readText(row, "staff"),
     notices: readText(row, "notices"),
     greeting: readText(row, "greeting"),
+    assistantName: readText(row, "assistantName"),
+    disclosureMode: readText(row, "disclosureMode"),
     voiceId: readText(row, "voiceId"),
     tone: readText(row, "tone"),
     languages: readText(row, "languages"),
@@ -803,6 +847,8 @@ function parseReceptionistFields(value: unknown): ReceptionistFields {
     emergencyHandling: readText(row, "emergencyHandling"),
     recallAddOn: readFlag(row, "recallAddOn"),
   };
+  if (fields.assistantName.trim().length > 40) throw new Error("The assistant name is too long.");
+  if (fields.disclosureMode !== "on_request" && fields.disclosureMode !== "upfront") throw new Error("Choose a disclosure mode.");
   if (fields.voiceId && !(VOICE_IDS as readonly string[]).includes(fields.voiceId)) throw new Error("Choose a voice.");
   if (fields.bookingMode && fields.bookingMode !== "direct_calendar" && fields.bookingMode !== "request_only") {
     throw new Error("Choose a booking mode.");
@@ -825,6 +871,8 @@ function editedClient(fields: ReceptionistFields): { voice: Record<string, unkno
     voice: {
       ...(fields.voiceId ? { voiceId: fields.voiceId } : {}),
       ...(optionalText(fields.greeting) ? { greeting: optionalText(fields.greeting) } : {}),
+      assistantName: optionalText(fields.assistantName) || "Ava",
+      disclosureMode: fields.disclosureMode === "upfront" ? "upfront" : "on_request",
       ...(optionalText(fields.tone) ? { tone: optionalText(fields.tone) } : {}),
       ...(optionalText(fields.languages) ? { languages: optionalText(fields.languages) } : {}),
     },
@@ -880,6 +928,7 @@ function previewInput(
       name: loaded.client.name,
       industry: loaded.client.industry,
       namePronunciation: loaded.client.namePronunciation,
+      timezone: loaded.client.timezone,
       voice: edited.voice,
       features: edited.features,
       compliance: loaded.client.compliance,
@@ -1073,6 +1122,7 @@ async function copyAsActive(ctx: Actor, input: { clientId: string; version: numb
         documentIds: source.documentIds as Prisma.InputJsonValue,
         voice: jsonOr(source.voice),
         greeting: source.greeting,
+        referenceToken: source.referenceToken,
         tools: source.tools as Prisma.InputJsonValue,
         settings: source.settings as Prisma.InputJsonValue,
         platformAgentId: null,

@@ -61,6 +61,9 @@ export default async function HomePage() {
           <Link className="rounded-md border border-[var(--line)] px-4 py-2 text-sm" href="/admin/plans">
             Plans
           </Link>
+          <Link className="rounded-md border border-[var(--line)] px-4 py-2 text-sm" href="/account/security">
+            Replace authenticator
+          </Link>
         </section>
       ) : null}
 

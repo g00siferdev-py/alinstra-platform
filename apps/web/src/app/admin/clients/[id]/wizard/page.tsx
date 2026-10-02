@@ -63,6 +63,8 @@ export default async function WizardPage({ params }: { params: Promise<{ id: str
           voice: {
             voiceId: parsed.voice?.voiceId ?? "",
             greeting: parsed.voice?.greeting ?? "",
+            assistantName: parsed.voice?.assistantName ?? "Ava",
+            disclosureMode: parsed.voice?.disclosureMode ?? "on_request",
             tone: parsed.voice?.tone ?? "",
             languages: parsed.voice?.languages ?? "",
           },

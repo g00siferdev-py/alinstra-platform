@@ -96,6 +96,8 @@ export const featuresSchema = z.object({
 export const voiceSchema = z.object({
   voiceId: z.preprocess(emptyToUndefined, z.enum(["voice_1", "voice_2", "voice_3", "voice_4"]).optional()),
   greeting: optionalText,
+  assistantName: z.preprocess(emptyToUndefined, z.string().trim().max(40).optional()),
+  disclosureMode: z.preprocess(emptyToUndefined, z.enum(["on_request", "upfront"]).optional()),
   tone: optionalText,
   languages: optionalText,
 });

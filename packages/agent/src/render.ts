@@ -1,4 +1,7 @@
-export const TEMPLATE_VERSION = "2";
+import { randomBytes } from "node:crypto";
+
+export const TEMPLATE_VERSION = "3";
+export const CURRENT_TIME_PLACEHOLDER = "{{current_time}}";
 export const PROMPT_BUDGET = 24_000;
 export const DECLARED_TOOLS = ["take_message", "transfer", "callback"] as const;
 
@@ -10,7 +13,6 @@ export const TRUNCATION_NOTE =
   "Some reference material was omitted because the prompt reached its size limit.";
 
 const GUARDRAILS = [
-  "You are an AI receptionist. Say so in your greeting.",
   "Answer only from the business information in this prompt.",
   "Never invent prices, services, availability, or policies. Offer a message or callback instead.",
   "Do not give medical, legal, or financial advice.",
@@ -50,11 +52,16 @@ export type PromptFeatures = {
   messages?: string | null;
 };
 
+export type DisclosureMode = "on_request" | "upfront";
+
 export type PromptInput = {
   businessName: string;
   namePronunciation?: string | null;
   industry?: string | null;
   greeting?: string | null;
+  assistantName?: string | null;
+  disclosureMode?: DisclosureMode | null;
+  timezone?: string | null;
   recordingNotice: boolean;
   hours?: string | null;
   services?: string | null;
@@ -73,6 +80,7 @@ export type RenderedPrompt = {
   templateId: TemplateId;
   templateVersion: string;
   tools: readonly string[];
+  referenceToken: string;
 };
 
 export function templateForIndustry(industry: string | null | undefined): TemplateId {
@@ -98,21 +106,50 @@ export function faqsToText(value: unknown): string | null {
   return lines.length > 0 ? lines.join("\n") : null;
 }
 
-export function neutralizeReferenceMarkers(text: string): string {
-  return text.replaceAll(REFERENCE_START, "reference start").replaceAll(REFERENCE_END, "reference end");
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-function section(label: string, value: string | null | undefined): string | null {
+export function referenceMarkers(token: string): { start: string; end: string } {
+  return { start: `REFERENCE START ${token}`, end: `REFERENCE END ${token}` };
+}
+
+export function neutralizeReferenceMarkers(text: string, token?: string): string {
+  let next = text;
+  if (token) {
+    const exact = new RegExp(`reference\\s+(?:start|end)\\s+${escapeRegExp(token)}`, "gi");
+    next = next.replace(exact, "[reference-marker]");
+  }
+  return next.replace(/reference\s+(?:start|end)/gi, "[reference-marker]");
+}
+
+export function assistantCapabilities(features: PromptFeatures | null | undefined): string {
+  const parts = ["answer your questions"];
+  if (features?.bookingMode === "direct_calendar") parts.push("help you schedule an appointment");
+  if (features?.bookingMode === "request_only") parts.push("take your appointment request");
+  parts.push("take a message");
+  return `${parts.slice(0, -1).join(", ")}, and ${parts[parts.length - 1]}`;
+}
+
+export function buildGreeting(input: {
+  businessName: string;
+  assistantName?: string | null;
+  disclosureMode?: DisclosureMode | null;
+  recordingNotice: boolean;
+}): string {
+  const name = input.assistantName?.trim() || "Ava";
+  const business = input.businessName.trim();
+  const spoken =
+    input.disclosureMode === "upfront"
+      ? `Thank you for calling ${business}. This is ${name}, ${business}'s virtual assistant.`
+      : `Thank you for calling ${business}. This is ${name}.`;
+  return input.recordingNotice ? `${spoken} This call may be recorded.` : spoken;
+}
+
+function section(label: string, value: string | null | undefined, token: string): string | null {
   const text = value?.trim();
   if (!text) return null;
-  return `${label}:\n${neutralizeReferenceMarkers(text)}`;
-}
-
-function spokenGreeting(input: PromptInput): string {
-  const custom = input.greeting?.trim() || `Thank you for calling ${input.businessName}.`;
-  const parts = [neutralizeReferenceMarkers(custom), "I am an AI receptionist."];
-  if (input.recordingNotice) parts.push("This call may be recorded.");
-  return parts.join(" ");
+  return `${label}:\n${neutralizeReferenceMarkers(text, token)}`;
 }
 
 export function toolsForFeatures(features: PromptFeatures | null | undefined): string[] {
@@ -121,7 +158,7 @@ export function toolsForFeatures(features: PromptFeatures | null | undefined): s
   return tools;
 }
 
-function featureLines(input: PromptInput): string[] {
+function featureLines(input: PromptInput, token: string): string[] {
   const features = input.features;
   const lines: string[] = [];
   if (features?.bookingMode === "request_only") {
@@ -135,52 +172,72 @@ function featureLines(input: PromptInput): string[] {
   }
   lines.push(features?.liveTransfer ? "Live transfer is on. Transfer only according to the staff directory." : "Live transfer is off. Do not transfer the call.");
   const delivery = features?.messages?.trim();
-  lines.push(delivery ? `Message delivery: ${neutralizeReferenceMarkers(delivery)}` : "Message delivery: the office follows up on messages.");
+  lines.push(delivery ? `Message delivery: ${neutralizeReferenceMarkers(delivery, token)}` : "Message delivery: the office follows up on messages.");
   return lines;
 }
 
-function instructions(input: PromptInput, templateId: TemplateId): string {
-  const lines = [...GUARDRAILS];
-  if (input.recordingNotice) {
-    lines.splice(1, 0, "This call may be recorded.");
+function personaLines(input: PromptInput): string[] {
+  const business = input.businessName.trim();
+  const capabilities = assistantCapabilities(input.features);
+  const zone = input.timezone?.trim() || "America/New_York";
+  const lines = [
+    `The current time is ${CURRENT_TIME_PLACEHOLDER} in ${zone}. The voice platform fills ${CURRENT_TIME_PLACEHOLDER} before the call. Use it with the business hours to decide whether the office is open.`,
+    "Never claim or imply to be a human. If asked whether you are a real person, a live person, a bot, or AI, answer truthfully and warmly.",
+    `After hours, say: I'm ${business}'s after-hours virtual assistant, but I can still ${capabilities}.`,
+    `During business hours, say: I'm ${business}'s virtual assistant. I can help with most things, or I can try to connect you with someone at the front desk.`,
+    "When the office is closed, warmly explain that the office is closed and when it next opens, that a live person is available during regular business hours, and offer what you can do now.",
+  ];
+  if (input.features?.liveTransfer) {
+    lines.push(
+      "When the caller asks for a person during business hours and live transfer is on, offer to transfer them to the front desk or the staff line in the directory. If no one answers, take a message.",
+    );
+  } else {
+    lines.push("When the caller asks for a person during business hours and live transfer is off, take a message. Do not transfer the call.");
   }
+  return lines;
+}
+
+function instructions(input: PromptInput, templateId: TemplateId, token: string): string {
+  const lines = [...GUARDRAILS];
   lines.push(...VOICE_BASICS);
-  lines.push(...featureLines(input));
+  lines.push(...personaLines(input));
+  lines.push(...featureLines(input, token));
   lines.push(INDUSTRY_NOTES[templateId]);
   const pronunciation = input.namePronunciation?.trim();
   if (pronunciation) {
-    lines.push(`Pronounce the business name as "${neutralizeReferenceMarkers(pronunciation)}".`);
+    lines.push(`Pronounce the business name as "${neutralizeReferenceMarkers(pronunciation, token)}".`);
   }
-  lines.push(`Greeting: ${spokenGreeting(input)}`);
-  lines.push(`Business name: ${neutralizeReferenceMarkers(input.businessName)}`);
+  lines.push(`Greeting: ${buildGreeting(input)}`);
+  lines.push(`Business name: ${neutralizeReferenceMarkers(input.businessName, token)}`);
   return lines.join("\n");
 }
 
-function structuredBlock(input: PromptInput): string {
+function structuredBlock(input: PromptInput, token: string): string {
   return [
-    section("Hours", input.hours),
-    section("Services", input.services),
-    section("FAQs", input.faqs),
-    section("Policies", input.policies),
-    section("Staff directory", input.staff),
-    section("Closures and notices", input.notices),
-    section("Emergency instructions", input.emergency),
+    section("Hours", input.hours, token),
+    section("Services", input.services, token),
+    section("FAQs", input.faqs, token),
+    section("Policies", input.policies, token),
+    section("Staff directory", input.staff, token),
+    section("Closures and notices", input.notices, token),
+    section("Emergency instructions", input.emergency, token),
   ]
     .filter((part): part is string => part !== null)
     .join("\n\n");
 }
 
-function documentBlock(document: PromptDocument): string {
+function documentBlock(document: PromptDocument, token: string): string {
   const body = document.text.trim() || "(no extracted text yet)";
-  return `--- document ${neutralizeReferenceMarkers(document.filename)} (${neutralizeReferenceMarkers(document.id)}) ---\n${neutralizeReferenceMarkers(body)}`;
+  return `--- document ${neutralizeReferenceMarkers(document.filename, token)} (${neutralizeReferenceMarkers(document.id, token)}) ---\n${neutralizeReferenceMarkers(body, token)}`;
 }
 
-export function renderPrompt(input: PromptInput): RenderedPrompt {
+export function renderPrompt(input: PromptInput, referenceToken = randomBytes(4).toString("hex")): RenderedPrompt {
+  const markers = referenceMarkers(referenceToken);
   const templateId = templateForIndustry(input.industry);
-  const head = instructions(input, templateId);
-  const structured = structuredBlock(input);
-  const documents = (input.documents ?? []).map(documentBlock);
-  const reserved = head.length + TRUNCATION_NOTE.length + REFERENCE_START.length + REFERENCE_END.length + REFERENCE_RULE.length + 8;
+  const head = instructions(input, templateId, referenceToken);
+  const structured = structuredBlock(input, referenceToken);
+  const documents = (input.documents ?? []).map((document) => documentBlock(document, referenceToken));
+  const reserved = head.length + TRUNCATION_NOTE.length + markers.start.length + markers.end.length + REFERENCE_RULE.length + 8;
   let room = Math.max(0, PROMPT_BUDGET - reserved);
   let truncated = false;
 
@@ -209,7 +266,7 @@ export function renderPrompt(input: PromptInput): RenderedPrompt {
     truncated = true;
   }
 
-  const reference = [REFERENCE_START, REFERENCE_RULE, structuredKept, ...keptDocs, REFERENCE_END]
+  const reference = [markers.start, REFERENCE_RULE, structuredKept, ...keptDocs, markers.end]
     .filter((part) => part.length > 0)
     .join("\n");
   const text = truncated ? `${head}\n${TRUNCATION_NOTE}\n${reference}` : `${head}\n${reference}`;
@@ -219,5 +276,6 @@ export function renderPrompt(input: PromptInput): RenderedPrompt {
     templateId,
     templateVersion: TEMPLATE_VERSION,
     tools: toolsForFeatures(input.features),
+    referenceToken,
   };
 }
