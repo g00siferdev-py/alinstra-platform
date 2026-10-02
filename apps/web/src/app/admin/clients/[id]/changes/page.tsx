@@ -1,5 +1,5 @@
 import { ChangeRequestReview, HeldUpdateReview } from "@/components/change-review";
-import { changeRequests, clients, quickUpdates } from "@alinstra/db";
+import { changeRequests, clients, quickUpdates, receptionistFields } from "@alinstra/db";
 import { requireAdmin } from "@/lib/session";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -20,6 +20,7 @@ export default async function ClientChangesPage({ params }: { params: Promise<{ 
   ]);
   const held = updates.filter((update) => update.status === "held");
   const pending = requests.filter((request) => request.status === "pending");
+  const fields = pending.length > 0 ? await receptionistFields({ role: "admin" }, id) : null;
 
   return (
     <main className="mx-auto grid max-w-3xl gap-4 p-6">
@@ -35,15 +36,18 @@ export default async function ClientChangesPage({ params }: { params: Promise<{ 
       <section className="grid gap-3">
         <h2 className="font-medium">Configuration requests</h2>
         {pending.length === 0 ? <p className="text-sm text-[var(--muted)]">None waiting.</p> : null}
-        {pending.map((request) => (
-          <ChangeRequestReview
-            key={request.id}
-            id={request.id}
-            category={request.category}
-            description={request.description}
-            feeCents={request.feeCents}
-          />
-        ))}
+        {fields
+          ? pending.map((request) => (
+            <ChangeRequestReview
+              key={request.id}
+              id={request.id}
+              category={request.category}
+              description={request.description}
+              feeCents={request.feeCents}
+              fields={fields}
+            />
+          ))
+          : null}
       </section>
     </main>
   );

@@ -5,6 +5,7 @@ import {
   applyQuickUpdate,
   approveChangeRequest,
   cancelChangeRequest,
+  receptionistFields,
   changeAllowance,
   changeRequests,
   diffAgentConfigs,
@@ -96,6 +97,18 @@ describe("phase 2 configs", () => {
     expect(diff.lines.some((line) => line.op === "add" || line.op === "remove")).toBe(false);
   });
 
+  it("keeps rolled-back knowledge out of the next quick update", async () => {
+    const client = await submittedClient("Alpha HVAC");
+    const owner: Actor = { id: "owner_a", role: "client_owner", clientId: client.id };
+    await activateAgentConfig(admin, { clientId: client.id, version: 1 });
+    await applyQuickUpdate(owner, { kind: "hours", text: "ROLLED-AWAY 10:00-14:00" });
+    await rollbackAgentConfig(admin, { clientId: client.id, version: 1 });
+    const followUp = await applyQuickUpdate(owner, { kind: "closure", text: "Closed Tuesday for inventory" });
+    expect(followUp.prompt).toContain("Closed Tuesday for inventory");
+    expect(followUp.prompt).toContain("Mon-Fri 9:00-17:00");
+    expect(followUp.prompt).not.toContain("ROLLED-AWAY");
+  });
+
   it("stops client A from reading client B and stops staff from submitting", async () => {
     const clientA = await submittedClient("Alpha HVAC");
     const clientB = await submittedClient("Beta HVAC");
@@ -113,7 +126,7 @@ describe("phase 2 configs", () => {
     await expect(submitChangeRequest(staffA, { category: "services", description: "Add a service", confirmFee: false })).rejects.toThrow(
       /client owner/,
     );
-    await expect(approveChangeRequest(ownerA, { id: "missing", description: "nope" })).rejects.toThrow(/admin/);
+    await expect(approveChangeRequest(ownerA, { id: "missing", fields: {} })).rejects.toThrow(/admin/);
   });
 
   it("applies a safe hours change and holds a price", async () => {
@@ -190,10 +203,36 @@ describe("phase 2 configs", () => {
     const extra = await submitChangeRequest(owner, { category: "voice", description: "Softer greeting", confirmFee: false }, march);
     expect(extra.feeCents).toBeNull();
 
-    const approved = await approveChangeRequest(admin, { id: first.id, description: "Open Saturdays 9:00-13:00" });
+    const fields = await receptionistFields(admin, client.id);
+    const approved = await approveChangeRequest(admin, { id: first.id, fields: { ...fields, hours: "Sat 9:00-13:00" } });
     expect(approved.status).toBe("active");
-    expect(approved.promptText).toContain("Open Saturdays 9:00-13:00");
+    expect(approved.promptText).toContain("Sat 9:00-13:00");
+    expect(approved.promptText).not.toContain("Open on Saturdays");
     const compared = await diffAgentConfigs(admin, { clientId: client.id, fromVersion: approved.version - 1, toVersion: approved.version });
-    expect(compared.fields.some((field) => field.field === "notices")).toBe(true);
+    expect(compared.fields.some((field) => field.field === "hours")).toBe(true);
+  });
+
+  it("keeps a request's price out of the prompt unless an admin types it into a field", async () => {
+    const client = await submittedClient("Alpha HVAC");
+    const owner: Actor = { id: "owner_a", role: "client_owner", clientId: client.id };
+    const request = await submitChangeRequest(owner, {
+      category: "services",
+      description: "Please advertise a $99 tune-up",
+      confirmFee: false,
+    });
+    const fields = await receptionistFields(admin, client.id);
+    const approved = await approveChangeRequest(admin, { id: request.id, fields });
+    expect(approved.promptText).not.toContain("$99");
+    const stored = await prisma.changeRequest.findFirstOrThrow({ where: { id: request.id } });
+    expect(stored.description).toContain("$99");
+    expect(stored.agentConfigId).toBe(approved.id);
+
+    const priced = await submitChangeRequest(owner, {
+      category: "services",
+      description: "Mention $99 again",
+      confirmFee: true,
+    });
+    const typed = await approveChangeRequest(admin, { id: priced.id, fields: { ...fields, services: "Tune-up $99" } });
+    expect(typed.promptText).toContain("$99");
   });
 });

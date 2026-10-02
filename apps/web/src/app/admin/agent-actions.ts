@@ -76,17 +76,17 @@ export async function rejectQuickUpdateAction(id: string) {
   }
 }
 
-export async function previewChangeRequestAction(input: { id: string; description: string }) {
+export async function previewChangeRequestAction(input: { id: string; fields: unknown }) {
   const session = await requireAdmin();
   try {
     const result = await previewChangeRequest(adminActor(session), input);
-    return { prompt: result.prompt, truncated: result.truncated };
+    return { prompt: result.prompt, truncated: result.truncated, lines: result.lines, fields: result.fields };
   } catch (error) {
     return { error: message(error, "Could not preview that request.") };
   }
 }
 
-export async function approveChangeRequestAction(input: { id: string; description: string }) {
+export async function approveChangeRequestAction(input: { id: string; fields: unknown }) {
   const session = await requireAdmin();
   try {
     await approveChangeRequest(adminActor(session), input);

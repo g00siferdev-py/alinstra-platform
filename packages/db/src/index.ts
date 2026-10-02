@@ -10,6 +10,7 @@ export {
   applyQuickUpdate,
   approveChangeRequest,
   approveQuickUpdate,
+  receptionistFields,
   cancelChangeRequest,
   changeAllowance,
   changeRequests,
@@ -24,6 +25,7 @@ export {
   rollbackAgentConfig,
   submitChangeRequest,
 } from "./agent";
+export type { ReceptionistFields } from "./agent";
 export { faqItems, type QuickUpdateInput } from "@alinstra/agent";
 export {
   DEFAULT_TIMEZONE,

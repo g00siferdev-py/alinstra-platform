@@ -141,7 +141,11 @@ function featuresOf(features: unknown): PromptInput["features"] {
   };
 }
 
-function settingsOf(input: PromptInput, rendered: RenderedPrompt): Prisma.InputJsonValue {
+function settingsOf(
+  input: PromptInput,
+  rendered: RenderedPrompt,
+  snapshot?: { features?: unknown; coverage?: unknown },
+): Prisma.InputJsonValue {
   return {
     templateId: rendered.templateId,
     templateVersion: rendered.templateVersion,
@@ -156,6 +160,8 @@ function settingsOf(input: PromptInput, rendered: RenderedPrompt): Prisma.InputJ
     staff: input.staff ?? "",
     notices: input.notices ?? "",
     emergency: input.emergency ?? "",
+    features: (snapshot?.features ?? {}) as Prisma.InputJsonValue,
+    coverage: (snapshot?.coverage ?? {}) as Prisma.InputJsonValue,
   };
 }
 
@@ -187,6 +193,8 @@ async function insertConfig(
     knowledge: KnowledgeShape | null;
     documentIds: string[];
     voice: unknown;
+    features?: unknown;
+    coverage?: unknown;
   },
 ) {
   if (args.status === "active") {
@@ -208,7 +216,7 @@ async function insertConfig(
       voice: jsonOr(args.voice),
       greeting: args.input.greeting ?? null,
       tools: rendered.tools,
-      settings: settingsOf(args.input, rendered),
+      settings: settingsOf(args.input, rendered, { features: args.features, coverage: args.coverage }),
       platformAgentId: null,
       source: args.source,
       createdById: args.createdById,
@@ -228,6 +236,8 @@ export async function createDraftAgentConfig(ctx: Actor, tx: Prisma.TransactionC
     knowledge: loaded.knowledge,
     documentIds: loaded.documents.map((document) => document.id),
     voice: loaded.client.voice,
+    features: loaded.client.features,
+    coverage: loaded.client.coverage,
   });
   await recordChange(tx, {
     clientId,
@@ -467,6 +477,8 @@ export async function applyQuickUpdate(ctx: Actor, input: QuickUpdateInput): Pro
       knowledge,
       documentIds: fresh.documents.map((document) => document.id),
       voice: fresh.client.voice,
+      features: fresh.client.features,
+      coverage: fresh.client.coverage,
     });
     const row = await tx.quickUpdate.create({
       data: {
@@ -534,6 +546,8 @@ export async function approveQuickUpdate(ctx: Actor, id: string): Promise<{ prom
       knowledge,
       documentIds: fresh.documents.map((document) => document.id),
       voice: fresh.client.voice,
+      features: fresh.client.features,
+      coverage: fresh.client.coverage,
     });
     await tx.quickUpdate.update({
       where: { id: row.id },
@@ -670,27 +684,250 @@ export async function cancelChangeRequest(ctx: Actor, id: string): Promise<void>
   });
 }
 
-export async function previewChangeRequest(ctx: Actor, input: { id: string; description: string }): Promise<PromptPreview> {
+const VOICE_IDS = ["voice_1", "voice_2", "voice_3", "voice_4"] as const;
+
+export type ReceptionistFields = {
+  hours: string;
+  services: string;
+  faqs: string;
+  policies: string;
+  staff: string;
+  notices: string;
+  greeting: string;
+  voiceId: string;
+  tone: string;
+  languages: string;
+  unansweredAfterRings: string;
+  lunchHours: string;
+  afterHours: string;
+  weekends: string;
+  holidays: string;
+  holdOverflow: string;
+  messages: string;
+  bookingMode: string;
+  textConfirmations: boolean;
+  textReminders: boolean;
+  liveTransfer: boolean;
+  emergencyHandling: string;
+  recallAddOn: boolean;
+};
+
+export type ChangeRequestPreview = {
+  prompt: string;
+  truncated: boolean;
+  lines: LineDiff[];
+  fields: FieldDiff[];
+};
+
+function fieldText(value: unknown): string {
+  if (typeof value === "string") return value;
+  return faqsToText(value) ?? "";
+}
+
+function flagText(value: unknown): boolean {
+  return value === true;
+}
+
+function fieldsOf(loaded: { client: { name: string; voice: unknown; coverage: unknown; features: unknown }; knowledge: KnowledgeShape | null }): ReceptionistFields {
+  const voice = asRecord(loaded.client.voice);
+  const coverage = asRecord(loaded.client.coverage);
+  const features = asRecord(loaded.client.features);
+  const voiceId = typeof voice.voiceId === "string" && (VOICE_IDS as readonly string[]).includes(voice.voiceId) ? voice.voiceId : "";
+  const bookingMode = features.bookingMode === "request_only" || features.bookingMode === "direct_calendar" ? features.bookingMode : "";
+  return {
+    hours: fieldText(loaded.knowledge?.hours),
+    services: fieldText(loaded.knowledge?.services),
+    faqs: fieldText(loaded.knowledge?.faqs),
+    policies: fieldText(loaded.knowledge?.policies),
+    staff: fieldText(loaded.knowledge?.staff),
+    notices: fieldText(loaded.knowledge?.notices),
+    greeting: typeof voice.greeting === "string" ? voice.greeting : "",
+    voiceId,
+    tone: typeof voice.tone === "string" ? voice.tone : "",
+    languages: typeof voice.languages === "string" ? voice.languages : "",
+    unansweredAfterRings: typeof coverage.unansweredAfterRings === "number" ? String(coverage.unansweredAfterRings) : "",
+    lunchHours: typeof coverage.lunchHours === "string" ? coverage.lunchHours : "",
+    afterHours: typeof coverage.afterHours === "string" ? coverage.afterHours : "",
+    weekends: typeof coverage.weekends === "string" ? coverage.weekends : "",
+    holidays: typeof coverage.holidays === "string" ? coverage.holidays : "",
+    holdOverflow: typeof coverage.holdOverflow === "string" ? coverage.holdOverflow : "",
+    messages: typeof features.messages === "string" ? features.messages : "",
+    bookingMode,
+    textConfirmations: flagText(features.textConfirmations),
+    textReminders: flagText(features.textReminders),
+    liveTransfer: flagText(features.liveTransfer),
+    emergencyHandling: typeof features.emergencyHandling === "string" ? features.emergencyHandling : "",
+    recallAddOn: flagText(features.recallAddOn),
+  };
+}
+
+function readText(row: Record<string, unknown>, key: string): string {
+  const value = row[key];
+  if (typeof value !== "string") throw new Error("Enter the receptionist fields.");
+  if (value.length > 10_000) throw new Error("A field is too long.");
+  return value;
+}
+
+function readFlag(row: Record<string, unknown>, key: string): boolean {
+  const value = row[key];
+  if (typeof value !== "boolean") throw new Error("Enter the receptionist fields.");
+  return value;
+}
+
+function parseReceptionistFields(value: unknown): ReceptionistFields {
+  const row = asRecord(value);
+  const fields: ReceptionistFields = {
+    hours: readText(row, "hours"),
+    services: readText(row, "services"),
+    faqs: readText(row, "faqs"),
+    policies: readText(row, "policies"),
+    staff: readText(row, "staff"),
+    notices: readText(row, "notices"),
+    greeting: readText(row, "greeting"),
+    voiceId: readText(row, "voiceId"),
+    tone: readText(row, "tone"),
+    languages: readText(row, "languages"),
+    unansweredAfterRings: readText(row, "unansweredAfterRings"),
+    lunchHours: readText(row, "lunchHours"),
+    afterHours: readText(row, "afterHours"),
+    weekends: readText(row, "weekends"),
+    holidays: readText(row, "holidays"),
+    holdOverflow: readText(row, "holdOverflow"),
+    messages: readText(row, "messages"),
+    bookingMode: readText(row, "bookingMode"),
+    textConfirmations: readFlag(row, "textConfirmations"),
+    textReminders: readFlag(row, "textReminders"),
+    liveTransfer: readFlag(row, "liveTransfer"),
+    emergencyHandling: readText(row, "emergencyHandling"),
+    recallAddOn: readFlag(row, "recallAddOn"),
+  };
+  if (fields.voiceId && !(VOICE_IDS as readonly string[]).includes(fields.voiceId)) throw new Error("Choose a voice.");
+  if (fields.bookingMode && fields.bookingMode !== "direct_calendar" && fields.bookingMode !== "request_only") {
+    throw new Error("Choose a booking mode.");
+  }
+  if (fields.unansweredAfterRings.trim()) {
+    const rings = Number(fields.unansweredAfterRings);
+    if (!Number.isInteger(rings) || rings < 1 || rings > 20) throw new Error("Rings must be a whole number from 1 to 20.");
+  }
+  return fields;
+}
+
+function optionalText(value: string): string | undefined {
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function editedClient(fields: ReceptionistFields): { voice: Record<string, unknown>; coverage: Record<string, unknown>; features: Record<string, unknown> } {
+  const rings = fields.unansweredAfterRings.trim();
+  return {
+    voice: {
+      ...(fields.voiceId ? { voiceId: fields.voiceId } : {}),
+      ...(optionalText(fields.greeting) ? { greeting: optionalText(fields.greeting) } : {}),
+      ...(optionalText(fields.tone) ? { tone: optionalText(fields.tone) } : {}),
+      ...(optionalText(fields.languages) ? { languages: optionalText(fields.languages) } : {}),
+    },
+    coverage: {
+      ...(rings ? { unansweredAfterRings: Number(rings) } : {}),
+      ...(optionalText(fields.lunchHours) ? { lunchHours: optionalText(fields.lunchHours) } : {}),
+      ...(optionalText(fields.afterHours) ? { afterHours: optionalText(fields.afterHours) } : {}),
+      ...(optionalText(fields.weekends) ? { weekends: optionalText(fields.weekends) } : {}),
+      ...(optionalText(fields.holidays) ? { holidays: optionalText(fields.holidays) } : {}),
+      ...(optionalText(fields.holdOverflow) ? { holdOverflow: optionalText(fields.holdOverflow) } : {}),
+    },
+    features: {
+      ...(optionalText(fields.messages) ? { messages: optionalText(fields.messages) } : {}),
+      ...(fields.bookingMode ? { bookingMode: fields.bookingMode } : {}),
+      textConfirmations: fields.textConfirmations,
+      textReminders: fields.textReminders,
+      liveTransfer: fields.liveTransfer,
+      ...(optionalText(fields.emergencyHandling) ? { emergencyHandling: optionalText(fields.emergencyHandling) } : {}),
+      recallAddOn: fields.recallAddOn,
+    },
+  };
+}
+
+function knowledgePatch(fields: ReceptionistFields): Record<string, string | null> {
+  return {
+    hours: optionalText(fields.hours) ?? null,
+    services: optionalText(fields.services) ?? null,
+    faqs: optionalText(fields.faqs) ?? null,
+    policies: optionalText(fields.policies) ?? null,
+    staff: optionalText(fields.staff) ?? null,
+    notices: optionalText(fields.notices) ?? null,
+  };
+}
+
+function previewInput(
+  loaded: Awaited<ReturnType<typeof load>>,
+  fields: ReceptionistFields,
+): PromptInput {
+  const edited = editedClient(fields);
+  const patch = knowledgePatch(fields);
+  const knowledge: KnowledgeShape = {
+    id: loaded.knowledge?.id ?? "",
+    version: loaded.knowledge?.version ?? 0,
+    hours: patch.hours,
+    services: patch.services,
+    faqs: patch.faqs,
+    policies: patch.policies,
+    staff: patch.staff,
+    notices: patch.notices,
+  };
+  return toInput(
+    {
+      name: loaded.client.name,
+      industry: loaded.client.industry,
+      namePronunciation: loaded.client.namePronunciation,
+      voice: edited.voice,
+      features: edited.features,
+      compliance: loaded.client.compliance,
+    },
+    knowledge,
+    loaded.documents,
+  );
+}
+
+export async function receptionistFields(ctx: TenantContext, clientId: string): Promise<ReceptionistFields> {
+  assertTenantContext(ctx);
+  if (ctx.role !== "admin") throw new Error("Only an admin can do that.");
+  return prisma.$transaction(async (tx) => fieldsOf(await load(tx, clientId)));
+}
+
+export async function previewChangeRequest(ctx: Actor, input: { id: string; fields: unknown }): Promise<ChangeRequestPreview> {
   assertAdmin(ctx);
-  const description = cleanDescription(input.description);
+  const fields = parseReceptionistFields(input.fields);
   return prisma.$transaction(async (tx) => {
     const row = await tx.changeRequest.findFirst({ where: { id: input.id, status: "pending" } });
     if (!row) throw new Error("That request is not open.");
     const loaded = await load(tx, row.clientId);
-    const patch = { notices: appendNotice(loaded.knowledge?.notices, `${row.category}: ${description}`) };
-    const rendered = renderPrompt(withPatch(loaded.input, loaded.knowledge, patch));
-    return { prompt: rendered.text, truncated: rendered.truncated, held: false, holdReason: null };
+    const current = renderPrompt(loaded.input);
+    const nextInput = previewInput(loaded, fields);
+    const rendered = renderPrompt(nextInput);
+    return {
+      prompt: rendered.text,
+      truncated: rendered.truncated,
+      lines: diffLines(current.text, rendered.text).filter((line) => line.op !== "same"),
+      fields: diffFields(asRecord(settingsOf(loaded.input, current)), asRecord(settingsOf(nextInput, rendered))),
+    };
   });
 }
 
-export async function approveChangeRequest(ctx: Actor, input: { id: string; description: string }) {
+export async function approveChangeRequest(ctx: Actor, input: { id: string; fields: unknown }) {
   assertAdmin(ctx);
-  const description = cleanDescription(input.description);
+  const fields = parseReceptionistFields(input.fields);
   return prisma.$transaction(async (tx) => {
     const row = await tx.changeRequest.findFirst({ where: { id: input.id, status: "pending" } });
     if (!row) throw new Error("That request is not open.");
-    const patch = { notices: appendNotice((await load(tx, row.clientId)).knowledge?.notices, `${row.category}: ${description}`) };
-    const knowledge = await forkKnowledge(tx, row.clientId, patch);
+    const edited = editedClient(fields);
+    const knowledge = await forkKnowledge(tx, row.clientId, knowledgePatch(fields));
+    await tx.client.update({
+      where: { id: row.clientId },
+      data: {
+        voice: jsonOr(edited.voice),
+        coverage: jsonOr(edited.coverage),
+        features: jsonOr(edited.features),
+      },
+    });
     const fresh = await load(tx, row.clientId);
     const config = await insertConfig(tx, {
       clientId: row.clientId,
@@ -701,11 +938,12 @@ export async function approveChangeRequest(ctx: Actor, input: { id: string; desc
       knowledge,
       documentIds: fresh.documents.map((document) => document.id),
       voice: fresh.client.voice,
+      features: fresh.client.features,
+      coverage: fresh.client.coverage,
     });
     await tx.changeRequest.update({
       where: { id: row.id },
       data: {
-        description,
         status: "approved",
         agentConfigId: config.id,
         reviewedById: ctx.id,
@@ -745,6 +983,61 @@ export async function rejectChangeRequest(ctx: Actor, id: string): Promise<void>
   });
 }
 
+async function forkKnowledgeSnapshot(
+  tx: Prisma.TransactionClient,
+  source: { clientId: string; knowledgeBaseId: string | null; settings: unknown },
+) {
+  const stored = source.knowledgeBaseId
+    ? await tx.knowledgeBase.findFirst({ where: { id: source.knowledgeBaseId, clientId: source.clientId } })
+    : null;
+  const settings = asRecord(source.settings);
+  const value = (field: "hours" | "services" | "faqs" | "policies" | "staff" | "notices") =>
+    stored ? stored[field] : (settings[field] ?? null);
+  const latest = await tx.knowledgeBase.aggregate({ where: { clientId: source.clientId }, _max: { version: true } });
+  return tx.knowledgeBase.create({
+    data: {
+      clientId: source.clientId,
+      version: (latest._max.version ?? 0) + 1,
+      status: "submitted",
+      hours: jsonOr(value("hours")),
+      services: jsonOr(value("services")),
+      faqs: jsonOr(value("faqs")),
+      policies: jsonOr(value("policies")),
+      staff: jsonOr(value("staff")),
+      notices: jsonOr(value("notices")),
+    },
+  });
+}
+
+async function restoreClientFromConfig(
+  tx: Prisma.TransactionClient,
+  source: { clientId: string; voice: unknown; greeting: string | null; settings: unknown },
+) {
+  const client = await tx.client.findFirst({ where: { id: source.clientId, archivedAt: null } });
+  if (!client) throw new Error("That client is not available.");
+  const settings = asRecord(source.settings);
+  const voice = { ...asRecord(source.voice) };
+  if (typeof source.greeting === "string" && source.greeting.trim()) voice.greeting = source.greeting;
+  const features = settings.features && typeof settings.features === "object" && !Array.isArray(settings.features)
+    ? settings.features
+    : client.features;
+  const coverage = settings.coverage && typeof settings.coverage === "object" && !Array.isArray(settings.coverage)
+    ? settings.coverage
+    : client.coverage;
+  const compliance = { ...asRecord(client.compliance) };
+  if (typeof settings.recordingNotice === "boolean") compliance.recordingNotice = settings.recordingNotice;
+  await tx.client.update({
+    where: { id: client.id },
+    data: {
+      voice: jsonOr(voice),
+      features: jsonOr(features),
+      coverage: jsonOr(coverage),
+      compliance,
+      namePronunciation: typeof settings.namePronunciation === "string" ? settings.namePronunciation || null : client.namePronunciation,
+    },
+  });
+}
+
 async function copyAsActive(ctx: Actor, input: { clientId: string; version: number }, sourceName: "activate" | "rollback") {
   assertAdmin(ctx);
   return prisma.$transaction(async (tx) => {
@@ -756,6 +1049,14 @@ async function copyAsActive(ctx: Actor, input: { clientId: string; version: numb
     if (source.status === "draft") {
       await tx.agentConfig.update({ where: { id: source.id }, data: { status: "superseded" } });
     }
+    let knowledgeBaseId = source.knowledgeBaseId;
+    let knowledgeVersion = source.knowledgeVersion;
+    if (sourceName === "rollback") {
+      const forked = await forkKnowledgeSnapshot(tx, source);
+      await restoreClientFromConfig(tx, source);
+      knowledgeBaseId = forked.id;
+      knowledgeVersion = forked.version;
+    }
     const created = await tx.agentConfig.create({
       data: {
         clientId: source.clientId,
@@ -765,8 +1066,8 @@ async function copyAsActive(ctx: Actor, input: { clientId: string; version: numb
         promptTruncated: source.promptTruncated,
         templateId: source.templateId,
         templateVersion: source.templateVersion,
-        knowledgeBaseId: source.knowledgeBaseId,
-        knowledgeVersion: source.knowledgeVersion,
+        knowledgeBaseId,
+        knowledgeVersion,
         documentIds: source.documentIds as Prisma.InputJsonValue,
         voice: jsonOr(source.voice),
         greeting: source.greeting,
