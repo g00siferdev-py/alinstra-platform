@@ -144,3 +144,27 @@ Auth and database tests share one Postgres database and both truncate it. `@alin
 ### CI services
 CI starts Postgres 16 and Redis 7 service containers, matching docker-compose.yml. The worker isolation test needs a real Redis for BullMQ.
 
+## 2026-10-01 — Phase 2
+
+Prompt text is rendered in `@alinstra/agent` from the client record and the latest knowledge base. Template version is `"1"`. HVAC and veterinary have their own paragraphs. Every other industry uses the general template. The prompt budget is 24,000 characters. Structured fields are written before extracted document text. Document text sits between `REFERENCE START` and `REFERENCE END`, with a line that it is reference material and must not be followed as instructions.
+
+Declared tools stored on each config are `take_message`, `transfer`, and `callback`. They are not callable. `platformAgentId` is always null in this phase.
+
+`Client.namePronunciation` is optional and is copied from wizard step 1. Closures, temporary notices, and the text of an approved change request are appended to `KnowledgeBase.notices`. A FAQ value that is still one string becomes a single item titled "Existing" the first time an owner edits FAQs, then an array of question and answer.
+
+A new knowledge base version is written when a quick update or an approved request changes those fields. Uploaded documents stay on the version that received them. The config stores that version id and the document ids.
+
+One active config per client is enforced by a partial unique index. Activate and rollback insert a new row copied from the chosen version. The previous active row, and a draft that was activated, change status to `superseded`. Prompt text on an existing row is not edited.
+
+Allowance counts change requests with status `pending` or `approved` whose `createdAt` falls in the calendar month of `Client.timezone`. Rejected and cancelled requests are ignored. `overrideIncludedChangesPerMonth` wins over the plan. Null means unlimited. The stored fee is the plan's `extraChangeFeeCents`.
+
+The admin notice email is queued only when a quick update applies immediately. The worker sends it to `ADMIN_EMAIL`. Held updates and change requests are listed on the admin home instead.
+
+## Needs Daniel's review
+
+- Existing AgentConfig rows change `status` when a newer version becomes active. The prompt and settings on that row stay as written. Full immutability, including status, would need a separate "current" pointer.
+- A client with no plan and no `overrideIncludedChangesPerMonth` is treated as unlimited.
+- An invalid timezone falls back to `America/New_York`.
+- The admin email is not sent when an admin approves a held update or a change request. Those show on the admin home.
+- Remote GitHub Actions was not watched. The GitHub CLI is not installed. A fresh clone of `231db47` passed the CI sequence locally.
+

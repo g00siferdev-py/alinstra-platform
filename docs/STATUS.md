@@ -1,16 +1,26 @@
 # Status
 
-Phase 1 — wizard, knowledge files, plans, and the client portal shell. Pushed to main and staging. Do not start Phase 2.
+Phase 2 is on branch `phase-2` and is not merged. Main and staging stay at the Phase 1 CI fix (`231db47`).
 
 ## Verified locally
 
-- `pnpm lint`, `pnpm typecheck`, and `pnpm test`: 37 tests passed
+- Phase 2 branch: `pnpm test` passed 49 tests (prompt rendering, allowance, isolation, plus the Phase 0–1 suites). `pnpm lint` and `pnpm typecheck` were run on this branch after those tests.
 - Isolation: a client user cannot read another client's draft, knowledge, documents, or change log. A storage key is always under that client's id.
 - Extraction: truncated text, a malformed or oversized DOCX fails as `ExtractionFailed`, and the timeout helper rejects
 - Production env guard still rejects placeholder secrets. Staging and production also require R2 (`STORAGE_DRIVER=s3`)
 
 ## CI
 - GitHub Actions runs install, prisma generate, migrate deploy, lint, typecheck, and test against Postgres 16 and Redis 7 service containers. Fixed 2026-10-01: Turborepo strict env mode hid DATABASE_URL from tasks, and CI had no Redis.
+- Remote GitHub Actions is unverified. `gh` is not installed, so the runs on GitHub were not watched. The same sequence was run from a fresh clone of `231db47` and passed locally (37 tests). Phase 2 has not been pushed to a host that runs that workflow yet.
+
+## Phase 2 (branch `phase-2`, not merged)
+
+- `@alinstra/agent` renders the receptionist prompt from structured data. Templates: general, HVAC, veterinary. No model or external API calls.
+- Wizard step 11 shows that prompt. Submit creates AgentConfig version 1 as draft. `platformAgentId` stays null.
+- Owners can quick-update hours, closures, staff and transfer numbers, and one FAQ. Sensitive wording is held. A safe change creates a new active config and queues an admin email.
+- Owners can submit a text change request. Allowance is the calendar month in the client timezone. Past it, the extra fee is stored after confirmation. Billing is still Phase 3.
+- Admin client pages: Agent Config (versions, diff, preview, activate, rollback) and Change Requests. Admin home lists held updates and pending requests.
+- Portal: My Business is editable for owners. Staff stay read-only. Owners have Change Requests.
 
 ## Shipped in Phase 1
 
@@ -37,5 +47,6 @@ See the root `README.md`. Admin sign-in still requires two-factor enrollment at 
 
 ## How to resume
 
-1. Read `docs/DECISIONS.md`, `docs/phase-1-plan.md`, and this file.
-2. Phase 2 starts only after review of Phase 1.
+1. Read `docs/DECISIONS.md`, `docs/phase-2-plan.md`, and this file.
+2. Phase 2 is on `phase-2`. Do not merge until Daniel reviews the items under "Needs Daniel's review".
+3. Phase 3 (billing, provisioning, live-client churn) has not started.
