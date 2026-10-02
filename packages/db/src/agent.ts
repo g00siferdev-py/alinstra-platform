@@ -604,7 +604,9 @@ async function readAllowance(tx: Prisma.TransactionClient, clientId: string, now
   const included =
     client.overrideIncludedChangesPerMonth !== null
       ? client.overrideIncludedChangesPerMonth
-      : (client.plan?.includedChangesPerMonth ?? null);
+      : client.plan
+        ? client.plan.includedChangesPerMonth
+        : 0;
   const range = calendarMonthRange(client.timezone || "America/New_York", now);
   const used = await tx.changeRequest.count({
     where: {
@@ -1032,7 +1034,7 @@ async function restoreClientFromConfig(
       voice: jsonOr(voice),
       features: jsonOr(features),
       coverage: jsonOr(coverage),
-      compliance,
+      compliance: jsonOr(compliance),
       namePronunciation: typeof settings.namePronunciation === "string" ? settings.namePronunciation || null : client.namePronunciation,
     },
   });

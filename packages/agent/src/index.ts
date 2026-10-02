@@ -29,5 +29,5 @@ export {
   type FaqItem,
   type QuickUpdateInput,
 } from "./validate";
-export { allowanceState, calendarMonthRange, type AllowanceState } from "./allowance";
+export { allowanceState, calendarMonthRange, isIanaTimezone, type AllowanceState } from "./allowance";
 export { diffFields, diffLines, type FieldDiff, type LineDiff } from "./diff";

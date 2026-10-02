@@ -146,25 +146,23 @@ CI starts Postgres 16 and Redis 7 service containers, matching docker-compose.ym
 
 ## 2026-10-01 — Phase 2
 
-Prompt text is rendered in `@alinstra/agent` from the client record and the latest knowledge base. Template version is `"1"`. HVAC and veterinary have their own paragraphs. Every other industry uses the general template. The prompt budget is 24,000 characters. Structured fields are written before extracted document text. Document text sits between `REFERENCE START` and `REFERENCE END`, with a line that it is reference material and must not be followed as instructions.
+Prompt text is rendered in `@alinstra/agent` from the client record and the latest knowledge base. Template version is `"2"`. HVAC and veterinary have their own paragraphs. Every other industry uses the general template. The prompt budget is 24,000 characters. Structured fields are written before extracted document text. That material sits in a reference block. The words `REFERENCE START` and `REFERENCE END` inside client or document text are rewritten so they cannot close the block. The greeting always includes the AI disclosure, and the recording notice when recording is enabled. Booking mode, live transfer, and message delivery are in the prompt. The stored tools are `take_message` and `callback`, plus `transfer` only when live transfer is on. They are not callable. `platformAgentId` is always null in this phase.
 
-Declared tools stored on each config are `take_message`, `transfer`, and `callback`. They are not callable. `platformAgentId` is always null in this phase.
-
-`Client.namePronunciation` is optional and is copied from wizard step 1. Closures, temporary notices, and the text of an approved change request are appended to `KnowledgeBase.notices`. A FAQ value that is still one string becomes a single item titled "Existing" the first time an owner edits FAQs, then an array of question and answer.
+`Client.namePronunciation` is optional and is copied from wizard step 1. Closures and temporary notices are appended to `KnowledgeBase.notices`. Approving a change request does not copy the request text into the prompt. An admin edits the receptionist fields, previews the prompt, and publishes a new active version. The request stores that version's id. A FAQ value that is still one string becomes a single item titled "Existing" the first time an owner edits FAQs, then an array of question and answer.
 
 A new knowledge base version is written when a quick update or an approved request changes those fields. Uploaded documents stay on the version that received them. The config stores that version id and the document ids.
 
-One active config per client is enforced by a partial unique index. Activate and rollback insert a new row copied from the chosen version. The previous active row, and a draft that was activated, change status to `superseded`. Prompt text on an existing row is not edited.
+One active config per client is enforced by a partial unique index. Activate and rollback insert a new row copied from the chosen version. Rollback also forks a new knowledge-base version from that config's knowledge snapshot and restores the voice, greeting, and settings it used, so the next edit builds on the rolled-back state. The previous active row, and a draft that was activated, change status to `superseded`. Prompt text on an existing row is not edited.
 
-Allowance counts change requests with status `pending` or `approved` whose `createdAt` falls in the calendar month of `Client.timezone`. Rejected and cancelled requests are ignored. `overrideIncludedChangesPerMonth` wins over the plan. Null means unlimited. The stored fee is the plan's `extraChangeFeeCents`.
+Allowance counts change requests with status `pending` or `approved` whose `createdAt` falls in the calendar month of `Client.timezone`. Rejected and cancelled requests are ignored. `overrideIncludedChangesPerMonth` wins over the plan. A plan value of null means unlimited. A client with no plan and no override gets 0 included change requests. Timezones are checked against IANA names when they are saved. If a stored timezone is still invalid when an allowance is calculated, that calculation falls back to `America/New_York`. The stored fee is the plan's `extraChangeFeeCents`.
+
+Tests connect to a database whose name ends in `_test`. Locally that database is `alinstra_test` unless `DATABASE_URL_TEST` is set, and the suite creates it. Reset refuses to truncate any other database. CI uses a service database named `alinstra_test`.
 
 The admin notice email is queued only when a quick update applies immediately. The worker sends it to `ADMIN_EMAIL`. Held updates and change requests are listed on the admin home instead.
 
 ## Needs Daniel's review
 
 - Existing AgentConfig rows change `status` when a newer version becomes active. The prompt and settings on that row stay as written. Full immutability, including status, would need a separate "current" pointer.
-- A client with no plan and no `overrideIncludedChangesPerMonth` is treated as unlimited.
-- An invalid timezone falls back to `America/New_York`.
 - The admin email is not sent when an admin approves a held update or a change request. Those show on the admin home.
 - Remote GitHub Actions was not watched. The GitHub CLI is not installed. A fresh clone of `231db47` passed the CI sequence locally.
 

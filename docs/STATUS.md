@@ -4,7 +4,7 @@ Phase 2 is on branch `phase-2` and is not merged. Main and staging stay at the P
 
 ## Verified locally
 
-- Phase 2 branch: `pnpm test` passed 49 tests (prompt rendering, allowance, isolation, plus the Phase 0–1 suites). `pnpm lint` and `pnpm typecheck` were run on this branch after those tests.
+- Phase 2 branch: `pnpm test` passed 58 tests (prompt rendering, allowance, isolation, plus the Phase 0–1 suites). `pnpm lint` and `pnpm typecheck` were run on this branch after those tests.
 - Isolation: a client user cannot read another client's draft, knowledge, documents, or change log. A storage key is always under that client's id.
 - Extraction: truncated text, a malformed or oversized DOCX fails as `ExtractionFailed`, and the timeout helper rejects
 - Production env guard still rejects placeholder secrets. Staging and production also require R2 (`STORAGE_DRIVER=s3`)
@@ -18,8 +18,9 @@ Phase 2 is on branch `phase-2` and is not merged. Main and staging stay at the P
 - `@alinstra/agent` renders the receptionist prompt from structured data. Templates: general, HVAC, veterinary. No model or external API calls.
 - Wizard step 11 shows that prompt. Submit creates AgentConfig version 1 as draft. `platformAgentId` stays null.
 - Owners can quick-update hours, closures, staff and transfer numbers, and one FAQ. Sensitive wording is held. A safe change creates a new active config and queues an admin email.
-- Owners can submit a text change request. Allowance is the calendar month in the client timezone. Past it, the extra fee is stored after confirmation. Billing is still Phase 3.
-- Admin client pages: Agent Config (versions, diff, preview, activate, rollback) and Change Requests. Admin home lists held updates and pending requests.
+- Owners can submit a text change request. Allowance is the calendar month in the client timezone. A client with no plan and no override gets 0 included requests. Past the allowance, the extra fee is stored after confirmation. Billing is still Phase 3.
+- Admin client pages: Agent Config (versions, diff, preview, activate, rollback) and Change Requests. Approving a request edits the receptionist fields and publishes a new version. The request text is not copied into the prompt. Rollback forks the knowledge base from the chosen version. Admin home lists held updates and pending requests.
+- Tests use the `alinstra_test` database and refuse to truncate any other database.
 - Portal: My Business is editable for owners. Staff stay read-only. Owners have Change Requests.
 
 ## Shipped in Phase 1

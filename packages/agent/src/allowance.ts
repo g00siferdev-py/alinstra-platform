@@ -47,6 +47,15 @@ function zonedMidnightUtc(year: number, month: number, day: number, timeZone: st
   return new Date(guess.getTime() - offsetMs(timeZone, first));
 }
 
+export function isIanaTimezone(timeZone: string): boolean {
+  try {
+    Intl.DateTimeFormat("en-US", { timeZone }).format(0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function calendarMonthRange(timeZone: string, now: Date): { start: Date; end: Date } {
   let zone = timeZone;
   try {

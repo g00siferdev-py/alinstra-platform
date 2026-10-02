@@ -1,3 +1,4 @@
+import { isIanaTimezone } from "@alinstra/agent";
 import { z } from "zod";
 
 export const INDUSTRIES = [
@@ -59,7 +60,13 @@ export const businessSchema = z.object({
   region: optionalText,
   postalCode: optionalText,
   country: optionalText,
-  timezone: z.string().trim().min(1).max(100).default(DEFAULT_TIMEZONE),
+  timezone: z
+    .string()
+    .trim()
+    .min(1)
+    .max(100)
+    .default(DEFAULT_TIMEZONE)
+    .refine(isIanaTimezone, "Enter an IANA timezone, such as America/New_York."),
   websiteUrl: z.preprocess(emptyToUndefined, z.string().url().max(500).optional()),
   namePronunciation: optionalText,
 });

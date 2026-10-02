@@ -19,7 +19,7 @@ import type { Actor } from "./changes";
 import { prisma } from "./client";
 import { resetTestDatabase } from "./reset-test-database";
 import { seedPlans } from "./plans";
-import { startWizard, submitWizard } from "./wizard";
+import { continueWizard, startWizard, submitWizard } from "./wizard";
 
 async function resetDatabase(): Promise<void> {
   await resetTestDatabase();
@@ -234,5 +234,37 @@ describe("phase 2 configs", () => {
     });
     const typed = await approveChangeRequest(admin, { id: priced.id, fields: { ...fields, services: "Tune-up $99" } });
     expect(typed.promptText).toContain("$99");
+  });
+
+  it("gives a client with no plan and no override zero included changes", async () => {
+    const client = await submittedClient("Alpha HVAC");
+    const owner: Actor = { id: "owner_a", role: "client_owner", clientId: client.id };
+    await prisma.client.update({ where: { id: client.id }, data: { planId: null, overrideIncludedChangesPerMonth: null } });
+    const view = await changeAllowance(owner, client.id, new Date("2026-03-15T15:00:00.000Z"));
+    expect(view.included).toBe(0);
+    expect(view.unlimited).toBe(false);
+    expect(view.over).toBe(true);
+  });
+
+  it("rejects a timezone that is not an IANA name when the business step is saved", async () => {
+    const client = await startWizard(admin, "Zone HVAC");
+    const draft = await prisma.wizardDraft.findFirstOrThrow({ where: { clientId: client.id } });
+    await expect(
+      continueWizard(admin, {
+        clientId: client.id,
+        step: 1,
+        updatedAt: draft.updatedAt.toISOString(),
+        payload: {
+          version: 1,
+          business: {
+            name: "Zone HVAC",
+            industry: "hvac",
+            contactName: "Ada",
+            contactEmail: "ada@example.com",
+            timezone: "Eastern Time",
+          },
+        },
+      }),
+    ).rejects.toThrow(/IANA/);
   });
 });

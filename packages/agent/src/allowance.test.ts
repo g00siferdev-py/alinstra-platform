@@ -11,6 +11,10 @@ describe("allowance", () => {
     expect(march >= februaryRange.end).toBe(true);
     expect(march >= marchRange.start && march < marchRange.end).toBe(true);
     expect(stillFebruary < marchRange.start).toBe(true);
+    const fallback = calendarMonthRange("Not/A/Zone", march);
+    const eastern = calendarMonthRange("America/New_York", march);
+    expect(fallback.start.toISOString()).toBe(eastern.start.toISOString());
+    expect(fallback.end.toISOString()).toBe(eastern.end.toISOString());
   });
 
   it("treats a null allowance as unlimited and charges only past the cap", () => {
