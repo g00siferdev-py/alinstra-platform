@@ -290,6 +290,8 @@ CSV upload and mapping, consent filtering, text-then-call campaigns, outcomes, p
 ### Later
 Public self-serve onboarding link, additional voice providers or a self-hosted pipeline, more calendar systems, practice-management software integrations, marketing site integration.
 
+Healthcare tier (future): see docs/future-healthcare-tier.md
+
 ## 18. Non-Goals (for now)
 
 - Building a custom voice pipeline (planned later; keep the abstraction ready)

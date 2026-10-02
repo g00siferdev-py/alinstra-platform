@@ -162,6 +162,10 @@ Tests connect to a database whose name ends in `_test`. Locally that database is
 
 The admin notice email is queued only when a quick update applies immediately. The worker sends it to `ADMIN_EMAIL`. Held updates and change requests are listed on the admin home instead.
 
+## 2026-10-02 — Staging and production hosting
+
+Daniel approved this: production is a **separate Railway project**, not a second environment inside the staging project. Each project has its own Postgres, Redis, R2 bucket, Resend key, Sentry environment, and `ENCRYPTION_KEY`. Staging is `staging.alinstra.com`. Production, later, is `app.alinstra.com`.
+
 ## Needs Daniel's review
 
 - Existing AgentConfig rows change `status` when a newer version becomes active. The prompt and settings on that row stay as written. Full immutability, including status, would need a separate "current" pointer.

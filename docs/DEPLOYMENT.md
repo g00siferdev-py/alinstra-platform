@@ -73,11 +73,27 @@ Staging gets its own private bucket. The app never makes objects public. Downloa
 5. Permission: **Object Read & Write**.
 6. Specify bucket: **only** `alinstra-staging`. Do not grant account-wide access.
 7. Create token. Copy the Access Key ID, Secret Access Key, and the S3 endpoint (`https://<account-id>.r2.cloudflarestorage.com`). The secret is shown once.
+8. R2 → `alinstra-staging` → Settings → CORS policy. Add this policy and save. The browser uploads the file with a presigned PUT straight to the bucket. The PUT signs `content-length` and `host`. The SDK also puts `x-amz-checksum-crc32` and `x-amz-sdk-checksum-algorithm` on the query string. The browser sends `Content-Type` as well (`text/plain`, `text/csv`, `application/pdf`, or the Word Open XML type). `host` is not a CORS header. `Content-Type` and `Content-Length` are the headers this policy must allow.
+
+```json
+[
+  {
+    "AllowedOrigins": ["https://staging.alinstra.com"],
+    "AllowedMethods": ["PUT", "GET"],
+    "AllowedHeaders": ["Content-Type", "Content-Length"],
+    "ExposeHeaders": ["ETag"],
+    "MaxAgeSeconds": 300
+  }
+]
+```
+
+`MaxAgeSeconds` is 300, the same lifetime as the presigned URL. This policy is only for the staging bucket. A production bucket would list `https://app.alinstra.com` instead, when that project exists.
 
 ### How to verify this step
 
 - The token's bucket scope lists only `alinstra-staging`.
 - In R2, the bucket has no public access.
+- The bucket CORS policy lists `https://staging.alinstra.com`, methods `PUT` and `GET`, and headers `Content-Type` and `Content-Length`.
 
 ## 3. Resend
 
@@ -197,7 +213,7 @@ Grey cloud first. Leave the apex alone.
 ### How to verify this step
 
 - Web deployment logs do not say `Refusing to start`.
-- `GET https://staging.alinstra.com/api/health` returns `200` and a JSON body with `"ok": true` plus `"db": true` and `"redis": true`.
+- `GET https://staging.alinstra.com/api/health` returns `200` and a JSON body with `"ok": true`, `"db": "up"`, and `"redis": "up"`. A failure is `503` with `"down"` on the check that failed.
 - Worker logs show the process started and do not show a migrate command.
 
 ## 8. Seed the admin, enroll two-factor, delete the seed password
@@ -225,7 +241,8 @@ Admin two-factor cannot be turned off. Replace the authenticator from the accoun
 
 - Header on a signed-in page: Alinstra (home), Home, Clients, Plans, and the account menu with Sign out.
 - Add a client, then **Save & exit**. The clients list shows **Continue setup** with the step number, and opening it returns to that step.
-- Upload a small `.txt` knowledge file on an unsubmitted client. The worker log should show extraction finish, and the file should download.
+- Upload a small `.txt` knowledge file on an unsubmitted client **in the browser** at `https://staging.alinstra.com` (not only from a server-side script). The browser PUT goes straight to R2. If the CORS policy is missing, the browser console shows a CORS error and the file never confirms. When the policy is right, the worker log shows extraction finish and the file downloads.
+- The local `prod-smoke` script uploads from inside the web container, so a green smoke run does not prove this browser step.
 
 Take a Railway Postgres backup before any later migration that drops or rewrites data. Restore by creating a new database from that backup, pointing `DATABASE_URL` at it, redeploying web (so migrate runs there), then redeploying the worker.
 
