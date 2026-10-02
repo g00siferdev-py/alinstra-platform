@@ -1,5 +1,6 @@
 import { Prisma } from "./generated/prisma/client";
 import { prisma } from "./client";
+import { createDraftAgentConfig } from "./agent";
 import { recordChange, type Actor } from "./changes";
 import {
   businessSchema,
@@ -111,7 +112,7 @@ async function applyStep(tx: Prisma.TransactionClient, clientId: string, step: n
     const business = businessSchema.parse({ timezone: "America/New_York", ...payload.business });
     await tx.client.update({
       where: { id: clientId },
-      data: { ...business, name: business.name },
+      data: { ...business, namePronunciation: business.namePronunciation ?? null },
     });
   }
   if (step === 2) {
@@ -239,6 +240,7 @@ export async function submitWizard(ctx: Actor, input: { clientId: string; payloa
       where: { id: draft.id },
       data: { payload: json(payload), currentStep: 11 },
     });
+    await createDraftAgentConfig(ctx, tx, client.id);
     await recordChange(tx, {
       clientId: client.id,
       actor: ctx,

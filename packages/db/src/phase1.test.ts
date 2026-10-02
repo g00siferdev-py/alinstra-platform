@@ -8,7 +8,7 @@ import { clients } from "./repositories";
 
 async function resetDatabase(): Promise<void> {
   await prisma.$executeRawUnsafe(
-    `TRUNCATE TABLE "change_log", "knowledge_document", "knowledge_base", "wizard_draft", "session", "account", "twoFactor", "verification", "invite", "user", "client", "plan" CASCADE`,
+    `TRUNCATE TABLE "change_request", "quick_update", "agent_config", "change_log", "knowledge_document", "knowledge_base", "wizard_draft", "session", "account", "twoFactor", "verification", "invite", "user", "client", "plan" CASCADE`,
   );
 }
 

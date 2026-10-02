@@ -1,0 +1,794 @@
+import {
+  CHANGE_CATEGORIES,
+  DECLARED_TOOLS,
+  allowanceState,
+  calendarMonthRange,
+  diffFields,
+  diffLines,
+  faqItems,
+  faqsToText,
+  renderPrompt,
+  sensitiveHoldReason,
+  textsForHold,
+  validateQuickUpdate,
+  type AllowanceState,
+  type ChangeCategory,
+  type LineDiff,
+  type FieldDiff,
+  type PromptDocument,
+  type PromptInput,
+  type QuickUpdateInput,
+  type RenderedPrompt,
+} from "@alinstra/agent";
+import { Prisma } from "./generated/prisma/client";
+import { prisma } from "./client";
+import { recordChange, type Actor } from "./changes";
+import { EXTRA_CHANGE_FEE_CENTS, wizardPayloadSchema } from "./domain";
+import { assertTenantContext, type TenantContext } from "./tenant";
+
+export type PromptPreview = {
+  prompt: string;
+  truncated: boolean;
+  held: boolean;
+  holdReason: string | null;
+};
+
+export type QuickUpdateResult = PromptPreview & {
+  status: "applied" | "held";
+  notify: { subject: string; text: string } | null;
+};
+
+export type AllowanceView = AllowanceState & { included: number | null; used: number };
+
+function assertClient(ctx: TenantContext, clientId: string): void {
+  assertTenantContext(ctx);
+  if (ctx.role !== "admin" && ctx.clientId !== clientId) {
+    throw new Error("That client is not available.");
+  }
+}
+
+function assertAdmin(ctx: Actor): void {
+  assertTenantContext(ctx);
+  if (ctx.role !== "admin") throw new Error("Only an admin can do that.");
+}
+
+function ownerId(ctx: Actor): string {
+  assertTenantContext(ctx);
+  if (ctx.role !== "client_owner" || !ctx.clientId) {
+    throw new Error("Only the client owner can submit this.");
+  }
+  return ctx.clientId;
+}
+
+function jsonOr(value: unknown): Prisma.InputJsonValue | typeof Prisma.DbNull {
+  if (value === null || value === undefined) return Prisma.DbNull;
+  return value as Prisma.InputJsonValue;
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return value as Record<string, unknown>;
+}
+
+function plain(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  return value.trim().length > 0 ? value : null;
+}
+
+function recordingOn(compliance: unknown): boolean {
+  const value = asRecord(compliance).recordingNotice;
+  return value !== false;
+}
+
+function greetingOf(voice: unknown, businessName: string): string {
+  const greeting = asRecord(voice).greeting;
+  if (typeof greeting === "string" && greeting.trim()) return greeting;
+  return `Thank you for calling ${businessName}.`;
+}
+
+function emergencyOf(features: unknown): string | null {
+  const value = asRecord(features).emergencyHandling;
+  return typeof value === "string" ? value : null;
+}
+
+type KnowledgeShape = {
+  id: string;
+  version: number;
+  hours: unknown;
+  services: unknown;
+  faqs: unknown;
+  policies: unknown;
+  staff: unknown;
+  notices: unknown;
+};
+
+type DocShape = { id: string; originalFilename: string; extractedText: string | null };
+
+function toInput(
+  client: { name: string; industry: string | null; namePronunciation: string | null; voice: unknown; features: unknown; compliance: unknown },
+  knowledge: KnowledgeShape | null,
+  documents: DocShape[],
+): PromptInput {
+  const docs: PromptDocument[] = documents.map((document) => ({
+    id: document.id,
+    filename: document.originalFilename,
+    text: document.extractedText ?? "",
+  }));
+  return {
+    businessName: client.name,
+    namePronunciation: client.namePronunciation,
+    industry: client.industry,
+    greeting: greetingOf(client.voice, client.name),
+    recordingNotice: recordingOn(client.compliance),
+    hours: plain(knowledge?.hours) ?? faqsToText(knowledge?.hours),
+    services: plain(knowledge?.services) ?? faqsToText(knowledge?.services),
+    faqs: faqsToText(knowledge?.faqs),
+    policies: plain(knowledge?.policies) ?? faqsToText(knowledge?.policies),
+    staff: plain(knowledge?.staff) ?? faqsToText(knowledge?.staff),
+    notices: plain(knowledge?.notices) ?? faqsToText(knowledge?.notices),
+    emergency: emergencyOf(client.features),
+    documents: docs,
+  };
+}
+
+function settingsOf(input: PromptInput, rendered: RenderedPrompt): Prisma.InputJsonValue {
+  return {
+    templateId: rendered.templateId,
+    templateVersion: rendered.templateVersion,
+    recordingNotice: input.recordingNotice,
+    namePronunciation: input.namePronunciation ?? "",
+    industry: input.industry ?? "",
+    greeting: input.greeting ?? "",
+    hours: input.hours ?? "",
+    services: input.services ?? "",
+    faqs: input.faqs ?? "",
+    policies: input.policies ?? "",
+    staff: input.staff ?? "",
+    notices: input.notices ?? "",
+    emergency: input.emergency ?? "",
+  };
+}
+
+async function load(tx: Prisma.TransactionClient, clientId: string) {
+  const client = await tx.client.findFirst({ where: { id: clientId, archivedAt: null } });
+  if (!client) throw new Error("That client is not available.");
+  const knowledge = await tx.knowledgeBase.findFirst({ where: { clientId }, orderBy: { version: "desc" } });
+  const documents = await tx.knowledgeDocument.findMany({
+    where: { clientId, extractionStatus: { not: "deleted" } },
+    orderBy: { createdAt: "asc" },
+    select: { id: true, originalFilename: true, extractedText: true },
+  });
+  return { client, knowledge, documents, input: toInput(client, knowledge, documents) };
+}
+
+async function nextVersion(tx: Prisma.TransactionClient, clientId: string): Promise<number> {
+  const latest = await tx.agentConfig.aggregate({ where: { clientId }, _max: { version: true } });
+  return (latest._max.version ?? 0) + 1;
+}
+
+async function insertConfig(
+  tx: Prisma.TransactionClient,
+  args: {
+    clientId: string;
+    status: "draft" | "active";
+    source: string;
+    createdById: string;
+    input: PromptInput;
+    knowledge: KnowledgeShape | null;
+    documentIds: string[];
+    voice: unknown;
+  },
+) {
+  if (args.status === "active") {
+    await tx.agentConfig.updateMany({ where: { clientId: args.clientId, status: "active" }, data: { status: "superseded" } });
+  }
+  const rendered = renderPrompt(args.input);
+  return tx.agentConfig.create({
+    data: {
+      clientId: args.clientId,
+      version: await nextVersion(tx, args.clientId),
+      status: args.status,
+      promptText: rendered.text,
+      promptTruncated: rendered.truncated,
+      templateId: rendered.templateId,
+      templateVersion: rendered.templateVersion,
+      knowledgeBaseId: args.knowledge?.id ?? null,
+      knowledgeVersion: args.knowledge?.version ?? null,
+      documentIds: args.documentIds,
+      voice: jsonOr(args.voice),
+      greeting: args.input.greeting ?? null,
+      tools: [...DECLARED_TOOLS],
+      settings: settingsOf(args.input, rendered),
+      platformAgentId: null,
+      source: args.source,
+      createdById: args.createdById,
+    },
+  });
+}
+
+export async function createDraftAgentConfig(ctx: Actor, tx: Prisma.TransactionClient, clientId: string) {
+  assertAdmin(ctx);
+  const loaded = await load(tx, clientId);
+  const config = await insertConfig(tx, {
+    clientId,
+    status: "draft",
+    source: "wizard",
+    createdById: ctx.id,
+    input: loaded.input,
+    knowledge: loaded.knowledge,
+    documentIds: loaded.documents.map((document) => document.id),
+    voice: loaded.client.voice,
+  });
+  await recordChange(tx, {
+    clientId,
+    actor: ctx,
+    action: "agent_config.created",
+    entityType: "agent_config",
+    entityId: config.id,
+    summary: `Created draft receptionist config v${config.version} for ${loaded.client.name}`,
+    after: { version: config.version, status: "draft", templateVersion: config.templateVersion },
+  });
+  return config;
+}
+
+export function agentConfigs(ctx: TenantContext) {
+  assertTenantContext(ctx);
+  const clientFilter = ctx.role === "admin" ? {} : { clientId: ctx.clientId };
+  return {
+    list(clientId: string) {
+      assertClient(ctx, clientId);
+      return prisma.agentConfig.findMany({ where: { clientId }, orderBy: { version: "desc" } });
+    },
+    get(clientId: string, version: number) {
+      assertClient(ctx, clientId);
+      return prisma.agentConfig.findFirst({ where: { clientId, version } });
+    },
+    getById(id: string) {
+      return prisma.agentConfig.findFirst({ where: { id, ...clientFilter } });
+    },
+  };
+}
+
+export function quickUpdates(ctx: TenantContext) {
+  assertTenantContext(ctx);
+  const clientFilter = ctx.role === "admin" ? {} : { clientId: ctx.clientId };
+  return {
+    list(clientId: string) {
+      assertClient(ctx, clientId);
+      return prisma.quickUpdate.findMany({ where: { clientId }, orderBy: { createdAt: "desc" } });
+    },
+    getById(id: string) {
+      return prisma.quickUpdate.findFirst({ where: { id, ...clientFilter } });
+    },
+    listHeld() {
+      if (ctx.role !== "admin") throw new Error("Only an admin can do that.");
+      return prisma.quickUpdate.findMany({ where: { status: "held" }, orderBy: { createdAt: "asc" } });
+    },
+  };
+}
+
+export function changeRequests(ctx: TenantContext) {
+  assertTenantContext(ctx);
+  const clientFilter = ctx.role === "admin" ? {} : { clientId: ctx.clientId };
+  return {
+    list(clientId: string) {
+      assertClient(ctx, clientId);
+      return prisma.changeRequest.findMany({ where: { clientId }, orderBy: { createdAt: "desc" } });
+    },
+    getById(id: string) {
+      return prisma.changeRequest.findFirst({ where: { id, ...clientFilter } });
+    },
+    listPending() {
+      if (ctx.role !== "admin") throw new Error("Only an admin can do that.");
+      return prisma.changeRequest.findMany({ where: { status: "pending" }, orderBy: { createdAt: "asc" } });
+    },
+  };
+}
+
+function withPatch(input: PromptInput, knowledge: KnowledgeShape | null, patch: Record<string, unknown>): PromptInput {
+  const next = knowledge
+    ? { ...knowledge, ...patch }
+    : { id: "", version: 0, hours: null, services: null, faqs: null, policies: null, staff: null, notices: null, ...patch };
+  return {
+    ...input,
+    hours: plain(next.hours) ?? faqsToText(next.hours),
+    services: plain(next.services) ?? faqsToText(next.services),
+    faqs: faqsToText(next.faqs),
+    policies: plain(next.policies) ?? faqsToText(next.policies),
+    staff: plain(next.staff) ?? faqsToText(next.staff),
+    notices: plain(next.notices) ?? faqsToText(next.notices),
+  };
+}
+
+function appendNotice(current: unknown, text: string): string {
+  const base = typeof current === "string" ? current.trim() : "";
+  return base ? `${base}\n${text.trim()}` : text.trim();
+}
+
+function staffText(input: { text: string; transferNumber?: string }): string {
+  const number = input.transferNumber?.trim();
+  if (!number || input.text.includes(number)) return input.text;
+  return `${input.text.trim()}\nTransfer number: ${number}`;
+}
+
+function patchFor(knowledge: KnowledgeShape | null, input: QuickUpdateInput): Record<string, unknown> {
+  if (input.kind === "hours") return { hours: input.text };
+  if (input.kind === "closure") return { notices: appendNotice(knowledge?.notices, input.text) };
+  if (input.kind === "staff") return { staff: staffText(input) };
+  const items = faqItems(knowledge?.faqs);
+  if (input.kind === "faq_add") {
+    items.push({ question: input.question.trim(), answer: input.answer.trim() });
+    return { faqs: items };
+  }
+  if (!items[input.index]) throw new Error("Choose a FAQ.");
+  if (input.kind === "faq_edit") {
+    items[input.index] = { question: input.question.trim(), answer: input.answer.trim() };
+    return { faqs: items };
+  }
+  items.splice(input.index, 1);
+  return { faqs: items };
+}
+
+function parseQuick(payload: unknown): QuickUpdateInput {
+  const row = asRecord(payload);
+  const kind = row.kind;
+  if (kind === "hours" || kind === "closure") return { kind, text: String(row.text ?? "") };
+  if (kind === "staff") {
+    return {
+      kind,
+      text: String(row.text ?? ""),
+      transferNumber: typeof row.transferNumber === "string" ? row.transferNumber : undefined,
+    };
+  }
+  if (kind === "faq_add" || kind === "faq_edit") {
+    return {
+      kind,
+      index: Number(row.index ?? 0),
+      question: String(row.question ?? ""),
+      answer: String(row.answer ?? ""),
+    };
+  }
+  if (kind === "faq_remove") return { kind, index: Number(row.index ?? -1) };
+  throw new Error("That update cannot be applied.");
+}
+
+async function forkKnowledge(tx: Prisma.TransactionClient, clientId: string, patch: Record<string, unknown>) {
+  const current = await tx.knowledgeBase.findFirst({ where: { clientId }, orderBy: { version: "desc" } });
+  if (!current) throw new Error("Submit the wizard before changing the receptionist.");
+  const latest = await tx.knowledgeBase.aggregate({ where: { clientId }, _max: { version: true } });
+  return tx.knowledgeBase.create({
+    data: {
+      clientId,
+      version: (latest._max.version ?? 0) + 1,
+      status: "submitted",
+      hours: jsonOr(patch.hours !== undefined ? patch.hours : current.hours),
+      services: jsonOr(patch.services !== undefined ? patch.services : current.services),
+      faqs: jsonOr(patch.faqs !== undefined ? patch.faqs : current.faqs),
+      policies: jsonOr(patch.policies !== undefined ? patch.policies : current.policies),
+      staff: jsonOr(patch.staff !== undefined ? patch.staff : current.staff),
+      notices: jsonOr(patch.notices !== undefined ? patch.notices : current.notices),
+    },
+  });
+}
+
+export async function previewWizardPrompt(ctx: Actor, input: { clientId: string; payload: unknown }): Promise<PromptPreview> {
+  assertAdmin(ctx);
+  const payload = wizardPayloadSchema.parse(input.payload);
+  return prisma.$transaction(async (tx) => {
+    const loaded = await load(tx, input.clientId);
+    const business = payload.business ?? {};
+    const knowledge = payload.knowledge ?? {};
+    const voice = payload.voice ?? asRecord(loaded.client.voice);
+    const compliance = { ...asRecord(loaded.client.compliance), ...asRecord(payload.compliance) };
+    const features = { ...asRecord(loaded.client.features), ...asRecord(payload.features) };
+    const promptInput: PromptInput = {
+      ...loaded.input,
+      businessName: business.name || loaded.client.name,
+      industry: business.industry ?? loaded.client.industry,
+      namePronunciation: business.namePronunciation ?? loaded.client.namePronunciation,
+      greeting: greetingOf(voice, business.name || loaded.client.name),
+      recordingNotice: recordingOn(compliance),
+      emergency: emergencyOf(features),
+      hours: knowledge.hours ?? loaded.input.hours,
+      services: knowledge.services ?? loaded.input.services,
+      faqs: knowledge.faqs ?? loaded.input.faqs,
+      policies: knowledge.policies ?? loaded.input.policies,
+      staff: knowledge.staff ?? loaded.input.staff,
+    };
+    const rendered = renderPrompt(promptInput);
+    return { prompt: rendered.text, truncated: rendered.truncated, held: false, holdReason: null };
+  });
+}
+
+export async function previewQuickUpdate(ctx: Actor, input: QuickUpdateInput): Promise<PromptPreview> {
+  const clientId = ownerId(ctx);
+  const error = validateQuickUpdate(input);
+  if (error) throw new Error(error);
+  return prisma.$transaction(async (tx) => {
+    const loaded = await load(tx, clientId);
+    if (!loaded.client.wizardSubmittedAt) throw new Error("Submit the wizard before changing the receptionist.");
+    const patch = patchFor(loaded.knowledge, input);
+    const rendered = renderPrompt(withPatch(loaded.input, loaded.knowledge, patch));
+    const holdReason = sensitiveHoldReason(textsForHold(input));
+    return { prompt: rendered.text, truncated: rendered.truncated, held: holdReason !== null, holdReason };
+  });
+}
+
+export async function applyQuickUpdate(ctx: Actor, input: QuickUpdateInput): Promise<QuickUpdateResult> {
+  const clientId = ownerId(ctx);
+  const error = validateQuickUpdate(input);
+  if (error) throw new Error(error);
+  return prisma.$transaction(async (tx) => {
+    const loaded = await load(tx, clientId);
+    if (!loaded.client.wizardSubmittedAt) throw new Error("Submit the wizard before changing the receptionist.");
+    const patch = patchFor(loaded.knowledge, input);
+    const holdReason = sensitiveHoldReason(textsForHold(input));
+    if (holdReason) {
+      const held = await tx.quickUpdate.create({
+        data: {
+          clientId,
+          kind: input.kind,
+          payload: input as unknown as Prisma.InputJsonValue,
+          status: "held",
+          holdReason,
+          createdById: ctx.id,
+        },
+      });
+      await recordChange(tx, {
+        clientId,
+        actor: ctx,
+        action: "quick_update.held",
+        entityType: "quick_update",
+        entityId: held.id,
+        summary: `Held a ${input.kind} update for ${loaded.client.name}`,
+        after: { holdReason },
+      });
+      const rendered = renderPrompt(withPatch(loaded.input, loaded.knowledge, patch));
+      return { status: "held" as const, prompt: rendered.text, truncated: rendered.truncated, held: true, holdReason, notify: null };
+    }
+    const knowledge = await forkKnowledge(tx, clientId, patch);
+    const fresh = await load(tx, clientId);
+    const config = await insertConfig(tx, {
+      clientId,
+      status: "active",
+      source: "quick_update",
+      createdById: ctx.id,
+      input: fresh.input,
+      knowledge,
+      documentIds: fresh.documents.map((document) => document.id),
+      voice: fresh.client.voice,
+    });
+    const row = await tx.quickUpdate.create({
+      data: {
+        clientId,
+        kind: input.kind,
+        payload: input as unknown as Prisma.InputJsonValue,
+        status: "applied",
+        agentConfigId: config.id,
+        createdById: ctx.id,
+      },
+    });
+    await recordChange(tx, {
+      clientId,
+      actor: ctx,
+      action: "quick_update.applied",
+      entityType: "quick_update",
+      entityId: row.id,
+      summary: `Applied a ${input.kind} update for ${loaded.client.name}`,
+      after: { agentConfigId: config.id, version: config.version },
+    });
+    return {
+      status: "applied" as const,
+      prompt: config.promptText,
+      truncated: config.promptTruncated,
+      held: false,
+      holdReason: null,
+      notify: {
+        subject: `Quick update applied for ${loaded.client.name}`,
+        text: `A ${input.kind} update is now version ${config.version} for ${loaded.client.name}.`,
+      },
+    };
+  });
+}
+
+export async function approveQuickUpdate(ctx: Actor, id: string): Promise<{ prompt: string; truncated: boolean }> {
+  assertAdmin(ctx);
+  return prisma.$transaction(async (tx) => {
+    const row = await tx.quickUpdate.findFirst({ where: { id, status: "held" } });
+    if (!row) throw new Error("That update is not waiting for review.");
+    const input = parseQuick(row.payload);
+    const error = validateQuickUpdate(input);
+    if (error) throw new Error(error);
+    const patch = patchFor((await load(tx, row.clientId)).knowledge, input);
+    const knowledge = await forkKnowledge(tx, row.clientId, patch);
+    const fresh = await load(tx, row.clientId);
+    const config = await insertConfig(tx, {
+      clientId: row.clientId,
+      status: "active",
+      source: "quick_update",
+      createdById: ctx.id,
+      input: fresh.input,
+      knowledge,
+      documentIds: fresh.documents.map((document) => document.id),
+      voice: fresh.client.voice,
+    });
+    await tx.quickUpdate.update({
+      where: { id: row.id },
+      data: { status: "approved", agentConfigId: config.id, reviewedById: ctx.id, reviewedAt: new Date() },
+    });
+    await recordChange(tx, {
+      clientId: row.clientId,
+      actor: ctx,
+      action: "quick_update.approved",
+      entityType: "quick_update",
+      entityId: row.id,
+      summary: `Approved a held ${row.kind} update`,
+      after: { agentConfigId: config.id, version: config.version },
+    });
+    return { prompt: config.promptText, truncated: config.promptTruncated };
+  });
+}
+
+export async function rejectQuickUpdate(ctx: Actor, id: string): Promise<void> {
+  assertAdmin(ctx);
+  await prisma.$transaction(async (tx) => {
+    const row = await tx.quickUpdate.findFirst({ where: { id, status: "held" } });
+    if (!row) throw new Error("That update is not waiting for review.");
+    await tx.quickUpdate.update({
+      where: { id: row.id },
+      data: { status: "rejected", reviewedById: ctx.id, reviewedAt: new Date() },
+    });
+    await recordChange(tx, {
+      clientId: row.clientId,
+      actor: ctx,
+      action: "quick_update.rejected",
+      entityType: "quick_update",
+      entityId: row.id,
+      summary: `Rejected a held ${row.kind} update`,
+    });
+  });
+}
+
+function cleanCategory(value: string): ChangeCategory {
+  if (!(CHANGE_CATEGORIES as readonly string[]).includes(value)) throw new Error("Choose a category.");
+  return value as ChangeCategory;
+}
+
+function cleanDescription(value: string): string {
+  const text = value.trim();
+  if (text.length === 0) throw new Error("Describe the change.");
+  if (text.length > 4_000) throw new Error("Descriptions must be 4,000 characters or fewer.");
+  return text;
+}
+
+async function readAllowance(tx: Prisma.TransactionClient, clientId: string, now: Date): Promise<AllowanceView> {
+  const client = await tx.client.findFirst({ where: { id: clientId, archivedAt: null }, include: { plan: true } });
+  if (!client) throw new Error("That client is not available.");
+  const included =
+    client.overrideIncludedChangesPerMonth !== null
+      ? client.overrideIncludedChangesPerMonth
+      : (client.plan?.includedChangesPerMonth ?? null);
+  const range = calendarMonthRange(client.timezone || "America/New_York", now);
+  const used = await tx.changeRequest.count({
+    where: {
+      clientId,
+      status: { in: ["pending", "approved"] },
+      createdAt: { gte: range.start, lt: range.end },
+    },
+  });
+  const state = allowanceState({
+    included,
+    used,
+    extraChangeFeeCents: client.plan?.extraChangeFeeCents ?? EXTRA_CHANGE_FEE_CENTS,
+  });
+  return { ...state, included, used };
+}
+
+export async function changeAllowance(ctx: Actor, clientId: string, now = new Date()): Promise<AllowanceView> {
+  assertClient(ctx, clientId);
+  if (ctx.role === "client_staff") throw new Error("Only the client owner can submit this.");
+  return prisma.$transaction((tx) => readAllowance(tx, clientId, now));
+}
+
+export async function submitChangeRequest(
+  ctx: Actor,
+  input: { category: string; description: string; confirmFee: boolean },
+  now = new Date(),
+) {
+  const clientId = ownerId(ctx);
+  const category = cleanCategory(input.category);
+  const description = cleanDescription(input.description);
+  return prisma.$transaction(async (tx) => {
+    const client = await tx.client.findFirst({ where: { id: clientId, archivedAt: null } });
+    if (!client?.wizardSubmittedAt) throw new Error("Submit the wizard before changing the receptionist.");
+    const allowance = await readAllowance(tx, clientId, now);
+    if (allowance.over && !input.confirmFee) throw new Error("Confirm the extra change fee.");
+    const row = await tx.changeRequest.create({
+      data: {
+        clientId,
+        category,
+        description,
+        status: "pending",
+        feeCents: allowance.over ? allowance.feeCents : null,
+        createdById: ctx.id,
+        createdAt: now,
+      },
+    });
+    await recordChange(tx, {
+      clientId,
+      actor: ctx,
+      action: "change_request.submitted",
+      entityType: "change_request",
+      entityId: row.id,
+      summary: `Submitted a ${category} change request for ${client.name}`,
+      after: { feeCents: row.feeCents },
+    });
+    return row;
+  });
+}
+
+export async function cancelChangeRequest(ctx: Actor, id: string): Promise<void> {
+  const clientId = ownerId(ctx);
+  await prisma.$transaction(async (tx) => {
+    const row = await tx.changeRequest.findFirst({ where: { id, clientId, status: "pending" } });
+    if (!row) throw new Error("That request is not open.");
+    await tx.changeRequest.update({
+      where: { id: row.id },
+      data: { status: "cancelled", reviewedAt: new Date() },
+    });
+    await recordChange(tx, {
+      clientId,
+      actor: ctx,
+      action: "change_request.cancelled",
+      entityType: "change_request",
+      entityId: row.id,
+      summary: "Cancelled a change request",
+    });
+  });
+}
+
+export async function previewChangeRequest(ctx: Actor, input: { id: string; description: string }): Promise<PromptPreview> {
+  assertAdmin(ctx);
+  const description = cleanDescription(input.description);
+  return prisma.$transaction(async (tx) => {
+    const row = await tx.changeRequest.findFirst({ where: { id: input.id, status: "pending" } });
+    if (!row) throw new Error("That request is not open.");
+    const loaded = await load(tx, row.clientId);
+    const patch = { notices: appendNotice(loaded.knowledge?.notices, `${row.category}: ${description}`) };
+    const rendered = renderPrompt(withPatch(loaded.input, loaded.knowledge, patch));
+    return { prompt: rendered.text, truncated: rendered.truncated, held: false, holdReason: null };
+  });
+}
+
+export async function approveChangeRequest(ctx: Actor, input: { id: string; description: string }) {
+  assertAdmin(ctx);
+  const description = cleanDescription(input.description);
+  return prisma.$transaction(async (tx) => {
+    const row = await tx.changeRequest.findFirst({ where: { id: input.id, status: "pending" } });
+    if (!row) throw new Error("That request is not open.");
+    const patch = { notices: appendNotice((await load(tx, row.clientId)).knowledge?.notices, `${row.category}: ${description}`) };
+    const knowledge = await forkKnowledge(tx, row.clientId, patch);
+    const fresh = await load(tx, row.clientId);
+    const config = await insertConfig(tx, {
+      clientId: row.clientId,
+      status: "active",
+      source: "change_request",
+      createdById: ctx.id,
+      input: fresh.input,
+      knowledge,
+      documentIds: fresh.documents.map((document) => document.id),
+      voice: fresh.client.voice,
+    });
+    await tx.changeRequest.update({
+      where: { id: row.id },
+      data: {
+        description,
+        status: "approved",
+        agentConfigId: config.id,
+        reviewedById: ctx.id,
+        reviewedAt: new Date(),
+      },
+    });
+    await recordChange(tx, {
+      clientId: row.clientId,
+      actor: ctx,
+      action: "change_request.approved",
+      entityType: "change_request",
+      entityId: row.id,
+      summary: `Approved a ${row.category} change request`,
+      after: { agentConfigId: config.id, version: config.version },
+    });
+    return config;
+  });
+}
+
+export async function rejectChangeRequest(ctx: Actor, id: string): Promise<void> {
+  assertAdmin(ctx);
+  await prisma.$transaction(async (tx) => {
+    const row = await tx.changeRequest.findFirst({ where: { id, status: "pending" } });
+    if (!row) throw new Error("That request is not open.");
+    await tx.changeRequest.update({
+      where: { id: row.id },
+      data: { status: "rejected", reviewedById: ctx.id, reviewedAt: new Date() },
+    });
+    await recordChange(tx, {
+      clientId: row.clientId,
+      actor: ctx,
+      action: "change_request.rejected",
+      entityType: "change_request",
+      entityId: row.id,
+      summary: "Rejected a change request",
+    });
+  });
+}
+
+async function copyAsActive(ctx: Actor, input: { clientId: string; version: number }, sourceName: "activate" | "rollback") {
+  assertAdmin(ctx);
+  return prisma.$transaction(async (tx) => {
+    const source = await tx.agentConfig.findFirst({ where: { clientId: input.clientId, version: input.version } });
+    if (!source) throw new Error("That version was not found.");
+    if (source.status === "active") throw new Error("That version is already active.");
+    if (sourceName === "activate" && source.status !== "draft") throw new Error("Only a draft can be activated.");
+    await tx.agentConfig.updateMany({ where: { clientId: input.clientId, status: "active" }, data: { status: "superseded" } });
+    if (source.status === "draft") {
+      await tx.agentConfig.update({ where: { id: source.id }, data: { status: "superseded" } });
+    }
+    const created = await tx.agentConfig.create({
+      data: {
+        clientId: source.clientId,
+        version: await nextVersion(tx, source.clientId),
+        status: "active",
+        promptText: source.promptText,
+        promptTruncated: source.promptTruncated,
+        templateId: source.templateId,
+        templateVersion: source.templateVersion,
+        knowledgeBaseId: source.knowledgeBaseId,
+        knowledgeVersion: source.knowledgeVersion,
+        documentIds: source.documentIds as Prisma.InputJsonValue,
+        voice: jsonOr(source.voice),
+        greeting: source.greeting,
+        tools: source.tools as Prisma.InputJsonValue,
+        settings: source.settings as Prisma.InputJsonValue,
+        platformAgentId: null,
+        source: sourceName,
+        createdById: ctx.id,
+      },
+    });
+    await recordChange(tx, {
+      clientId: source.clientId,
+      actor: ctx,
+      action: sourceName === "activate" ? "agent_config.activated" : "agent_config.rollback",
+      entityType: "agent_config",
+      entityId: created.id,
+      summary: sourceName === "activate"
+        ? `Activated receptionist config v${created.version} from draft v${source.version}`
+        : `Rolled back to a copy of v${source.version} as v${created.version}`,
+      after: { fromVersion: source.version, version: created.version },
+    });
+    return created;
+  });
+}
+
+export async function activateAgentConfig(ctx: Actor, input: { clientId: string; version: number }) {
+  return copyAsActive(ctx, input, "activate");
+}
+
+export async function rollbackAgentConfig(ctx: Actor, input: { clientId: string; version: number }) {
+  return copyAsActive(ctx, input, "rollback");
+}
+
+export async function diffAgentConfigs(
+  ctx: Actor,
+  input: { clientId: string; fromVersion: number; toVersion: number },
+): Promise<{ lines: LineDiff[]; fields: FieldDiff[] }> {
+  assertAdmin(ctx);
+  const [from, to] = await Promise.all([
+    prisma.agentConfig.findFirst({ where: { clientId: input.clientId, version: input.fromVersion } }),
+    prisma.agentConfig.findFirst({ where: { clientId: input.clientId, version: input.toVersion } }),
+  ]);
+  if (!from || !to) throw new Error("That version was not found.");
+  return {
+    lines: diffLines(from.promptText, to.promptText),
+    fields: diffFields(asRecord(from.settings), asRecord(to.settings)),
+  };
+}

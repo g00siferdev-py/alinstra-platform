@@ -61,6 +61,7 @@ export const businessSchema = z.object({
   country: optionalText,
   timezone: z.string().trim().min(1).max(100).default(DEFAULT_TIMEZONE),
   websiteUrl: z.preprocess(emptyToUndefined, z.string().url().max(500).optional()),
+  namePronunciation: optionalText,
 });
 
 export const coverageSchema = z.object({

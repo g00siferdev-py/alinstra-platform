@@ -128,6 +128,7 @@ model Client {
   country                         String?
   timezone                        String    @default("America/New_York")
   websiteUrl                      String?
+  namePronunciation               String?
   notes                           String?
   websiteNotes                    String?
   portalOwnerEmail                String?
@@ -155,6 +156,9 @@ model Client {
   knowledgeBases                  KnowledgeBase[]
   knowledgeDocuments              KnowledgeDocument[]
   changeLogs                      ChangeLog[]
+  agentConfigs                    AgentConfig[]
+  quickUpdates                    QuickUpdate[]
+  changeRequests                  ChangeRequest[]
 
   @@index([status])
   @@index([archivedAt])
@@ -186,9 +190,11 @@ model KnowledgeBase {
   faqs      Json?
   policies  Json?
   staff     Json?
+  notices   Json?
   createdAt DateTime            @default(now())
   updatedAt DateTime            @updatedAt
   documents KnowledgeDocument[]
+  agentConfigs AgentConfig[]
 
   @@unique([clientId, version])
   @@index([clientId])
@@ -257,4 +263,68 @@ model Invite {
   @@index([clientId])
   @@index([email])
   @@map("invite")
+}
+
+model AgentConfig {
+  id               String         @id @default(cuid())
+  clientId         String
+  client           Client         @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  version          Int
+  status           String
+  promptText       String         @db.Text
+  promptTruncated  Boolean        @default(false)
+  templateId       String
+  templateVersion  String
+  knowledgeBaseId  String?
+  knowledgeBase    KnowledgeBase? @relation(fields: [knowledgeBaseId], references: [id], onDelete: SetNull)
+  knowledgeVersion Int?
+  documentIds      Json
+  voice            Json?
+  greeting         String?
+  tools            Json
+  settings         Json
+  platformAgentId  String?
+  source           String
+  createdById      String
+  createdAt        DateTime       @default(now())
+
+  @@unique([clientId, version])
+  @@index([clientId, status])
+  @@map("agent_config")
+}
+
+model QuickUpdate {
+  id            String    @id @default(cuid())
+  clientId      String
+  client        Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  kind          String
+  payload       Json
+  status        String
+  holdReason    String?
+  agentConfigId String?
+  createdById   String
+  reviewedById  String?
+  createdAt     DateTime  @default(now())
+  reviewedAt    DateTime?
+
+  @@index([clientId, status])
+  @@map("quick_update")
+}
+
+model ChangeRequest {
+  id            String    @id @default(cuid())
+  clientId      String
+  client        Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  category      String
+  description   String    @db.Text
+  status        String
+  feeCents      Int?
+  agentConfigId String?
+  createdById   String
+  reviewedById  String?
+  createdAt     DateTime  @default(now())
+  reviewedAt    DateTime?
+
+  @@index([clientId, status])
+  @@map("change_request")
 }
