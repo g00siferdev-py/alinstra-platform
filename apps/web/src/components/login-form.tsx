@@ -25,6 +25,9 @@ export function LoginForm({ notice }: { notice?: string | null }) {
       else setError("Email or password is incorrect.");
       return;
     }
+    if (result.data && "twoFactorRedirect" in result.data && result.data.twoFactorRedirect) {
+      return;
+    }
     window.location.href = "/home";
   }
 
