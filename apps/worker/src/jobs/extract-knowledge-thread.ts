@@ -1,5 +1,5 @@
 import { parentPort, workerData } from "node:worker_threads";
-import { extractKnowledge } from "./extract-knowledge-text";
+import { extractKnowledge } from "./extract-knowledge-text.ts";
 
 const documentId =
   typeof workerData === "object" && workerData !== null && "documentId" in workerData

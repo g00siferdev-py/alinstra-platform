@@ -85,6 +85,142 @@ services:
       redis:
         condition: service_healthy
 
+  # Production image rehearsal. Does not start with a plain `docker compose up`.
+  # MinIO's published images were not anonymously pullable on 2026-10-02 (Docker Hub
+  # denied the repo; dl.min.io returned 410). RustFS is the S3 stand-in for R2.
+  # docker compose --profile prod-smoke up -d --build postgres-smoke redis-smoke s3 s3-init web-prod worker-prod
+  postgres-smoke:
+    profiles: ["prod-smoke"]
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: alinstra
+      POSTGRES_PASSWORD: alinstra
+      POSTGRES_DB: alinstra
+    volumes:
+      - alinstra_smoke_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U alinstra -d alinstra"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis-smoke:
+    profiles: ["prod-smoke"]
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - alinstra_smoke_redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  s3:
+    profiles: ["prod-smoke"]
+    image: rustfs/rustfs:latest
+    environment:
+      RUSTFS_VOLUMES: /data/rustfs0
+      RUSTFS_ADDRESS: 0.0.0.0:9000
+      RUSTFS_CONSOLE_ENABLE: "false"
+      RUSTFS_ACCESS_KEY: alinstra
+      RUSTFS_SECRET_KEY: alinstra-minio-secret
+    volumes:
+      - alinstra_smoke_s3:/data
+    ports:
+      - "9000:9000"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:9000/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  s3-init:
+    profiles: ["prod-smoke"]
+    image: amazon/aws-cli:2.31.13
+    depends_on:
+      s3:
+        condition: service_healthy
+    environment:
+      AWS_ACCESS_KEY_ID: alinstra
+      AWS_SECRET_ACCESS_KEY: alinstra-minio-secret
+      AWS_DEFAULT_REGION: us-east-1
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["aws --endpoint-url http://s3:9000 s3 mb s3://alinstra-smoke || aws --endpoint-url http://s3:9000 s3 ls s3://alinstra-smoke"]
+
+  web-prod:
+    profiles: ["prod-smoke"]
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "3001:3000"
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      APP_URL: http://127.0.0.1:3000
+      BETTER_AUTH_URL: http://127.0.0.1:3000
+      BETTER_AUTH_SECRET: smoke-local-auth-secret-not-for-railway
+      ENCRYPTION_KEY: BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=
+      ADMIN_EMAIL: smoke-admin@example.com
+      ADMIN_INITIAL_PASSWORD: smoke-admin-pass
+      DATABASE_URL: postgresql://alinstra:alinstra@postgres-smoke:5432/alinstra?schema=public
+      REDIS_URL: redis://redis-smoke:6379
+      EMAIL_FROM: notifications@alinstra.com
+      EMAIL_TRANSPORT: resend
+      RESEND_API_KEY: re_smoke_local_only
+      STORAGE_DRIVER: s3
+      S3_ENDPOINT: http://s3:9000
+      S3_BUCKET: alinstra-smoke
+      S3_ACCESS_KEY_ID: alinstra
+      S3_SECRET_ACCESS_KEY: alinstra-minio-secret
+      S3_REGION: us-east-1
+    depends_on:
+      postgres-smoke:
+        condition: service_healthy
+      redis-smoke:
+        condition: service_healthy
+      s3-init:
+        condition: service_completed_successfully
+
+  worker-prod:
+    profiles: ["prod-smoke"]
+    build:
+      context: .
+      dockerfile: apps/worker/Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      APP_URL: http://127.0.0.1:3000
+      BETTER_AUTH_URL: http://127.0.0.1:3000
+      BETTER_AUTH_SECRET: smoke-local-auth-secret-not-for-railway
+      ENCRYPTION_KEY: BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=
+      ADMIN_EMAIL: smoke-admin@example.com
+      DATABASE_URL: postgresql://alinstra:alinstra@postgres-smoke:5432/alinstra?schema=public
+      REDIS_URL: redis://redis-smoke:6379
+      EMAIL_FROM: notifications@alinstra.com
+      EMAIL_TRANSPORT: resend
+      RESEND_API_KEY: re_smoke_local_only
+      STORAGE_DRIVER: s3
+      S3_ENDPOINT: http://s3:9000
+      S3_BUCKET: alinstra-smoke
+      S3_ACCESS_KEY_ID: alinstra
+      S3_SECRET_ACCESS_KEY: alinstra-minio-secret
+      S3_REGION: us-east-1
+    depends_on:
+      postgres-smoke:
+        condition: service_healthy
+      redis-smoke:
+        condition: service_healthy
+      s3-init:
+        condition: service_completed_successfully
+
 volumes:
   alinstra_pg_data:
   alinstra_redis_data:
+  alinstra_smoke_pg:
+  alinstra_smoke_redis:
+  alinstra_smoke_s3:

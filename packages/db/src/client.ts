@@ -10,7 +10,7 @@ for (const path of [
   resolve(process.cwd(), "../../.env"),
   resolve(process.cwd(), "../../../.env"),
 ]) {
-  if (existsSync(path)) loadDotenv({ path });
+    if (existsSync(/*turbopackIgnore: true*/ path)) loadDotenv({ path });
 }
 
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };

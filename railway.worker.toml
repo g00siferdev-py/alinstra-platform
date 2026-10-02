@@ -1,5 +1,10 @@
-# Worker service. Do not add a pre-deploy migration command.
+# Worker service. In the Railway service settings, set the config file path to
+# railway.worker.toml. Do not add a pre-deploy migration command.
 # Schema changes are applied by the web service before traffic moves.
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "apps/worker/Dockerfile"
 
 [deploy]
 startCommand = "pnpm --filter @alinstra/worker start"

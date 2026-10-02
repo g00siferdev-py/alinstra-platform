@@ -1,6 +1,7 @@
 "use client";
 
 import { continueWizardAction, discardWizardAction, previewWizardPromptAction, saveDraftAction, submitWizardAction } from "@/app/admin/actions";
+import { useNavigationGuard } from "@/components/navigation-guard";
 import { Button, ErrorText, FileDropzone, Input } from "@/components/ui";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -118,11 +119,16 @@ export function WizardForm({
   const [uploadedName, setUploadedName] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [saveState, setSaveState] = useState<"saving" | "saved" | "error">("saved");
+  const [exitNote, setExitNote] = useState<string | null>(null);
   const saveLock = useRef(false);
-
-  useEffect(() => {
-    updatedRef.current = updatedAt;
-  }, [updatedAt]);
+  const payloadRef = useRef(payload);
+  const stepRef = useRef(step);
+  const chain = useRef(Promise.resolve(true));
+  const guard = useNavigationGuard();
+  updatedRef.current = updatedAt;
+  payloadRef.current = payload;
+  stepRef.current = step;
 
   useEffect(() => {
     const industry = payload.business.industry;
@@ -135,16 +141,84 @@ export function WizardForm({
     }
   }, [payload.business.industry, payload.compliance.healthcareTouched, payload.compliance.healthcareSensitive]);
 
+  function enqueueSave(): Promise<boolean> {
+    const run = chain.current.then(() => writeDraft(), () => writeDraft());
+    chain.current = run.catch(() => false);
+    return run;
+  }
+
+  async function writeDraft(): Promise<boolean> {
+    setSaveState("saving");
+    const result = await saveDraftAction({
+      clientId,
+      payload: payloadRef.current,
+      currentStep: stepRef.current,
+      updatedAt: updatedRef.current,
+    });
+    if (result?.updatedAt) {
+      updatedRef.current = result.updatedAt;
+      setUpdatedAt(result.updatedAt);
+    }
+    if (result?.error) {
+      setSaveState("error");
+      setError(result.error);
+      return false;
+    }
+    setSaveState("saved");
+    setError(null);
+    return true;
+  }
+
   useEffect(() => {
+    setSaveState("saving");
     const timer = setTimeout(() => {
       if (saveLock.current) return;
-      void saveDraftAction({ clientId, payload, currentStep: step, updatedAt: updatedRef.current }).then((result) => {
-        if (result?.updatedAt) setUpdatedAt(result.updatedAt);
-        if (result?.error?.includes("another tab")) setError(result.error);
-      });
+      void enqueueSave();
     }, 800);
     return () => clearTimeout(timer);
   }, [clientId, payload, step]);
+
+  useEffect(() => {
+    function warn(event: BeforeUnloadEvent) {
+      if (saveState === "saving" || saveState === "error") {
+        event.preventDefault();
+        event.returnValue = "";
+      }
+    }
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [saveState]);
+
+  useEffect(() => {
+    if (!guard) return;
+    guard.register(async () => {
+      if (saveState === "saving" || saveState === "error") {
+        const leave = window.confirm(
+          saveState === "saving"
+            ? "A save is still in progress. Leave this page?"
+            : "The last save failed. Leave this page?",
+        );
+        if (!leave) return false;
+      }
+      return enqueueSave();
+    });
+    return () => guard.register(null);
+  }, [guard, saveState]);
+
+  async function saveAndExit() {
+    setExitNote(null);
+    const saved = await enqueueSave();
+    if (!saved) return;
+    saveLock.current = true;
+    setExitNote("Draft saved");
+    window.setTimeout(() => router.push("/admin/clients"), 500);
+  }
+
+  function discardDraft() {
+    if (!window.confirm("Discard this draft? Uploaded files for this draft are deleted.")) return;
+    saveLock.current = true;
+    void discardWizardAction(clientId);
+  }
 
   async function continueStep() {
     saveLock.current = true;
@@ -473,11 +547,21 @@ export function WizardForm({
         </div>
       ) : null}
 
-      <div className="flex flex-wrap gap-2">
-        {step > 1 ? <Button onClick={() => setStep((current) => current - 1)}>Back</Button> : null}
+      <div className="flex flex-wrap items-center gap-2">
+        {step > 1 ? <Button tone="secondary" onClick={() => setStep((current) => current - 1)}>Back</Button> : null}
+        <Button tone="secondary" onClick={() => void saveAndExit()}>Save & exit</Button>
         {step < 11 ? <Button disabled={pending} onClick={() => void continueStep()}>{pending ? "Saving…" : "Continue"}</Button> : null}
-        <Button onClick={() => void discardWizardAction(clientId)}>Discard draft</Button>
+        <div className="ml-auto">
+          <Button tone="danger" onClick={discardDraft}>Discard draft</Button>
+        </div>
       </div>
+      <p className="text-sm text-[var(--muted)]">
+        {exitNote ? exitNote : saveState === "saving" ? "Saving…" : saveState === "error" ? (
+          <button type="button" className="cursor-pointer text-[var(--danger)] underline" onClick={() => void enqueueSave()}>
+            Couldn&apos;t save — retry
+          </button>
+        ) : "All changes saved"}
+      </p>
     </div>
   );
 }

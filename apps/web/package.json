@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev --port 3000",
     "build": "next build",
-    "start": "next start --port 3000",
+    "start": "node scripts/start.mjs",
     "lint": "pnpm -w exec eslint apps/web/src apps/web/sentry.server.config.ts apps/web/sentry.edge.config.ts apps/web/next.config.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests"

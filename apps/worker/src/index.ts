@@ -68,6 +68,7 @@ const knowledge = new Worker(
       log("error", "knowledge extraction killed", {
         documentId,
         error: error instanceof Error ? error.name : "unknown",
+        message: error instanceof Error ? error.message : "unknown",
       });
       throw new UnrecoverableError("Extraction timed out.");
     }

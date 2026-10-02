@@ -1,4 +1,3 @@
-import { SignOutButton } from "@/components/home-forms";
 import { changeRequests, clients, plans, quickUpdates, type TenantContext } from "@alinstra/db";
 import { requireUser } from "@/lib/session";
 import Link from "next/link";
@@ -33,15 +32,7 @@ export default async function HomePage() {
 
   return (
     <main className="mx-auto grid max-w-3xl gap-6 p-6">
-      <header className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Alinstra</h1>
-          <p className="text-sm text-[var(--muted)]">
-            {session.user.email} · {session.user.role}
-          </p>
-        </div>
-        <SignOutButton />
-      </header>
+      <h1 className="text-2xl font-semibold">Home</h1>
 
       {needsTwoFactor ? (
         <section className="rounded-xl border border-[var(--line)] bg-[var(--card)] p-6">
@@ -49,20 +40,6 @@ export default async function HomePage() {
           <p className="mb-4 text-sm text-[var(--muted)]">Admin tools stay unavailable until an authenticator app is enrolled.</p>
           <Link className="rounded-md bg-[var(--accent)] px-4 py-2 text-sm text-[var(--accent-ink)]" href="/account/security">
             Set up two-factor
-          </Link>
-        </section>
-      ) : null}
-
-      {isAdmin && !needsTwoFactor ? (
-        <section className="flex flex-wrap gap-3">
-          <Link className="rounded-md bg-[var(--accent)] px-4 py-2 text-sm text-[var(--accent-ink)]" href="/admin/clients">
-            Clients
-          </Link>
-          <Link className="rounded-md border border-[var(--line)] px-4 py-2 text-sm" href="/admin/plans">
-            Plans
-          </Link>
-          <Link className="rounded-md border border-[var(--line)] px-4 py-2 text-sm" href="/account/security">
-            Replace authenticator
           </Link>
         </section>
       ) : null}

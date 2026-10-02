@@ -26,8 +26,16 @@ export function Input(props: InputHTMLAttributes<HTMLInputElement>) {
   );
 }
 
-export function Button(props: ButtonHTMLAttributes<HTMLButtonElement>) {
-  return <button className={buttonClassName} {...props} />;
+const buttonTones = {
+  primary: buttonClassName,
+  secondary:
+    "inline-block cursor-pointer rounded-md border border-[var(--line)] bg-white px-4 py-2 text-center text-sm font-medium text-[var(--ink)] disabled:cursor-not-allowed disabled:opacity-60",
+  danger:
+    "inline-block cursor-pointer rounded-md border border-[var(--danger)] bg-white px-4 py-2 text-center text-sm font-medium text-[var(--danger)] disabled:cursor-not-allowed disabled:opacity-60",
+} as const;
+
+export function Button({ tone = "primary", ...props }: ButtonHTMLAttributes<HTMLButtonElement> & { tone?: keyof typeof buttonTones }) {
+  return <button className={buttonTones[tone]} {...props} />;
 }
 
 export function ErrorText({ children }: { children: ReactNode }) {

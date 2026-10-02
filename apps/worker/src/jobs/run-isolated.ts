@@ -1,4 +1,10 @@
+import { createRequire } from "node:module";
+import { fileURLToPath } from "node:url";
 import { Worker, type ResourceLimits } from "node:worker_threads";
+
+const requireFromHere = createRequire(import.meta.url);
+const tsxLoader = requireFromHere.resolve("tsx");
+const extensionLoader = fileURLToPath(new URL("./register-ts-paths.mjs", import.meta.url));
 
 const limits: ResourceLimits = {
   maxOldGenerationSizeMb: 256,
@@ -24,7 +30,7 @@ export function runIsolatedJob(
     const worker = new Worker(processor, {
       workerData,
       resourceLimits: limits,
-      execArgv: options?.transpile ? ["--import", "tsx"] : [],
+      execArgv: options?.transpile ? ["--import", tsxLoader, "--import", extensionLoader] : [],
     });
     let settled = false;
     const finish = (fn: () => void) => {

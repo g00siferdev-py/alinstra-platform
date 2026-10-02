@@ -46,7 +46,7 @@ export function clients(ctx: TenantContext) {
       return prisma.client.findMany({
         where: { ...scope, archivedAt: null },
         orderBy: { createdAt: "desc" },
-        include: { wizardDraft: { select: { currentStep: true } } },
+        include: { wizardDraft: { select: { currentStep: true, discardedAt: true } } },
       });
     },
     getById(id: string) {

@@ -16,12 +16,19 @@ export default async function ClientsPage() {
       <ul className="grid gap-2">
         {rows.map((client) => (
           <li key={client.id} className="flex items-center justify-between gap-3 rounded-xl border border-[var(--line)] bg-[var(--card)] p-4">
-            <Link className="min-w-0" href={client.wizardSubmittedAt ? `/admin/clients/${client.id}` : `/admin/clients/${client.id}/wizard`}>
-              <span className="font-medium">{client.name}</span>
-              <span className="ml-2 text-sm text-[var(--muted)]">{client.industry ?? "no industry"} · {client.status} · step {client.wizardDraft?.currentStep ?? 1}</span>
+            <div className="min-w-0">
+              <Link href={`/admin/clients/${client.id}`}>
+                <span className="font-medium">{client.name}</span>
+              </Link>
+              <span className="ml-2 text-sm text-[var(--muted)]">{client.industry ?? "no industry"} · {client.status}</span>
               {client.planId ? <span className="ml-2 text-sm">{planName.get(client.planId)}</span> : null}
               {client.wizardSubmittedAt ? <span className="ml-2 rounded bg-[var(--accent)] px-2 py-0.5 text-xs text-[var(--accent-ink)]">Wizard submitted</span> : null}
-            </Link>
+              {!client.wizardSubmittedAt && client.wizardDraft && !client.wizardDraft.discardedAt ? (
+                <Link className="mt-1 block text-sm" href={`/admin/clients/${client.id}/wizard`}>
+                  Continue setup · step {client.wizardDraft.currentStep}
+                </Link>
+              ) : null}
+            </div>
             {clientCanBeRemoved(client.status) ? <RemoveClientButton clientId={client.id} name={client.name} /> : null}
           </li>
         ))}
