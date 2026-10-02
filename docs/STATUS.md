@@ -15,7 +15,7 @@ Phase 2 is merged into `main`. Staging deploy readiness (navigation, port, worke
 
 ## CI
 - GitHub Actions runs install, prisma generate, migrate deploy, lint, typecheck, and test against Postgres 16 and Redis 7 service containers. Fixed 2026-10-01: Turborepo strict env mode hid DATABASE_URL from tasks, and CI had no Redis.
-- Remote GitHub Actions is unverified. `gh` is not installed, so the runs on GitHub were not watched. A fresh clone of `phase-2` passed the CI sequence locally against `alinstra_test` before this deploy-readiness work. The clone for this work is recorded below once it has run.
+- Remote GitHub Actions is unverified. `gh` is not installed, so the runs on GitHub were not watched. A fresh clone of this `main` (`c9bfcdd`) passed the CI sequence locally against `alinstra_test` (lint, typecheck, and 60 tests).
 
 ## Phase 2
 
