@@ -10,6 +10,9 @@ import {
   emptyWizardPayload,
   featuresSchema,
   healthcareRequired,
+  parseRecipientEmails,
+  parseTransferTargets,
+  parseWeeklyHours,
   knowledgeFieldsSchema,
   phoneSchema,
   planSelectionSchema,
@@ -142,7 +145,17 @@ async function applyStep(tx: Prisma.TransactionClient, clientId: string, step: n
     await tx.client.update({ where: { id: clientId }, data: { coverage: json(coverageSchema.parse(payload.coverage ?? {})) } });
   }
   if (step === 5) {
-    await tx.client.update({ where: { id: clientId }, data: { features: json(featuresSchema.parse(payload.features ?? {})) } });
+    const features = featuresSchema.parse(payload.features ?? {});
+    const weeklyHours = parseWeeklyHours(features.weeklyHoursText ?? "");
+    parseTransferTargets(features.transferTargetsText ?? "");
+    if (features.messageRecipients) parseRecipientEmails(features.messageRecipients);
+    await tx.client.update({
+      where: { id: clientId },
+      data: {
+        features: json(features),
+        weeklyHours: Object.keys(weeklyHours).length > 0 ? weeklyHours : Prisma.DbNull,
+      },
+    });
   }
   if (step === 6) {
     await tx.client.update({ where: { id: clientId }, data: { voice: json(voiceSchema.parse(payload.voice ?? {})) } });
@@ -230,6 +243,13 @@ export async function submitWizard(ctx: Actor, input: { clientId: string; payloa
     }
     for (let step = 1; step <= 10; step += 1) {
       await applyStep(tx, input.clientId, step, payload);
+    }
+    const targets = parseTransferTargets(payload.features?.transferTargetsText ?? "");
+    await tx.transferTarget.deleteMany({ where: { clientId: input.clientId } });
+    if (targets.length > 0) {
+      await tx.transferTarget.createMany({
+        data: targets.map((target) => ({ clientId: input.clientId, label: target.label, e164: target.e164 })),
+      });
     }
     await tx.knowledgeBase.updateMany({ where: { clientId: input.clientId, status: "draft" }, data: { status: "submitted" } });
     const client = await tx.client.update({

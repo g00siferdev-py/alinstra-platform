@@ -12,6 +12,7 @@ export type QuickUpdateInput =
   | { kind: "hours"; text: string }
   | { kind: "closure"; text: string }
   | { kind: "staff"; text: string; transferNumber?: string }
+  | { kind: "transfers"; text: string }
   | { kind: "faq_add"; question: string; answer: string }
   | { kind: "faq_edit"; index: number; question: string; answer: string }
   | { kind: "faq_remove"; index: number };
@@ -71,6 +72,17 @@ export function validateQuickUpdate(input: QuickUpdateInput): string | null {
     if (invalidClock(input.text)) return "Use a real clock time, such as 9:00 or 17:30.";
     return null;
   }
+  if (input.kind === "transfers") {
+    if (input.text.length > 4_000) return "Transfer targets must be 4,000 characters or fewer.";
+    for (const raw of input.text.split(/\r?\n/)) {
+      const line = raw.trim();
+      if (!line) continue;
+      if (!/,\s*\+[1-9]\d{7,14}\s*$/.test(line) || line.startsWith(",")) {
+        return "Enter each transfer target as Label, +E.164.";
+      }
+    }
+    return null;
+  }
   if (input.kind === "staff") {
     if (input.text.trim().length === 0) return "Enter the staff directory.";
     if (input.text.length > 10_000) return "The staff directory must be 10,000 characters or fewer.";
@@ -92,7 +104,7 @@ export function validateQuickUpdate(input: QuickUpdateInput): string | null {
 
 export function textsForHold(input: QuickUpdateInput): string {
   if (input.kind === "hours" || input.kind === "closure") return input.text;
-  if (input.kind === "staff") return `${input.text}\n${input.transferNumber ?? ""}`;
+  if (input.kind === "staff" || input.kind === "transfers") return `${input.text}\n${input.kind === "staff" ? input.transferNumber ?? "" : ""}`;
   if (input.kind === "faq_remove") return "";
   return `${input.question}\n${input.answer}`;
 }

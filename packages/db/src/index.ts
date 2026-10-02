@@ -44,4 +44,26 @@ export {
   wizardPayloadSchema,
 } from "./domain";
 export { assertTenantContext, ROLES, type Role, type TenantContext } from "./tenant";
+export {
+  advanceProvisioning,
+  clientIdForRetellAgent,
+  createClientZero,
+  applyRetellCall,
+  applyStripeEvent,
+  callRecords,
+  clientMessages,
+  decideTransfer,
+  endServiceNow,
+  inboundVariables,
+  provisioningRuns,
+  recordTakenMessage,
+  replaceTransferTargets,
+  runDueTeardowns,
+  scheduleChurn,
+  startProvisioning,
+  syncProvisionedAgent,
+  transferTargets,
+  type Phase3Deps,
+} from "./provision";
+export { clientIsHealthcare, formatTransferTargets, formatWeeklyHours, maskCaller, officeOpen, retellPrompt } from "./domain";
 export type { Actor } from "./changes";

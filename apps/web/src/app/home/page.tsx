@@ -1,4 +1,4 @@
-import { changeRequests, clients, plans, quickUpdates, type TenantContext } from "@alinstra/db";
+import { changeRequests, clientMessages, clients, plans, quickUpdates, type TenantContext } from "@alinstra/db";
 import { requireUser } from "@/lib/session";
 import Link from "next/link";
 
@@ -8,6 +8,7 @@ export default async function HomePage() {
   const needsTwoFactor = isAdmin && !session.user.twoFactorEnabled;
   const role = session.user.role;
   const clientId = session.user.clientId;
+  let messages: Array<{ id: string; callerName: string; body: string; createdAt: Date }> = [];
   let clientName: string | null = null;
   let planName: string | null = null;
   let minutes = 0;
@@ -15,7 +16,11 @@ export default async function HomePage() {
   let pendingRequests: Array<{ id: string; clientId: string; category: string }> = [];
   if (clientId && (role === "client_owner" || role === "client_staff")) {
     const ctx: TenantContext = { role, clientId };
-    const client = await clients(ctx).getById(clientId);
+    const [client, messageRows] = await Promise.all([
+      clients(ctx).getById(clientId),
+      clientMessages(ctx).list(clientId),
+    ]);
+    messages = messageRows;
     const plan = client?.planId ? await plans(ctx).getById(client.planId) : null;
     clientName = client?.name ?? null;
     planName = plan?.name ?? null;
@@ -70,7 +75,15 @@ export default async function HomePage() {
           <p className="mt-3 text-sm">Minutes included: {minutes}</p>
           <p className="text-sm">Calls today: 0 · not connected yet</p>
           <p className="text-sm">Appointments: 0 · not connected yet</p>
-          <p className="text-sm">Messages: 0 · not connected yet</p>
+          <div className="mt-3 text-sm">
+            <p className="font-medium">Messages</p>
+            {messages.length === 0 ? <p className="text-[var(--muted)]">No messages yet.</p> : null}
+            <ul className="grid gap-1">
+              {messages.map((message) => (
+                <li key={message.id}>{message.createdAt.toISOString()} · {message.callerName}: {message.body}</li>
+              ))}
+            </ul>
+          </div>
           <div className="mt-4 flex flex-wrap gap-3 text-sm">
             <Link href="/home/business">My business</Link>
             {session.user.role === "client_owner" ? <Link href="/home/changes">Change requests</Link> : null}

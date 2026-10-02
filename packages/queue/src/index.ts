@@ -26,8 +26,28 @@ export type SendPasswordResetEmail = z.infer<typeof sendPasswordResetEmail>;
 export type ExtractKnowledgeText = z.infer<typeof extractKnowledgeText>;
 export type SendAdminNotice = z.infer<typeof sendAdminNotice>;
 
+export const syncAgent = z.object({
+  clientId: z.string().min(1),
+});
+
+export const provisionClient = z.object({
+  clientId: z.string().min(1),
+});
+
+export const sendMessageEmail = z.object({
+  clientId: z.string().min(1),
+  recipients: z.array(z.string().email()).min(1),
+  callerName: z.string().min(1),
+  body: z.string().min(1),
+});
+
+export type SyncAgent = z.infer<typeof syncAgent>;
+export type ProvisionClient = z.infer<typeof provisionClient>;
+export type SendMessageEmail = z.infer<typeof sendMessageEmail>;
+
 export const EMAIL_QUEUE = "email";
 export const KNOWLEDGE_QUEUE = "knowledge";
+export const PROVISION_QUEUE = "provision";
 
 let redis: Redis | undefined;
 
@@ -55,12 +75,20 @@ export function bullConnection(): ConnectionOptions {
 
 let emailQueue: Queue | undefined;
 let knowledgeQueue: Queue | undefined;
+let provisionQueue: Queue | undefined;
 
 function emailJobs(): Queue {
   if (!emailQueue) {
     emailQueue = new Queue(EMAIL_QUEUE, { connection: bullConnection() });
   }
   return emailQueue;
+}
+
+function provisionJobs(): Queue {
+  if (!provisionQueue) {
+    provisionQueue = new Queue(PROVISION_QUEUE, { connection: bullConnection() });
+  }
+  return provisionQueue;
 }
 
 function knowledgeJobs(): Queue {
@@ -110,9 +138,40 @@ export async function enqueueExtractKnowledge(data: ExtractKnowledgeText): Promi
   });
 }
 
+export async function enqueueSyncAgent(data: SyncAgent): Promise<void> {
+  const payload = syncAgent.parse(data);
+  await provisionJobs().add("sync-agent", payload, {
+    attempts: 3,
+    backoff: { type: "exponential", delay: 2000 },
+    removeOnComplete: 100,
+    removeOnFail: 100,
+  });
+}
+
+export async function enqueueProvisionClient(data: ProvisionClient): Promise<void> {
+  const payload = provisionClient.parse(data);
+  await provisionJobs().add("provision-client", payload, {
+    attempts: 1,
+    removeOnComplete: 100,
+    removeOnFail: 100,
+  });
+}
+
+export async function enqueueMessageEmail(data: SendMessageEmail): Promise<void> {
+  const payload = sendMessageEmail.parse(data);
+  await emailJobs().add("send-message-email", payload, {
+    attempts: 5,
+    backoff: { type: "exponential", delay: 2000 },
+    removeOnComplete: 100,
+    removeOnFail: 100,
+  });
+}
+
 export async function closeQueue(): Promise<void> {
   await emailQueue?.close();
   await knowledgeQueue?.close();
+  await provisionQueue?.close();
+  provisionQueue = undefined;
   emailQueue = undefined;
   knowledgeQueue = undefined;
   if (redis) {

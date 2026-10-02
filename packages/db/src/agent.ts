@@ -24,6 +24,7 @@ import { Prisma } from "./generated/prisma/client";
 import { prisma } from "./client";
 import { recordChange, type Actor } from "./changes";
 import { EXTRA_CHANGE_FEE_CENTS, wizardPayloadSchema } from "./domain";
+import { flagAgentSync, writeTransferTargets } from "./provision";
 import { assertTenantContext, type TenantContext } from "./tenant";
 
 export type PromptPreview = {
@@ -36,6 +37,7 @@ export type PromptPreview = {
 export type QuickUpdateResult = PromptPreview & {
   status: "applied" | "held";
   notify: { subject: string; text: string } | null;
+  sync?: boolean;
 };
 
 export type AllowanceView = AllowanceState & { included: number | null; used: number };
@@ -215,6 +217,7 @@ async function insertConfig(
     status: "draft" | "active";
     source: string;
     createdById: string;
+    actor: Actor;
     input: PromptInput;
     knowledge: KnowledgeShape | null;
     documentIds: string[];
@@ -227,7 +230,7 @@ async function insertConfig(
     await tx.agentConfig.updateMany({ where: { clientId: args.clientId, status: "active" }, data: { status: "superseded" } });
   }
   const rendered = renderPrompt(args.input);
-  return tx.agentConfig.create({
+  const created = await tx.agentConfig.create({
     data: {
       clientId: args.clientId,
       version: await nextVersion(tx, args.clientId),
@@ -249,6 +252,8 @@ async function insertConfig(
       createdById: args.createdById,
     },
   });
+  if (args.status === "active") await flagAgentSync(tx, args.clientId, args.actor);
+  return created;
 }
 
 export async function createDraftAgentConfig(ctx: Actor, tx: Prisma.TransactionClient, clientId: string) {
@@ -259,6 +264,7 @@ export async function createDraftAgentConfig(ctx: Actor, tx: Prisma.TransactionC
     status: "draft",
     source: "wizard",
     createdById: ctx.id,
+    actor: ctx,
     input: loaded.input,
     knowledge: loaded.knowledge,
     documentIds: loaded.documents.map((document) => document.id),
@@ -359,6 +365,7 @@ function staffText(input: { text: string; transferNumber?: string }): string {
 }
 
 function patchFor(knowledge: KnowledgeShape | null, input: QuickUpdateInput): Record<string, unknown> {
+  if (input.kind === "transfers") return {};
   if (input.kind === "hours") return { hours: input.text };
   if (input.kind === "closure") return { notices: appendNotice(knowledge?.notices, input.text) };
   if (input.kind === "staff") return { staff: staffText(input) };
@@ -379,7 +386,7 @@ function patchFor(knowledge: KnowledgeShape | null, input: QuickUpdateInput): Re
 function parseQuick(payload: unknown): QuickUpdateInput {
   const row = asRecord(payload);
   const kind = row.kind;
-  if (kind === "hours" || kind === "closure") return { kind, text: String(row.text ?? "") };
+  if (kind === "hours" || kind === "closure" || kind === "transfers") return { kind, text: String(row.text ?? "") };
   if (kind === "staff") {
     return {
       kind,
@@ -477,6 +484,39 @@ export async function applyQuickUpdate(ctx: Actor, input: QuickUpdateInput): Pro
   const error = validateQuickUpdate(input);
   if (error) throw new Error(error);
   return prisma.$transaction(async (tx) => {
+    if (input.kind === "transfers") {
+      const loaded = await load(tx, clientId);
+      if (!loaded.client.wizardSubmittedAt) throw new Error("Submit the wizard before changing the receptionist.");
+      const holdReason = sensitiveHoldReason(textsForHold(input));
+      if (holdReason) {
+        const held = await tx.quickUpdate.create({
+          data: { clientId, kind: input.kind, payload: input as unknown as Prisma.InputJsonValue, status: "held", holdReason, createdById: ctx.id },
+        });
+        await recordChange(tx, {
+          clientId,
+          actor: ctx,
+          action: "quick_update.held",
+          entityType: "quick_update",
+          entityId: held.id,
+          summary: `Held a transfers update for ${loaded.client.name}`,
+          after: { holdReason },
+        });
+        return { status: "held" as const, prompt: "Transfer targets are waiting for review.", truncated: false, held: true, holdReason, notify: null };
+      }
+      const sync = await writeTransferTargets(tx, ctx, clientId, input.text);
+      const row = await tx.quickUpdate.create({
+        data: { clientId, kind: input.kind, payload: input as unknown as Prisma.InputJsonValue, status: "applied", createdById: ctx.id },
+      });
+      await recordChange(tx, {
+        clientId,
+        actor: ctx,
+        action: "quick_update.applied",
+        entityType: "quick_update",
+        entityId: row.id,
+        summary: `Applied transfer targets for ${loaded.client.name}`,
+      });
+      return { status: "applied" as const, prompt: "Transfer targets are saved.", truncated: false, held: false, holdReason: null, notify: null, sync };
+    }
     const loaded = await load(tx, clientId);
     if (!loaded.client.wizardSubmittedAt) throw new Error("Submit the wizard before changing the receptionist.");
     const patch = patchFor(loaded.knowledge, input);
@@ -511,6 +551,7 @@ export async function applyQuickUpdate(ctx: Actor, input: QuickUpdateInput): Pro
       status: "active",
       source: "quick_update",
       createdById: ctx.id,
+      actor: ctx,
       input: fresh.input,
       knowledge,
       documentIds: fresh.documents.map((document) => document.id),
@@ -564,7 +605,7 @@ export async function previewHeldUpdate(ctx: Actor, id: string): Promise<PromptP
   });
 }
 
-export async function approveQuickUpdate(ctx: Actor, id: string): Promise<{ prompt: string; truncated: boolean }> {
+export async function approveQuickUpdate(ctx: Actor, id: string): Promise<{ prompt: string; truncated: boolean; clientId: string }> {
   assertAdmin(ctx);
   return prisma.$transaction(async (tx) => {
     const row = await tx.quickUpdate.findFirst({ where: { id, status: "held" } });
@@ -572,6 +613,22 @@ export async function approveQuickUpdate(ctx: Actor, id: string): Promise<{ prom
     const input = parseQuick(row.payload);
     const error = validateQuickUpdate(input);
     if (error) throw new Error(error);
+    if (input.kind === "transfers") {
+      await writeTransferTargets(tx, ctx, row.clientId, input.text);
+      await tx.quickUpdate.update({
+        where: { id: row.id },
+        data: { status: "approved", reviewedById: ctx.id, reviewedAt: new Date() },
+      });
+      await recordChange(tx, {
+        clientId: row.clientId,
+        actor: ctx,
+        action: "quick_update.approved",
+        entityType: "quick_update",
+        entityId: row.id,
+        summary: "Approved a held transfers update",
+      });
+      return { prompt: "Transfer targets are saved.", truncated: false, clientId: row.clientId };
+    }
     const patch = patchFor((await load(tx, row.clientId)).knowledge, input);
     const knowledge = await forkKnowledge(tx, row.clientId, patch);
     const fresh = await load(tx, row.clientId);
@@ -580,6 +637,7 @@ export async function approveQuickUpdate(ctx: Actor, id: string): Promise<{ prom
       status: "active",
       source: "quick_update",
       createdById: ctx.id,
+      actor: ctx,
       input: fresh.input,
       knowledge,
       documentIds: fresh.documents.map((document) => document.id),
@@ -600,7 +658,7 @@ export async function approveQuickUpdate(ctx: Actor, id: string): Promise<{ prom
       summary: `Approved a held ${row.kind} update`,
       after: { agentConfigId: config.id, version: config.version },
     });
-    return { prompt: config.promptText, truncated: config.promptTruncated };
+    return { prompt: config.promptText, truncated: config.promptTruncated, clientId: row.clientId };
   });
 }
 
@@ -985,6 +1043,7 @@ export async function approveChangeRequest(ctx: Actor, input: { id: string; fiel
       status: "active",
       source: "change_request",
       createdById: ctx.id,
+      actor: ctx,
       input: fresh.input,
       knowledge,
       documentIds: fresh.documents.map((document) => document.id),
@@ -1141,6 +1200,7 @@ async function copyAsActive(ctx: Actor, input: { clientId: string; version: numb
         : `Rolled back to a copy of v${source.version} as v${created.version}`,
       after: { fromVersion: source.version, version: created.version },
     });
+    await flagAgentSync(tx, source.clientId, ctx);
     return created;
   });
 }

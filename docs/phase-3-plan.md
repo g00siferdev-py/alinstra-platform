@@ -1,57 +1,45 @@
-# Phase 3 plan
+# Phase 3
 
-Status: draft for review. No Phase 3 code in this change. Stop here.
+Status: implemented on `phase-3`. Not on `main`. No live Retell or Stripe calls until `RETELL_API_KEY` and `STRIPE_SECRET_KEY` are set. Local development and tests use in-memory fakes.
 
 Checked against the live docs on 2 October 2026:
 
-- Retell OpenAPI revision `2026-08-12-9e090f0` ([create agent](https://docs.retellai.com/api-references/create-agent), [create phone number](https://docs.retellai.com/api-references/create-phone-number), [delete agent](https://docs.retellai.com/api-references/delete-agent), [delete phone number](https://docs.retellai.com/api-references/delete-phone-number), [dynamic variables](https://docs.retellai.com/build/dynamic-variables), [secure webhook](https://docs.retellai.com/features/secure-webhook), [custom function](https://docs.retellai.com/build/single-multi-prompt/custom-function))
-- Stripe billing docs current that day ([subscription create](https://docs.stripe.com/api/subscriptions/create), [setup fee on the first invoice](https://docs.stripe.com/billing/invoices/subscription), [cancel](https://docs.stripe.com/billing/subscriptions/cancel), [customer portal session](https://docs.stripe.com/api/customer_portal/sessions/create))
+- Retell spec revision `2026-08-12` for create/update LLM and agent, and `2026-09-14` for delete LLM. A single-prompt agent is a Retell LLM (`general_prompt`, no `states`) plus an agent whose `response_engine` is `{ type: "retell-llm", llm_id }`. [Create Retell LLM](https://docs.retellai.com/api-references/create-retell-llm), [create agent](https://docs.retellai.com/api-references/create-agent), [update Retell LLM](https://docs.retellai.com/api-references/update-retell-llm), [publish agent version](https://docs.retellai.com/api-references/publish-agent), [agent versions](https://docs.retellai.com/agent/version).
+- Published agent versions are immutable. Sync creates a draft with `POST /create-agent-version/{agent_id}` when the current version is published, patches the LLM and agent at that version, then `POST /publish-agent-version/{agent_id}`. The legacy `POST /publish-agent/{agent_id}` was deprecated on 20 July 2026.
+- Delete LLM is `DELETE /delete-retell-llm/{llm_id}` and removes every version. Delete the agent first. A 404 on delete counts as success.
+- `{{current_time}}` is always `America/Los_Angeles`. The publish step rewrites that token to `{{current_time_<IANA>}}` from `Client.timezone` and does not change the stored prompt. [Dynamic variables](https://docs.retellai.com/build/dynamic-variables).
+- Webhooks: `X-Retell-Signature` is `v=<unix-ms>,d=<HMAC-SHA256(rawBody + timestamp, apiKey)>`, five-minute window, raw body only. The same key verifies webhooks when it has the webhook badge. Signature and timestamp only. No IP allowlist. [Secure webhook](https://docs.retellai.com/features/secure-webhook).
+- Call events used here are `call_started` and `call_ended` (`call_id`, timestamps, `from_number`, `disconnection_reason`). Transcripts are not stored. [Webhook overview](https://docs.retellai.com/features/webhook-overview).
+- Transfer destinations can be a predefined E.164 number. Custom tools time out at 8 seconds. [Custom function](https://docs.retellai.com/build/single-multi-prompt/custom-function).
+- Retell has no sandbox. Testing bills like production. A Retell number is about $2 per month plus per-minute voice and telephony. There is no API spend cap; billing is post-usage. [Testing pricing](https://docs.retellai.com/test/testing-pricing), [billing](https://docs.retellai.com/accounts/billing).
+- Stripe Checkout `mode=subscription` puts one-time prices on the first invoice only. Lookup keys move to a new Price with `transfer_lookup_key`; existing subscriptions keep the Price they were created with. [Checkout](https://docs.stripe.com/api/checkout/sessions/create), [lookup keys](https://docs.stripe.com/products-prices/manage-prices).
 
-Staging uses Retell and Stripe **test** mode only. Production keys wait until a later checklist.
+## Decisions Daniel confirmed
 
-## What this phase does
+1. Payment is a Checkout session in subscription mode. The setup fee is a one-time line item unless it is waived. The link is shown on the admin client page. The card stays on file and the subscription bills monthly. Retell steps may finish before payment. The client status stays `awaiting_payment` until Checkout completes, then `live`. Client zero skips billing.
+2. Daniel creates the Retell account under Alinstra Technologies, LLC. One `RETELL_API_KEY` per environment does API calls and webhook verification. Staging and production use different keys.
+3. Voice ids wait for Daniel. `docs/voice-options.md` lists previews. Until he picks, provisioning uses `RETELL_DEFAULT_VOICE_ID`.
+4. Client zero transfers to `DANIEL_TRANSFER_NUMBER` during the hours on its wizard. After hours it takes a message and emails Daniel (`ADMIN_EMAIL`).
+5. Churn defaults to the end of the paid period. The number stays up until then. A worker sweep tears it down after `serviceEndsAt`. **End service now** cancels Stripe immediately and tears down.
+6. Prices are created from the plan catalog with lookup keys `plan_<code>_monthly` and `plan_<code>_setup`. A price change creates a new Price and moves the lookup key. Existing subscriptions are not moved. `plan_<code>_overage` is reserved for metered overage in Phase 6 and is not created yet.
+7. Healthcare-flagged clients cannot be provisioned.
+8. The first live test is staging, with no tunnel. Local development uses the fakes.
+9. Signature and timestamp only.
+10. Client zero is excluded from revenue and margin. Its provider costs belong in an internal bucket when cost reporting exists. This phase does not compute margin.
 
-After an admin approves a submitted wizard, a provisioning run turns that lead into a live client: a Stripe customer and subscription, a Retell agent whose prompt is the active `AgentConfig`, a phone number, and signed webhooks. The admin sees each step's status and can retry a failed step without repeating a step that already succeeded. A live client can be churned: release the number, delete the agent, cancel Stripe. The first provisioned client is Alinstra itself.
+## What shipped
 
-Calendar booking stays in Phase 5. Phase 3 tools that are not ready yet answer with a message-taking fallback instead of failing the call.
+- Provisioning steps, in order: `stripe_customer`, `stripe_checkout`, `retell_llm`, `retell_agent`, `retell_number`, `retell_bind`. One open run per client. A stored external id is not created again. Admin starts the run. Wizard submit does not.
+- Agent sync when an active config is activated, rolled back, approved from a change request or held update, or when transfer targets change. The client page shows In sync, Syncing, or Sync failed — retry. A failure emails the admin. The job is safe to run again.
+- `take_message` stores the message and emails the client's message recipients. Client zero also emails Daniel. SMS stays Phase 5. Home and the admin client page list messages.
+- Transfer targets are label plus E.164, edited in the wizard, on the admin client page, and by the owner quick update `transfers`. The transfer tool allows only those numbers, and only inside `weeklyHours`. Otherwise it tells the agent to take a message.
+- Call rows store call id, client, start, end, duration, masked caller, and end reason.
+- Client zero is an internal client named Alinstra, created from the clients list. $0, no Checkout, no subscription. It is not in a revenue query because there is no revenue query yet; `internal` is the flag that query will use.
 
-## Decisions
+## Staging spend
 
-A. Provisioning is a list of named steps on a `ProvisioningRun`, one active run per client. Each step stores `pending`, `running`, `succeeded`, or `failed`, plus the external id when one exists, the last error, and timestamps. The admin client page shows that list and a Retry button on the failed step. Retry runs that step again and then continues forward. A step whose external id is already stored returns success without calling the provider again. A provider 404 on a later churn step counts as success so a half-finished teardown can be repeated.
+Use one Retell number, for client zero. Watch the Retell Billing tab. Releasing the number (`DELETE /delete-phone-number/{e164}`, or End service now) stops the monthly number charge. There is no switch in this repo that caps Retell's invoice.
 
-B. Steps, in order: `stripe_customer`, `stripe_subscription`, `retell_agent`, `retell_number`, `retell_bind`. The run starts only from an admin action on a submitted, non-healthcare-blocked client that has one active `AgentConfig`. It does not start from wizard submit. Nothing in the run calls Twilio or a calendar.
+## Still later
 
-C. The Retell agent is a single-prompt agent. `general_prompt` is the active config's prompt text with one substitution: the template token `{{current_time}}` is replaced by Retell's timezone variable `{{current_time_<IANA>}}`, using `Client.timezone`. Retell's plain `{{current_time}}` is always `America/Los_Angeles` ([dynamic variables](https://docs.retellai.com/build/dynamic-variables)). The timezone form, for example `{{current_time_America/New_York}}`, is filled by Retell at speak time. The stored `AgentConfig.prompt` is not rewritten. `platformAgentId` is set to the returned agent id when `retell_agent` succeeds. Voice id comes from a fixed map of the wizard's voice label to a Retell voice id, checked in at implementation time against the voice list, not guessed in this plan.
-
-D. The phone number is created with `POST /create-phone-number` and bound to that agent as the inbound agent. `inbound_webhook_url` points at our inbound route. The webhook may set `dynamic_variables` and may reject a call. Signature check is the same as the call-event webhook. The number is stored in E.164; that string is the id for later delete.
-
-E. Every Retell webhook and custom-function call is verified before any write. Header `X-Retell-Signature` is `v=<unix-ms>,d=<hex>`. The digest is HMAC-SHA256 of the raw body concatenated with the timestamp, keyed by the API key that has the webhook badge. Reject timestamps older than five minutes. Verify the raw bytes, not a re-serialized JSON object ([secure webhook](https://docs.retellai.com/features/secure-webhook), [custom function](https://docs.retellai.com/build/single-multi-prompt/custom-function)). A bad signature is 401 and is not retried by us.
-
-F. Mid-call tools are Retell custom functions: `take_message` and `transfer`. `transfer` uses Retell's built-in transfer to the number on the client (staff directory, or Daniel's cell for client zero). `take_message` POSTs to our endpoint. The request body is `{ name, call, args }` (payload-args-only stays off). We store the message, return 200 and a short sentence the agent can read. Timeout is 8 seconds. `max_retry` stays 0 so a slow handler is not invoked twice. If we return non-2xx, time out, or the tool is one we do not implement yet (booking), the agent receives Retell's error string. The published prompt already says to take a message when unsure; the tool description repeats that a failure means offer to take a message and do not invent a booking. Talk-while-waiting is a static line ("One moment."). Booking is not registered as a callable tool in this phase.
-
-G. Stripe staging uses `sk_test_` keys. One Customer per client. Prices are created once per plan in test mode (recurring monthly amount, and a one-time setup price) and reused by id. The subscription is `POST /v1/subscriptions` with the recurring price. Unless `setupFeeWaived` is set, the setup price is sent as `add_invoice_items`, which Stripe documents as the way to put a one-time charge on the first subscription invoice. `payment_behavior` is `default_incomplete` so the first invoice can wait for a card. The customer portal is a Billing Portal session (`POST /v1/billing_portal/sessions`) from the admin client page in this phase, return URL back to that page. Portal configuration in the test dashboard allows invoice history and payment-method update. Cancel for churn is `DELETE /v1/subscriptions/:id` (immediate). Stripe webhooks (`customer.subscription.updated`, `customer.subscription.deleted`, `invoice.paid`, `invoice.payment_failed`) are verified with the signing secret and update the stored billing status. They do not provision or tear down Retell by themselves.
-
-H. Client zero is a real `Client` row with `internal: true`, name Alinstra, plan amount $0, setup fee waived. It is excluded from revenue and margin totals. Provisioning still creates the Retell agent and number. Stripe customer is created; the subscription step is skipped and marked succeeded with a note, because there is nothing to bill. The agent takes messages and transfers to Daniel's cell. The cell number is an env var, not a hardcoded literal. Calendar booking is not offered; if a caller asks, the agent takes a message. That booking tool arrives in Phase 5.
-
-I. Churn is an admin action on a live client, separate from Remove (Remove stays lead and demo only). Order: delete the Retell number (`DELETE /delete-phone-number/{e164}`, 204), delete the agent (`DELETE /delete-agent/{agent_id}`, 204, all versions), cancel the Stripe subscription if one exists. Each of those is its own step with the same retry rules. Client status becomes `churned`. A second churn run is a no-op once the external ids are cleared or the provider returns 404.
-
-J. Scoped repositories and a change-log row in the same transaction as each status write. Provider calls happen outside the transaction, then the result is saved. A crash after the provider succeeds and before the save is recovered by retry: the step looks up the external object by our idempotency key (Stripe `Idempotency-Key` header on customer and subscription creates; Retell agent metadata `client_id`) and stores the id it finds.
-
-## Client zero, first
-
-1. Seed or admin-create the Alinstra client with the internal flag, $0, and Daniel's transfer number from the env var.
-2. Run provisioning. Expect the Stripe subscription step to be skipped, and the Retell agent and number to succeed.
-3. Call the number. A message is stored. A transfer request rings Daniel's cell. A booking request becomes a message, not a calendar event.
-
-## Open questions
-
-1. Should the first invoice be `send_invoice` (Stripe emails a bill, subscription becomes active before payment) or stay `default_incomplete` until the portal collects a card? This plan uses `default_incomplete`.
-2. Who owns the Retell account and the test API key, and is the webhook-badged key the same key we use for create-agent?
-3. Which Retell voice ids match the wizard's voice labels? That map needs a pass against the current voice list before implementation.
-4. Is Daniel's cell the only transfer target for client zero, and should after-hours calls still transfer or only take a message?
-5. Should churn cancel Stripe immediately (this plan) or at period end (`cancel_at_period_end`)?
-6. Do we create Stripe Prices from the plan catalog in code, or will Daniel create them in the test dashboard and paste the ids?
-7. Healthcare clients stay blocked until a later compliance review. Confirm they cannot be provisioned in Phase 3.
-8. The custom-function URL must be public. Staging's grey-cloud hostname is enough. Local tests need a tunnel. Is that acceptable for the first live test of client zero?
-9. Retell documents one outbound IP (`100.20.5.228`). Do we allowlist it in addition to the signature check, or signature only?
-10. Margin exclusion for client zero: exclude the whole client from the revenue query, or also exclude Retell's per-minute cost from a cost report we do not have yet?
+Calendar booking and SMS are Phase 5. Transcripts, call history, and metered overage billing are Phase 6. The voice label map is blocked on Daniel's pick in `docs/voice-options.md`.

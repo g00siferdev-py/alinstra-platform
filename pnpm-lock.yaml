@@ -35,6 +35,9 @@ importers:
       '@alinstra/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@alinstra/providers':
+        specifier: workspace:*
+        version: link:../../packages/providers
       '@alinstra/queue':
         specifier: workspace:*
         version: link:../../packages/queue
@@ -102,6 +105,9 @@ importers:
       '@alinstra/email':
         specifier: workspace:*
         version: link:../../packages/email
+      '@alinstra/providers':
+        specifier: workspace:*
+        version: link:../../packages/providers
       '@alinstra/queue':
         specifier: workspace:*
         version: link:../../packages/queue
@@ -222,6 +228,9 @@ importers:
       '@alinstra/agent':
         specifier: workspace:*
         version: link:../agent
+      '@alinstra/providers':
+        specifier: workspace:*
+        version: link:../providers
       '@prisma/adapter-pg':
         specifier: 7.10.0
         version: 7.10.0
@@ -265,6 +274,21 @@ importers:
       resend:
         specifier: 6.1.2
         version: 6.1.2
+    devDependencies:
+      '@alinstra/tsconfig':
+        specifier: workspace:*
+        version: link:../tsconfig
+      '@types/node':
+        specifier: 22.19.1
+        version: 22.19.1
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: 4.1.0
+        version: 4.1.0(@opentelemetry/api@1.9.1)(@types/node@22.19.1)(vite@8.3.1(@types/node@22.19.1)(jiti@2.7.0)(terser@5.51.2)(tsx@4.20.6))
+
+  packages/providers:
     devDependencies:
       '@alinstra/tsconfig':
         specifier: workspace:*

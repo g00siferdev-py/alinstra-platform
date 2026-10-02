@@ -1,5 +1,6 @@
 import { ClientActions } from "@/components/client-actions";
-import { changeLogs, clientCanBeRemoved, clients, knowledgeBases, knowledgeDocuments, plans, users } from "@alinstra/db";
+import { ProvisionPanel } from "@/components/provision-panel";
+import { callRecords, changeLogs, clientCanBeRemoved, clientMessages, clients, formatTransferTargets, knowledgeBases, knowledgeDocuments, plans, transferTargets, users } from "@alinstra/db";
 import { requireAdmin } from "@/lib/session";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -9,12 +10,15 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
   const { id } = await params;
   const client = await clients({ role: "admin" }).getById(id);
   if (!client) notFound();
-  const [plan, knowledge, documents, logs, people] = await Promise.all([
+  const [plan, knowledge, documents, logs, people, targets, messages, calls] = await Promise.all([
     client.planId ? plans({ role: "admin" }).getById(client.planId) : Promise.resolve(null),
     knowledgeBases({ role: "admin" }).getCurrent(id),
     knowledgeDocuments({ role: "admin" }).list(id),
     changeLogs({ role: "admin" }).list(id),
     users({ role: "admin", clientId: id }).list(),
+    transferTargets({ role: "admin" }).list(id),
+    clientMessages({ role: "admin" }).list(id),
+    callRecords({ role: "admin" }).list(id),
   ]);
   return (
     <main className="mx-auto grid max-w-3xl gap-6 p-6">
@@ -37,6 +41,35 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
         <Link href={`/admin/clients/${client.id}/agent`}>Agent config</Link>
         <Link href={`/admin/clients/${client.id}/changes`}>Change requests</Link>
       </div>
+      <ProvisionPanel
+        clientId={client.id}
+        status={client.status}
+        syncStatus={client.agentSyncStatus}
+        syncError={client.agentSyncError}
+        checkoutUrl={client.stripeCheckoutUrl}
+        billingStatus={client.billingStatus}
+        phone={client.phoneE164}
+        targets={formatTransferTargets(targets)}
+        internal={client.internal}
+      />
+      <section className="rounded-xl border border-[var(--line)] p-4">
+        <h2 className="mb-2 font-medium">Messages</h2>
+        {messages.length === 0 ? <p className="text-sm text-[var(--muted)]">No messages yet.</p> : null}
+        <ul className="grid gap-2 text-sm">
+          {messages.map((message) => (
+            <li key={message.id}>{message.createdAt.toISOString()} · {message.callerName} · {message.callbackNumber} · {message.body}</li>
+          ))}
+        </ul>
+      </section>
+      <section className="rounded-xl border border-[var(--line)] p-4">
+        <h2 className="mb-2 font-medium">Calls</h2>
+        {calls.length === 0 ? <p className="text-sm text-[var(--muted)]">No calls yet.</p> : null}
+        <ul className="grid gap-1 text-sm">
+          {calls.map((call) => (
+            <li key={call.id}>{call.callerMasked} · {call.durationSeconds ?? "—"}s · {call.endReason ?? "in progress"}</li>
+          ))}
+        </ul>
+      </section>
       <section className="rounded-xl border border-[var(--line)] p-4">
         <h2 className="mb-2 font-medium">Overview</h2>
         <p className="text-sm">Industry: {client.industry ?? "—"}</p>

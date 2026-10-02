@@ -5,14 +5,19 @@ import {
   EMAIL_QUEUE,
   extractKnowledgeText,
   KNOWLEDGE_QUEUE,
+  PROVISION_QUEUE,
+  provisionClient,
   sendAdminNotice,
   sendInviteEmail,
+  sendMessageEmail,
   sendPasswordResetEmail,
+  syncAgent,
 } from "@alinstra/queue";
 import * as Sentry from "@sentry/node";
 import { UnrecoverableError, Worker } from "bullmq";
 import { markExtractionFailed } from "./jobs/extract-knowledge-text";
 import { runIsolatedJob } from "./jobs/run-isolated";
+import { runChurnSweep, runMessageEmail, runProvision, runSync } from "./jobs/phase3";
 import { deliverAdminNotice } from "./jobs/send-admin-notice";
 import { sendInvite } from "./jobs/send-invite-email";
 import { sendPasswordReset } from "./jobs/send-password-reset-email";
@@ -47,6 +52,10 @@ const email = new Worker(
       await deliverAdminNotice(payload.subject, payload.text);
       return;
     }
+    if (job.name === "send-message-email") {
+      await runMessageEmail(sendMessageEmail.parse(job.data));
+      return;
+    }
     log("warn", "unknown job", { job: job.name });
   },
   { connection, concurrency: 5 },
@@ -76,17 +85,46 @@ const knowledge = new Worker(
   { connection, concurrency: 1 },
 );
 
-for (const worker of [email, knowledge]) {
+const provision = new Worker(
+  PROVISION_QUEUE,
+  async (job) => {
+    if (job.name === "provision-client") {
+      await runProvision(provisionClient.parse(job.data).clientId);
+      return;
+    }
+    if (job.name === "sync-agent") {
+      await runSync(syncAgent.parse(job.data).clientId);
+      return;
+    }
+    if (job.name === "churn-sweep") {
+      await runChurnSweep();
+      return;
+    }
+    log("warn", "unknown job", { job: job.name });
+  },
+  { connection, concurrency: 2 },
+);
+
+void runChurnSweep().catch((error: unknown) => {
+  log("error", "churn sweep failed", { error: error instanceof Error ? error.name : "unknown" });
+});
+setInterval(() => {
+  void runChurnSweep().catch((error: unknown) => {
+    log("error", "churn sweep failed", { error: error instanceof Error ? error.name : "unknown" });
+  });
+}, 60 * 60 * 1000);
+
+for (const worker of [email, knowledge, provision]) {
   worker.on("failed", (job, error) => {
     log("error", "job failed", { job: job?.name ?? "unknown", error: error.name });
     Sentry.captureException(error);
   });
 }
 
-log("info", "worker listening", { queues: [EMAIL_QUEUE, KNOWLEDGE_QUEUE].join(",") });
+log("info", "worker listening", { queues: [EMAIL_QUEUE, KNOWLEDGE_QUEUE, PROVISION_QUEUE].join(",") });
 
 async function shutdown(): Promise<void> {
-  await Promise.all([email.close(), knowledge.close()]);
+  await Promise.all([email.close(), knowledge.close(), provision.close()]);
   process.exit(0);
 }
 

@@ -27,6 +27,11 @@ const envSchema = z.object({
   S3_ACCESS_KEY_ID: z.string().default(""),
   S3_SECRET_ACCESS_KEY: z.string().default(""),
   S3_REGION: z.string().default("auto"),
+  RETELL_API_KEY: z.string().default(""),
+  RETELL_DEFAULT_VOICE_ID: z.string().default(""),
+  STRIPE_SECRET_KEY: z.string().default(""),
+  STRIPE_WEBHOOK_SECRET: z.string().default(""),
+  DANIEL_TRANSFER_NUMBER: z.string().default(""),
 });
 
 export type Env = z.infer<typeof envSchema>;

@@ -1,4 +1,5 @@
 import { RemoveClientButton } from "@/components/client-actions";
+import { CreateClientZeroButton } from "@/components/provision-panel";
 import { clientCanBeRemoved, clients, plans } from "@alinstra/db";
 import { requireAdmin } from "@/lib/session";
 import Link from "next/link";
@@ -11,7 +12,10 @@ export default async function ClientsPage() {
     <main className="mx-auto grid max-w-3xl gap-4 p-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Clients</h1>
-        <Link className="rounded-md bg-[var(--accent)] px-4 py-2 text-sm text-[var(--accent-ink)]" href="/admin/clients/new">Add client</Link>
+        <div className="flex gap-2">
+          <CreateClientZeroButton />
+          <Link className="rounded-md bg-[var(--accent)] px-4 py-2 text-sm text-[var(--accent-ink)]" href="/admin/clients/new">Add client</Link>
+        </div>
       </div>
       <ul className="grid gap-2">
         {rows.map((client) => (

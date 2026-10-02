@@ -410,7 +410,19 @@ export function WizardForm({
           </div>
           <div className="flex items-start gap-2 text-sm">
             <input className="mt-0.5" type="checkbox" checked={Boolean(payload.features.liveTransfer)} onChange={(event) => setPayload({ ...payload, features: { ...payload.features, liveTransfer: event.target.checked } })} />
-            <FieldLabel label="Live transfer" hint="Allow the receptionist to transfer the caller to a person." />
+            <FieldLabel label="Live transfer" hint="Allow the receptionist to transfer the caller to a person. Transfers only use the targets below, and only during the hours on the next lines." />
+          </div>
+          <div>
+            <FieldLabel label="Business hours" hint="One day per line, 24-hour time. Example: mon 09:00-17:00. Days you leave out are closed, and closed hours take a message instead of transferring." />
+            <textarea className="min-h-24 w-full rounded-md border border-[var(--line)] px-3 py-2 text-sm" value={String(payload.features.weeklyHoursText ?? "")} onChange={(event) => setPayload({ ...payload, features: { ...payload.features, weeklyHoursText: event.target.value } })} />
+          </div>
+          <div>
+            <FieldLabel label="Transfer targets" hint="One per line: Label, +E.164. The transfer tool will not dial any other number." />
+            <textarea className="min-h-20 w-full rounded-md border border-[var(--line)] px-3 py-2 text-sm" value={String(payload.features.transferTargetsText ?? "")} onChange={(event) => setPayload({ ...payload, features: { ...payload.features, transferTargetsText: event.target.value } })} />
+          </div>
+          <div>
+            <FieldLabel label="Message emails" hint="Who is emailed as soon as the receptionist takes a message. Separate addresses with commas." />
+            <Input value={String(payload.features.messageRecipients ?? "")} onChange={(event) => setPayload({ ...payload, features: { ...payload.features, messageRecipients: event.target.value } })} />
           </div>
           <div className="flex items-start gap-2 text-sm">
             <input className="mt-0.5" type="checkbox" checked={Boolean(payload.features.recallAddOn)} onChange={(event) => setPayload({ ...payload, features: { ...payload.features, recallAddOn: event.target.checked } })} />

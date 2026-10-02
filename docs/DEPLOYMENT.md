@@ -265,6 +265,26 @@ Stop it with:
 docker compose --profile prod-smoke down
 ```
 
+## Phase 3 keys (only after the phase-3 branch is what staging runs)
+
+Leave these empty until you are ready for one real Retell number. Empty keys make the process use fakes and refuse live provisioning when `NODE_ENV=production`.
+
+| Variable | Web and worker | How to get it |
+| --- | --- | --- |
+| `RETELL_API_KEY` | both | Retell dashboard → API keys. One key with the webhook badge. Staging and production are different keys. |
+| `RETELL_DEFAULT_VOICE_ID` | both | The id from the voice card after you pick in `docs/voice-options.md`. |
+| `STRIPE_SECRET_KEY` | both | Stripe test mode secret key (`sk_test_...`) for staging. |
+| `STRIPE_WEBHOOK_SECRET` | web | Stripe → Developers → Webhooks → endpoint `https://staging.alinstra.com/api/stripe/webhook` → signing secret. |
+| `DANIEL_TRANSFER_NUMBER` | both | Your cell in E.164, for client zero. |
+
+Retell webhook URL: `https://staging.alinstra.com/api/retell/webhook`. Inbound URL is set by the app when it buys the number. There is no Retell sandbox and no spend cap in the API. Use one number. End service, or delete the number, to stop the monthly charge. Watch the Retell Billing tab.
+
+### How to verify this step
+
+- A client with two-factor admin can start provisioning and the page shows a Checkout link before the client is live.
+- Client zero skips Checkout, gets a number, and shows In sync after a config change.
+- A browser upload still works. The health check is still `"db": "up"` and `"redis": "up"`.
+
 ## Production later
 
 Repeat this checklist in a separate Railway project. Hostname `app.alinstra.com`. Own Postgres, Redis, R2 bucket, Resend key, and Sentry environment `production`. Grey-cloud CNAME for `app` only. Do not share staging's database, Redis, bucket token, or `ENCRYPTION_KEY`. Enroll a new admin and delete that environment's `ADMIN_INITIAL_PASSWORD` the same way.

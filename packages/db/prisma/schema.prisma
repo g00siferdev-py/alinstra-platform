@@ -143,11 +143,26 @@ model Client {
   overrideSetupFeeCents           Int?
   overrideIncludedChangesPerMonth Int?
   setupFeeWaived                  Boolean   @default(false)
+  internal                        Boolean   @default(false)
   coverage                        Json?
   features                        Json?
   voice                           Json?
   phone                           Json?
   compliance                      Json?
+  weeklyHours                     Json?
+  billingStatus                   String    @default("none")
+  stripeCustomerId                String?
+  stripeSubscriptionId            String?
+  stripeCheckoutUrl               String?
+  paidAt                          DateTime?
+  serviceEndsAt                   DateTime?
+  retellLlmId                     String?
+  retellAgentId                   String?
+  phoneE164                       String?
+  agentSyncStatus                 String    @default("not_provisioned")
+  agentSyncError                  String?
+  syncedConfigId                  String?
+  liveAt                          DateTime?
   createdAt                       DateTime  @default(now())
   updatedAt                       DateTime  @updatedAt
   users                           User[]
@@ -159,6 +174,10 @@ model Client {
   agentConfigs                    AgentConfig[]
   quickUpdates                    QuickUpdate[]
   changeRequests                  ChangeRequest[]
+  transferTargets                 TransferTarget[]
+  messages                        ClientMessage[]
+  callRecords                     CallRecord[]
+  provisioningRuns                ProvisioningRun[]
 
   @@index([status])
   @@index([archivedAt])
@@ -328,4 +347,90 @@ model ChangeRequest {
 
   @@index([clientId, status])
   @@map("change_request")
+}
+
+model TransferTarget {
+  id        String   @id @default(cuid())
+  clientId  String
+  client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  label     String
+  e164      String
+  createdAt DateTime @default(now())
+
+  @@index([clientId])
+  @@map("transfer_target")
+}
+
+model ClientMessage {
+  id             String   @id @default(cuid())
+  clientId       String
+  client         Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  callerName     String
+  callbackNumber String
+  body           String   @db.Text
+  createdAt      DateTime @default(now())
+
+  @@index([clientId, createdAt])
+  @@map("client_message")
+}
+
+model CallRecord {
+  id              String    @id @default(cuid())
+  clientId        String
+  client          Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  retellCallId    String    @unique
+  startedAt       DateTime?
+  endedAt         DateTime?
+  durationSeconds Int?
+  callerMasked    String
+  endReason       String?
+  createdAt       DateTime  @default(now())
+
+  @@index([clientId, createdAt])
+  @@map("call_record")
+}
+
+model ProvisioningRun {
+  id          String             @id @default(cuid())
+  clientId    String
+  client      Client             @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  kind        String
+  status      String
+  createdById String
+  createdAt   DateTime           @default(now())
+  finishedAt  DateTime?
+  steps       ProvisioningStep[]
+
+  @@index([clientId, createdAt])
+  @@map("provisioning_run")
+}
+
+model ProvisioningStep {
+  id         String          @id @default(cuid())
+  runId      String
+  run        ProvisioningRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  name       String
+  status     String
+  externalId String?
+  error      String?
+  startedAt  DateTime?
+  finishedAt DateTime?
+
+  @@unique([runId, name])
+  @@map("provisioning_step")
+}
+
+/// Stripe Price ids created from the plan catalog. `metered_overage` is reserved for Phase 6.
+model StripePrice {
+  id            String   @id @default(cuid())
+  lookupKey     String   @unique
+  stripePriceId String
+  planCode      String
+  kind          String
+  amountCents   Int
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([planCode, kind])
+  @@map("stripe_price")
 }

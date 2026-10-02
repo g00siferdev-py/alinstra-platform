@@ -162,6 +162,14 @@ Tests connect to a database whose name ends in `_test`. Locally that database is
 
 The admin notice email is queued only when a quick update applies immediately. The worker sends it to `ADMIN_EMAIL`. Held updates and change requests are listed on the admin home instead.
 
+## 2026-10-02 — Phase 3 providers
+
+A single-prompt Retell agent is a Retell LLM plus an agent that references `llm_id`. Retell has no sandbox. Staging uses one real number (client zero) on Daniel's Alinstra Technologies, LLC account. One API key per environment covers API calls and webhook checks. Verification is the signature and the five-minute timestamp. There is no IP allowlist.
+
+Payment is Stripe Checkout in subscription mode, with the setup fee as a one-time line item unless waived. The client is not live until that Checkout completes. Client zero skips billing and is excluded from revenue and margin. Churn waits until the end of the paid period unless an admin chooses End service now. Prices come from the plan catalog by lookup key. A new amount creates a new Price. Metered overage is a later Price kind (`plan_<code>_overage`), not created in this phase.
+
+`RETELL_API_KEY` and `STRIPE_SECRET_KEY` empty means the in-memory fakes. Production refuses to provision without both keys. No provider call is made until those keys exist.
+
 ## 2026-10-02 — Staging and production hosting
 
 Daniel approved this: production is a **separate Railway project**, not a second environment inside the staging project. Each project has its own Postgres, Redis, R2 bucket, Resend key, Sentry environment, and `ENCRYPTION_KEY`. Staging is `staging.alinstra.com`. Production, later, is `app.alinstra.com`.

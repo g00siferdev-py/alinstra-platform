@@ -10,7 +10,7 @@ import {
   type Actor,
   type QuickUpdateInput,
 } from "@alinstra/db";
-import { enqueueSendAdminNotice } from "@alinstra/queue";
+import { enqueueSendAdminNotice, enqueueSyncAgent } from "@alinstra/queue";
 import { requireUser } from "@/lib/session";
 import { revalidatePath } from "next/cache";
 
@@ -39,6 +39,13 @@ export async function applyQuickUpdateAction(input: QuickUpdateInput) {
   const session = await requireUser();
   try {
     const result = await applyQuickUpdate(ownerActor(session), input);
+    if (result.sync) {
+      try {
+        await enqueueSyncAgent({ clientId: session.user.clientId ?? "" });
+      } catch (error) {
+        log("error", "agent sync was not queued", { error: error instanceof Error ? error.name : "unknown" });
+      }
+    }
     if (result.notify) {
       try {
         await enqueueSendAdminNotice(result.notify);

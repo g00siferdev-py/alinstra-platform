@@ -1,5 +1,5 @@
 import { QuickUpdateForms } from "@/components/quick-update-forms";
-import { clients, faqItems, knowledgeBases, plans } from "@alinstra/db";
+import { clients, faqItems, formatTransferTargets, knowledgeBases, plans, transferTargets } from "@alinstra/db";
 import { requireUser } from "@/lib/session";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -10,9 +10,10 @@ export default async function MyBusinessPage() {
   const ctx = { role: session.user.role as "client_owner" | "client_staff", clientId: session.user.clientId };
   const client = await clients(ctx).getById(session.user.clientId);
   if (!client) notFound();
-  const [plan, knowledge] = await Promise.all([
+  const [plan, knowledge, targets] = await Promise.all([
     client.planId ? plans(ctx).getById(client.planId) : Promise.resolve(null),
     knowledgeBases(ctx).getCurrent(session.user.clientId),
+    transferTargets(ctx).list(session.user.clientId),
   ]);
   const owner = session.user.role === "client_owner";
   const faqs = faqItems(knowledge?.faqs);
@@ -41,6 +42,7 @@ export default async function MyBusinessPage() {
           hours={typeof knowledge?.hours === "string" ? knowledge.hours : ""}
           staff={typeof knowledge?.staff === "string" ? knowledge.staff : ""}
           faqs={faqs}
+          targets={formatTransferTargets(targets)}
         />
       ) : null}
     </main>

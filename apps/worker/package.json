@@ -15,6 +15,7 @@
     "@alinstra/crypto": "workspace:*",
     "@alinstra/db": "workspace:*",
     "@alinstra/email": "workspace:*",
+    "@alinstra/providers": "workspace:*",
     "@alinstra/queue": "workspace:*",
     "@alinstra/storage": "workspace:*",
     "@sentry/node": "10.22.0",

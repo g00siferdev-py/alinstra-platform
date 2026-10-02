@@ -11,6 +11,7 @@ import {
   rollbackAgentConfig,
   type Actor,
 } from "@alinstra/db";
+import { enqueueSyncAgent } from "@alinstra/queue";
 import { requireAdmin } from "@/lib/session";
 import { revalidatePath } from "next/cache";
 
@@ -26,6 +27,7 @@ export async function activateAgentAction(clientId: string, version: number) {
   const session = await requireAdmin();
   try {
     await activateAgentConfig(adminActor(session), { clientId, version });
+    await enqueueSyncAgent({ clientId }).catch(() => undefined);
     revalidatePath(`/admin/clients/${clientId}/agent`);
     return { ok: true };
   } catch (error) {
@@ -37,6 +39,7 @@ export async function rollbackAgentAction(clientId: string, version: number) {
   const session = await requireAdmin();
   try {
     await rollbackAgentConfig(adminActor(session), { clientId, version });
+    await enqueueSyncAgent({ clientId }).catch(() => undefined);
     revalidatePath(`/admin/clients/${clientId}/agent`);
     return { ok: true };
   } catch (error) {
@@ -57,7 +60,8 @@ export async function previewHeldUpdateAction(id: string) {
 export async function approveQuickUpdateAction(id: string) {
   const session = await requireAdmin();
   try {
-    await approveQuickUpdate(adminActor(session), id);
+    const approved = await approveQuickUpdate(adminActor(session), id);
+    await enqueueSyncAgent({ clientId: approved.clientId }).catch(() => undefined);
     revalidatePath("/home");
     return { ok: true };
   } catch (error) {
@@ -89,7 +93,8 @@ export async function previewChangeRequestAction(input: { id: string; fields: un
 export async function approveChangeRequestAction(input: { id: string; fields: unknown }) {
   const session = await requireAdmin();
   try {
-    await approveChangeRequest(adminActor(session), input);
+    const approved = await approveChangeRequest(adminActor(session), input);
+    await enqueueSyncAgent({ clientId: approved.clientId }).catch(() => undefined);
     revalidatePath("/home");
     return { ok: true };
   } catch (error) {

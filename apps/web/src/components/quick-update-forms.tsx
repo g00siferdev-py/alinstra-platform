@@ -8,7 +8,7 @@ import { useState } from "react";
 
 type Faq = { question: string; answer: string };
 
-export function QuickUpdateForms({ hours, staff, faqs }: { hours: string; staff: string; faqs: Faq[] }) {
+export function QuickUpdateForms({ hours, staff, faqs, targets }: { hours: string; staff: string; faqs: Faq[]; targets: string }) {
   const router = useRouter();
   const [preview, setPreview] = useState<string | null>(null);
   const [truncated, setTruncated] = useState(false);
@@ -71,6 +71,13 @@ export function QuickUpdateForms({ hours, staff, faqs }: { hours: string; staff:
           <Button disabled={pending} onClick={(event) => void previewUpdate({ kind: "closure", text: field(event, "notice") })}>Preview</Button>
           <Button disabled={pending} onClick={(event) => void applyUpdate({ kind: "closure", text: field(event, "notice") })}>Apply</Button>
         </div>
+      </form>
+
+      <form className="grid gap-2 rounded-xl border border-[var(--line)] p-4" onSubmit={(event) => event.preventDefault()}>
+        <h2 className="font-medium">Transfer targets</h2>
+        <p className="text-sm text-[var(--muted)]">One per line: Label, +E.164. These are the only numbers the receptionist can transfer to, and only during business hours.</p>
+        <textarea name="targets" className="min-h-20 w-full rounded-md border border-[var(--line)] px-3 py-2 text-sm" defaultValue={targets} />
+        <Button disabled={pending} onClick={(event) => void applyUpdate({ kind: "transfers", text: field(event, "targets") })}>Save targets</Button>
       </form>
 
       <form className="grid gap-2 rounded-xl border border-[var(--line)] p-4" onSubmit={(event) => event.preventDefault()}>

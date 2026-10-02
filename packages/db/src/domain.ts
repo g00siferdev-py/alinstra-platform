@@ -85,6 +85,9 @@ export const coverageSchema = z.object({
 
 export const featuresSchema = z.object({
   messages: optionalText,
+  messageRecipients: optionalText,
+  weeklyHoursText: optionalText,
+  transferTargetsText: optionalText,
   bookingMode: z.preprocess(emptyToUndefined, z.enum(["direct_calendar", "request_only"]).optional()),
   textConfirmations: z.boolean().optional(),
   textReminders: z.boolean().optional(),
@@ -155,6 +158,109 @@ export type WizardPayload = z.infer<typeof wizardPayloadSchema>;
 
 export function emptyWizardPayload(): WizardPayload {
   return { version: 1, compliance: { aiDisclosure: true, recordingNotice: true } };
+}
+
+export const E164 = /^\+[1-9]\d{7,14}$/;
+
+const DAY_KEYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
+export type DayKey = (typeof DAY_KEYS)[number];
+export type WeeklyHours = Partial<Record<DayKey, { start: string; end: string }>>;
+
+const DAY_LINE = /^(mon|tue|wed|thu|fri|sat|sun)\s+([01]\d|2[0-3]):([0-5]\d)-([01]\d|2[0-3]):([0-5]\d)$/i;
+
+export function parseWeeklyHours(text: string): WeeklyHours {
+  const hours: WeeklyHours = {};
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line) continue;
+    const match = DAY_LINE.exec(line);
+    if (!match?.[1] || !match[2] || !match[3] || !match[4] || !match[5]) {
+      throw new Error("Use one day per line, such as mon 09:00-17:00.");
+    }
+    const start = Number(match[2]) * 60 + Number(match[3]);
+    const end = Number(match[4]) * 60 + Number(match[5]);
+    if (end <= start) throw new Error("Closing time must be after opening time.");
+    hours[match[1].toLowerCase() as DayKey] = { start: `${match[2]}:${match[3]}`, end: `${match[4]}:${match[5]}` };
+  }
+  return hours;
+}
+
+export function formatWeeklyHours(hours: WeeklyHours | null | undefined): string {
+  if (!hours) return "";
+  return DAY_KEYS.flatMap((day) => (hours[day] ? [`${day} ${hours[day].start}-${hours[day].end}`] : [])).join("\n");
+}
+
+export function parseTransferTargets(text: string): Array<{ label: string; e164: string }> {
+  const rows: Array<{ label: string; e164: string }> = [];
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line) continue;
+    const comma = line.lastIndexOf(",");
+    const label = (comma === -1 ? "" : line.slice(0, comma)).trim();
+    const e164 = (comma === -1 ? line : line.slice(comma + 1)).trim();
+    if (!label || !E164.test(e164)) throw new Error("Enter each transfer target as Label, +E.164.");
+    rows.push({ label, e164 });
+  }
+  return rows;
+}
+
+export function formatTransferTargets(rows: Array<{ label: string; e164: string }>): string {
+  return rows.map((row) => `${row.label}, ${row.e164}`).join("\n");
+}
+
+export function parseRecipientEmails(text: string): string[] {
+  const emails = text.split(/[\s,;]+/).map((item) => item.trim().toLowerCase()).filter(Boolean);
+  for (const email of emails) {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("Enter message recipient emails separated by commas.");
+  }
+  return [...new Set(emails)];
+}
+
+export function officeOpen(hours: unknown, timezone: string, now: Date): boolean {
+  if (!hours || typeof hours !== "object") return false;
+  let weekday = "";
+  let hour = "";
+  let minute = "";
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: timezone,
+      weekday: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    }).formatToParts(now);
+    weekday = parts.find((part) => part.type === "weekday")?.value.slice(0, 3).toLowerCase() ?? "";
+    hour = parts.find((part) => part.type === "hour")?.value ?? "";
+    minute = parts.find((part) => part.type === "minute")?.value ?? "";
+  } catch {
+    return false;
+  }
+  const window = (hours as WeeklyHours)[weekday as DayKey];
+  if (!window) return false;
+  const current = Number(hour) * 60 + Number(minute);
+  const [startHour, startMinute] = window.start.split(":").map(Number);
+  const [endHour, endMinute] = window.end.split(":").map(Number);
+  if (startHour === undefined || startMinute === undefined || endHour === undefined || endMinute === undefined) return false;
+  return current >= startHour * 60 + startMinute && current < endHour * 60 + endMinute;
+}
+
+export function maskCaller(value: string): string {
+  const digits = value.replace(/\D/g, "");
+  if (digits.length <= 4) return "****";
+  const prefix = value.trim().startsWith("+") ? "+" : "";
+  return `${prefix}${"*".repeat(digits.length - 4)}${digits.slice(-4)}`;
+}
+
+export function retellPrompt(stored: string, timezone: string): string {
+  const zone = /^[A-Za-z0-9_+\-/]+$/.test(timezone) ? timezone : DEFAULT_TIMEZONE;
+  return stored.replace(/\{\{current_time\}\}(?!_)/g, `{{current_time_${zone}}}`);
+}
+
+export function clientIsHealthcare(client: { industry: string | null; compliance: unknown }): boolean {
+  const compliance = client.compliance && typeof client.compliance === "object" ? (client.compliance as { healthcareTouched?: boolean; healthcareSensitive?: boolean }) : {};
+  if (compliance.healthcareTouched) return Boolean(compliance.healthcareSensitive);
+  if (client.industry === "dental" || client.industry === "medical_office") return true;
+  return Boolean(compliance.healthcareSensitive);
 }
 
 export function healthcareRequired(payload: WizardPayload): boolean {
