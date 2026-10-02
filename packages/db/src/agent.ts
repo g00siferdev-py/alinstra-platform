@@ -1,6 +1,5 @@
 import {
   CHANGE_CATEGORIES,
-  DECLARED_TOOLS,
   allowanceState,
   calendarMonthRange,
   diffFields,
@@ -127,7 +126,18 @@ function toInput(
     staff: plain(knowledge?.staff) ?? faqsToText(knowledge?.staff),
     notices: plain(knowledge?.notices) ?? faqsToText(knowledge?.notices),
     emergency: emergencyOf(client.features),
+    features: featuresOf(client.features),
     documents: docs,
+  };
+}
+
+function featuresOf(features: unknown): PromptInput["features"] {
+  const row = asRecord(features);
+  const mode = row.bookingMode;
+  return {
+    bookingMode: mode === "request_only" || mode === "direct_calendar" ? mode : null,
+    liveTransfer: row.liveTransfer === true,
+    messages: typeof row.messages === "string" ? row.messages : null,
   };
 }
 
@@ -197,7 +207,7 @@ async function insertConfig(
       documentIds: args.documentIds,
       voice: jsonOr(args.voice),
       greeting: args.input.greeting ?? null,
-      tools: [...DECLARED_TOOLS],
+      tools: rendered.tools,
       settings: settingsOf(args.input, rendered),
       platformAgentId: null,
       source: args.source,

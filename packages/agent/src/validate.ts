@@ -1,7 +1,8 @@
 export const HOLD_REASON =
   "This looks like a price, discount, guarantee, or refund. An admin will review it before it goes live.";
 
-const SENSITIVE = /\$\s?\d|\bfree\b|\bdiscount\b|\bguarantee\b|\brefund\b/i;
+const SENSITIVE =
+  /\$\s?\d|\bfree\b|\bdiscount\b|\bguarantee\b|\brefund\b|%\s*off|\bpercent off\b|\bdollars\b|\bno charge\b|\bwaive(?:d|s)?\b|\bcomplimentary\b|\bhalf price\b/i;
 const PHONE = /^\+?[\d\s().-]{7,20}$/;
 const CLOCK = /\b(\d{1,2}):(\d{2})\b/g;
 
