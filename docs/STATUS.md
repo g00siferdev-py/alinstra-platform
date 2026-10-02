@@ -1,6 +1,6 @@
 # Status
 
-Phase 1 — wizard, knowledge files, plans, and the client portal shell. Committed locally. Do not push until Daniel asks. Do not start Phase 2.
+Phase 1 — wizard, knowledge files, plans, and the client portal shell. Pushed to main and staging. Do not start Phase 2.
 
 ## Verified locally
 
@@ -8,6 +8,9 @@ Phase 1 — wizard, knowledge files, plans, and the client portal shell. Committ
 - Isolation: a client user cannot read another client's draft, knowledge, documents, or change log. A storage key is always under that client's id.
 - Extraction: truncated text, a malformed or oversized DOCX fails as `ExtractionFailed`, and the timeout helper rejects
 - Production env guard still rejects placeholder secrets. Staging and production also require R2 (`STORAGE_DRIVER=s3`)
+
+## CI
+- GitHub Actions runs install, prisma generate, migrate deploy, lint, typecheck, and test against Postgres 16 and Redis 7 service containers. Fixed 2026-10-01: Turborepo strict env mode hid DATABASE_URL from tasks, and CI had no Redis.
 
 ## Shipped in Phase 1
 

@@ -132,3 +132,15 @@ Removing a client is only allowed while status is `lead` or `demo`. It archives 
 Website import, voice audio, phone purchasing, and the agent prompt are stored as notes or labels. Phase 1 does not call Retell, Stripe, Twilio, or a calendar API.
 
 Auth and database tests share one Postgres database and both truncate it. `@alinstra/auth` tests run after `@alinstra/db` tests so one suite cannot truncate the other's rows.
+
+## 2026-10-01 — CI
+
+### Turborepo env mode
+`turbo.json` sets `"envMode": "loose"`, so every task sees the process environment. Turborepo 2 defaults to strict mode, which hid DATABASE_URL and the other workflow env vars from tasks in GitHub Actions. Locally the root `.env` masked this because dotenv reads it from disk. Loose mode means a new env var never has to be registered in two places. The trade-off is that env values are not part of turbo cache keys. That is acceptable because there is no remote cache.
+
+### Prisma generate without a database URL
+`packages/db/prisma.config.ts` only sets `datasource.url` when DATABASE_URL exists. `prisma generate` works in Docker image builds without secrets. `prisma migrate deploy` still fails clearly when the URL is missing.
+
+### CI services
+CI starts Postgres 16 and Redis 7 service containers, matching docker-compose.yml. The worker isolation test needs a real Redis for BullMQ.
+
