@@ -1,4 +1,5 @@
 export { prisma, createPrismaClient } from "./client";
+export { resetTestDatabase } from "./reset-test-database";
 export { clients, createClient, users } from "./repositories";
 export { plans, seedPlans, updatePlan } from "./plans";
 export { confirmDocument, knowledgeBases, knowledgeDocuments, reserveDocument } from "./knowledge";

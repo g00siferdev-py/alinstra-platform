@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "./generated/prisma/client";
+import { testDatabaseUrl } from "./test-database-url";
 
 for (const path of [
   resolve(process.cwd(), ".env"),
@@ -14,12 +15,16 @@ for (const path of [
 
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
 
+function connectionString(): string {
+  const configured = process.env.DATABASE_URL;
+  if (!configured) throw new Error("DATABASE_URL is not set");
+  if (process.env.NODE_ENV === "test") return testDatabaseUrl(configured, process.env.DATABASE_URL_TEST);
+  return configured;
+}
+
 export function createPrismaClient(): PrismaClient {
-  const connectionString = process.env.DATABASE_URL;
-  if (!connectionString) {
-    throw new Error("DATABASE_URL is not set");
-  }
-  const adapter = new PrismaPg({ connectionString });
+  const connectionStringValue = connectionString();
+  const adapter = new PrismaPg({ connectionString: connectionStringValue });
   return new PrismaClient({ adapter });
 }
 

@@ -19,6 +19,9 @@
     "@alinstra/auth#test": {
       "dependsOn": ["^build", "@alinstra/db#test"]
     },
+    "@alinstra/worker#test": {
+      "dependsOn": ["^build", "@alinstra/db#test"]
+    },
     "typecheck": {
       "dependsOn": ["^build"]
     }

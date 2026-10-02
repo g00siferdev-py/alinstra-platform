@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
-import { prisma, removeClient } from "@alinstra/db";
+import { prisma, removeClient, resetTestDatabase } from "@alinstra/db";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { acceptInvite, createInvite } from "./invites";
 import { resetMemoryCounter } from "./counter";
@@ -11,9 +11,7 @@ import { readAllowedSession } from "./session-access";
 import { createCredentialUser } from "./users";
 
 async function resetDatabase(): Promise<void> {
-  await prisma.$executeRawUnsafe(
-    `TRUNCATE TABLE "change_request", "quick_update", "agent_config", "change_log", "knowledge_document", "knowledge_base", "wizard_draft", "session", "account", "twoFactor", "verification", "invite", "user", "client", "plan" CASCADE`,
-  );
+  await resetTestDatabase();
 }
 
 describe("acceptInvite", () => {

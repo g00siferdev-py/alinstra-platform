@@ -2,13 +2,12 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { prisma } from "./client";
+import { resetTestDatabase } from "./reset-test-database";
 import { clients, createClient, users } from "./repositories";
 import type { TenantContext } from "./tenant";
 
 async function resetDatabase(): Promise<void> {
-  await prisma.$executeRawUnsafe(
-    `TRUNCATE TABLE "change_request", "quick_update", "agent_config", "change_log", "knowledge_document", "knowledge_base", "wizard_draft", "session", "account", "twoFactor", "verification", "invite", "user", "client", "plan" CASCADE`,
-  );
+  await resetTestDatabase();
 }
 
 async function seedPair() {

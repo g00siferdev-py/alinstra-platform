@@ -38,6 +38,8 @@ Web: http://localhost:3000. Health: http://localhost:3000/api/health.
 
 `pnpm dev` runs both through Turborepo. Email in local development is printed to the worker log (`EMAIL_TRANSPORT=console`).
 
+Tests use their own database. `pnpm test` reads `DATABASE_URL_TEST` when it is set. Otherwise it takes `DATABASE_URL` and changes the database name so it ends in `_test` (`alinstra` becomes `alinstra_test`). The suite creates that database if it does not exist, then migrates it. Reset refuses to `TRUNCATE` unless the connected database name ends in `_test`, so a test run cannot wipe the dev database. CI uses a Postgres service database named `alinstra_test` as well.
+
 `docker compose up -d --build` also builds web and worker containers. Apply migrations from the host first. The worker never migrates.
 
 ## Scripts
@@ -47,7 +49,7 @@ Web: http://localhost:3000. Health: http://localhost:3000/api/health.
 | `pnpm dev` | Web and worker |
 | `pnpm lint` | ESLint |
 | `pnpm typecheck` | `tsc --noEmit` |
-| `pnpm test` | Vitest, including `clientId` isolation |
+| `pnpm test` | Vitest, including `clientId` isolation. Uses `alinstra_test`, not the dev database |
 | `pnpm db:migrate` | `prisma migrate dev` |
 | `pnpm db:migrate:deploy` | `prisma migrate deploy` (Railway web pre-deploy) |
 | `pnpm db:seed` | Create the admin from `ADMIN_EMAIL` |

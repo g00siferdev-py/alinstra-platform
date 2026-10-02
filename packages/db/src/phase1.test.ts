@@ -1,5 +1,6 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { prisma } from "./client";
+import { resetTestDatabase } from "./reset-test-database";
 import { reserveDocument, knowledgeDocuments } from "./knowledge";
 import { seedPlans, updatePlan } from "./plans";
 import type { Actor } from "./changes";
@@ -7,9 +8,7 @@ import { startWizard, submitWizard, removeClient, wizardDrafts } from "./wizard"
 import { clients } from "./repositories";
 
 async function resetDatabase(): Promise<void> {
-  await prisma.$executeRawUnsafe(
-    `TRUNCATE TABLE "change_request", "quick_update", "agent_config", "change_log", "knowledge_document", "knowledge_base", "wizard_draft", "session", "account", "twoFactor", "verification", "invite", "user", "client", "plan" CASCADE`,
-  );
+  await resetTestDatabase();
 }
 
 const admin: Actor = { id: "user_admin", role: "admin" };
