@@ -32,6 +32,8 @@ const envSchema = z.object({
   STRIPE_SECRET_KEY: z.string().default(""),
   STRIPE_WEBHOOK_SECRET: z.string().default(""),
   DANIEL_TRANSFER_NUMBER: z.string().default(""),
+  RETELL_DEFAULT_AREA_CODE: z.string().default(""),
+  RETELL_DEFAULT_TOLL_FREE: z.string().default("false"),
 });
 
 export type Env = z.infer<typeof envSchema>;

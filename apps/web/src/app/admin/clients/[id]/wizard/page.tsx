@@ -1,12 +1,15 @@
 import { WizardForm } from "@/components/wizard-form";
-import { emptyWizardPayload, knowledgeDocuments, plans, wizardDrafts, wizardPayloadSchema } from "@alinstra/db";
+import { clients, emptyWizardPayload, knowledgeDocuments, plans, wizardDrafts, wizardPayloadSchema } from "@alinstra/db";
 import { requireAdmin } from "@/lib/session";
 import { notFound } from "next/navigation";
 
 export default async function WizardPage({ params }: { params: Promise<{ id: string }> }) {
   await requireAdmin();
   const { id } = await params;
-  const draft = await wizardDrafts({ role: "admin" }).getByClientId(id);
+  const [draft, client] = await Promise.all([
+    wizardDrafts({ role: "admin" }).getByClientId(id),
+    clients({ role: "admin" }).getById(id),
+  ]);
   if (!draft) notFound();
   const parsed = wizardPayloadSchema.parse(draft.payload ?? emptyWizardPayload());
   const [planRows, documents] = await Promise.all([
@@ -79,6 +82,8 @@ export default async function WizardPage({ params }: { params: Promise<{ id: str
             mode: parsed.phone?.mode ?? "",
             carrier: parsed.phone?.carrier ?? "",
             currentNumber: parsed.phone?.currentNumber ?? "",
+            areaCode: parsed.phone?.areaCode ?? "",
+            tollFree: parsed.phone?.tollFree ?? Boolean(client?.internal),
           },
           compliance: {
             aiDisclosure: true,

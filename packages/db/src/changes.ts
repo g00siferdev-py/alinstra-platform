@@ -1,5 +1,6 @@
 import type { Prisma } from "./generated/prisma/client";
-import type { TenantContext } from "./tenant";
+import { prisma } from "./client";
+import type { Role, TenantContext } from "./tenant";
 
 export type Actor = TenantContext & { id: string };
 
@@ -15,6 +16,39 @@ export async function recordChange(
     before?: Prisma.InputJsonValue;
     after?: Prisma.InputJsonValue;
   },
+): Promise<void> {
+  await writeChange(tx, entry);
+}
+
+export async function recordEmailChange(input: {
+  userId: string;
+  role: Role;
+  clientId: string | null;
+  previousEmail: string;
+  nextEmail: string;
+}): Promise<void> {
+  if (input.previousEmail.toLowerCase() === input.nextEmail.toLowerCase()) return;
+  const actor: Actor = input.role === "admin"
+    ? { id: input.userId, role: "admin" }
+    : { id: input.userId, role: input.role, clientId: input.clientId ?? "" };
+  if (actor.role !== "admin" && !actor.clientId) return;
+  await prisma.$transaction(async (tx) => {
+    await recordChange(tx, {
+      clientId: input.clientId,
+      actor,
+      action: "user.email_changed",
+      entityType: "user",
+      entityId: input.userId,
+      summary: "Login email changed",
+      before: { email: input.previousEmail },
+      after: { email: input.nextEmail },
+    });
+  });
+}
+
+async function writeChange(
+  tx: Prisma.TransactionClient,
+  entry: Parameters<typeof recordChange>[1],
 ): Promise<void> {
   await tx.changeLog.create({
     data: {

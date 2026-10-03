@@ -15,8 +15,8 @@ Phase 2 is merged into `main`. Staging deploy readiness (navigation, port, worke
 
 ## CI
 - GitHub Actions runs install, prisma generate, migrate deploy, lint, typecheck, and test against Postgres 16 and Redis 7 service containers. Fixed 2026-10-01: Turborepo strict env mode hid DATABASE_URL from tasks, and CI had no Redis.
-- Phase 3 is on branch `phase-3` only. It is not merged. Provisioning, Retell sync, Stripe Checkout, message email, transfer targets, and call records are behind fakes until keys are set. Healthcare clients cannot be provisioned. See `docs/phase-3-plan.md` and `docs/voice-options.md`.
-- Remote GitHub Actions is unverified. `gh` is not installed, so the runs on GitHub were not watched. A fresh clone of `phase-3` (`d093a73`) passed the CI sequence locally against `alinstra_test` (lint, typecheck, and 72 tests).
+- Phase 3 is on branch `phase-3` only. It is not merged. The 3 October review fixes (tool parameters, phone-number binding, inbound webhook shape, sync enqueue, Stripe item periods, checkout expiry, NANP transfer limits) are on this branch. Provisioning stays on fakes until keys are set. See `docs/phase-3-plan.md`.
+- Remote GitHub Actions is unverified. `gh` is not installed. Lint, typecheck, and 84 tests passed locally against `alinstra_test` on this review. A fresh clone of the earlier `phase-3` commit `d093a73` had passed 72 tests; this review was not cloned to a second directory.
 
 ## Phase 2
 

@@ -1,4 +1,5 @@
 import { getEnv, log, scrubSentryEvent, type SentryLikeEvent } from "@alinstra/config";
+import { sendEmail } from "@alinstra/email";
 import { EXTRACT_TIMEOUT_MS } from "@alinstra/db";
 import {
   bullConnection,
@@ -7,6 +8,7 @@ import {
   KNOWLEDGE_QUEUE,
   PROVISION_QUEUE,
   provisionClient,
+  sendAccountEmail,
   sendAdminNotice,
   sendInviteEmail,
   sendMessageEmail,
@@ -50,6 +52,11 @@ const email = new Worker(
     if (job.name === "send-admin-notice") {
       const payload = sendAdminNotice.parse(job.data);
       await deliverAdminNotice(payload.subject, payload.text);
+      return;
+    }
+    if (job.name === "send-account-email") {
+      const payload = sendAccountEmail.parse(job.data);
+      await sendEmail({ to: payload.to, subject: payload.subject, text: payload.text });
       return;
     }
     if (job.name === "send-message-email") {

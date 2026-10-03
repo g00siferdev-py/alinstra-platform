@@ -31,14 +31,20 @@ export function signStripe(rawBody: string, timestampSec: number, secret: string
 
 export function verifyStripe(rawBody: string, header: string | null, secret: string, now = Date.now()): boolean {
   if (!header || !secret) return false;
-  const parts = new Map(header.split(",").map((part) => {
-    const [key, value] = part.split("=");
-    return [key?.trim() ?? "", value?.trim() ?? ""] as const;
-  }));
-  const timestamp = Number(parts.get("t"));
-  const digest = parts.get("v1") ?? "";
-  if (!Number.isFinite(timestamp) || !digest) return false;
+  const signatures: string[] = [];
+  let timestamp = Number.NaN;
+  for (const part of header.split(",")) {
+    const separator = part.indexOf("=");
+    if (separator === -1) continue;
+    const key = part.slice(0, separator).trim();
+    const value = part.slice(separator + 1).trim();
+    if (key === "t") timestamp = Number(value);
+    if (key === "v1" && value) signatures.push(value);
+  }
+  if (!Number.isFinite(timestamp) || signatures.length === 0) return false;
   if (Math.abs(now - timestamp * 1000) > FIVE_MINUTES_MS) return false;
   const expected = createHmac("sha256", secret).update(`${timestamp}.${rawBody}`).digest("hex");
-  return sameHex(expected, digest);
+  let matched = false;
+  for (const digest of signatures) matched = sameHex(expected, digest) || matched;
+  return matched;
 }

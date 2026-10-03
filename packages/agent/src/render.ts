@@ -3,7 +3,7 @@ import { randomBytes } from "node:crypto";
 export const TEMPLATE_VERSION = "3";
 export const CURRENT_TIME_PLACEHOLDER = "{{current_time}}";
 export const PROMPT_BUDGET = 24_000;
-export const DECLARED_TOOLS = ["take_message", "transfer", "callback"] as const;
+export const DECLARED_TOOLS = ["take_message", "transfer"] as const;
 
 export const REFERENCE_START = "REFERENCE START";
 export const REFERENCE_END = "REFERENCE END";
@@ -153,8 +153,8 @@ function section(label: string, value: string | null | undefined, token: string)
 }
 
 export function toolsForFeatures(features: PromptFeatures | null | undefined): string[] {
-  const tools = ["take_message", "callback"];
-  if (features?.liveTransfer) tools.splice(1, 0, "transfer");
+  const tools = ["take_message"];
+  if (features?.liveTransfer) tools.push("transfer");
   return tools;
 }
 

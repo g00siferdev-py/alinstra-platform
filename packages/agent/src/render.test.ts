@@ -40,7 +40,7 @@ describe("prompt rendering", () => {
     expect(rendered.text).toContain("Stay on the business's topics.");
     expect(rendered.text).toContain("Greeting: Thank you for calling Alinstra. This is Ava. This call may be recorded.");
     expect(rendered.text.split("\n").find((line) => line.startsWith("Greeting:"))).not.toMatch(/AI receptionist/i);
-    expect(rendered.tools).toEqual(["take_message", "callback"]);
+    expect(rendered.tools).toEqual(["take_message"]);
     expect(rendered.text).toContain('Pronounce the business name as "uh-LIN-struh".');
     expect(rendered.text).not.toContain("This is an HVAC company");
   });
@@ -143,12 +143,12 @@ describe("prompt rendering", () => {
     expect(requestOnly.text).toContain("Never claim an appointment is booked.");
     expect(requestOnly.text).toContain("Live transfer is off.");
     expect(requestOnly.text).toContain("Message delivery: Text the on-call tech");
-    expect(requestOnly.tools).toEqual(["take_message", "callback"]);
+    expect(requestOnly.tools).toEqual(["take_message"]);
 
     const transferable = renderPrompt({ ...base, features: { liveTransfer: true, bookingMode: "direct_calendar" } });
     expect(transferable.text).toContain("Live transfer is on. Transfer only according to the staff directory.");
     expect(transferable.text).toContain("Booking mode is direct calendar.");
-    expect(transferable.tools).toEqual(["take_message", "transfer", "callback"]);
+    expect(transferable.tools).toEqual(["take_message", "transfer"]);
   });
 
   it("keeps marker-like text and the real token from closing the reference block", () => {

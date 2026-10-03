@@ -54,6 +54,8 @@ export {
   clientMessages,
   decideTransfer,
   endServiceNow,
+  failProvisioning,
+  refreshPaymentLink,
   inboundVariables,
   provisioningRuns,
   recordTakenMessage,
@@ -65,5 +67,5 @@ export {
   transferTargets,
   type Phase3Deps,
 } from "./provision";
-export { clientIsHealthcare, formatTransferTargets, formatWeeklyHours, maskCaller, officeOpen, retellPrompt } from "./domain";
-export type { Actor } from "./changes";
+export { assertTransferNumber, clientIsHealthcare, formatTransferTargets, formatWeeklyHours, maskCaller, normalizeTransferNumber, officeOpen, plainCallerName, retellPrompt } from "./domain";
+export { recordEmailChange, type Actor } from "./changes";

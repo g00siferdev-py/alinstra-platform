@@ -162,6 +162,12 @@ Tests connect to a database whose name ends in `_test`. Locally that database is
 
 The admin notice email is queued only when a quick update applies immediately. The worker sends it to `ADMIN_EMAIL`. Held updates and change requests are listed on the admin home instead.
 
+## 2026-10-03 — Stripe API version and Retell number binding
+
+Stripe requests send `Stripe-Version: 2026-09-30.endive`. That is the current version as of 3 October 2026. Billing-period end is read from `items.data[].current_period_end` (the largest item), which has been the shape since `2025-03-31.basil`. The webhook endpoint in the Stripe dashboard must use this same version. A missing or past period end is an error and is not saved.
+
+Retell phone numbers bind with `inbound_agents` and `agent_version: "latest_published"`, because the create-phone-number schema does not document a default for an omitted version. Outbound transfers are limited to US and Canada on the number, and transfer targets in the app are +1 NANP numbers only, excluding 900 and 976. Retell LLMs have no name field, so a crash between create and save can leave an orphan LLM. Those objects are not billed monthly.
+
 ## 2026-10-02 — Phase 3 providers
 
 A single-prompt Retell agent is a Retell LLM plus an agent that references `llm_id`. Retell has no sandbox. Staging uses one real number (client zero) on Daniel's Alinstra Technologies, LLC account. One API key per environment covers API calls and webhook checks. Verification is the signature and the five-minute timestamp. There is no IP allowlist.

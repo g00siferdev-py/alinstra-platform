@@ -77,8 +77,14 @@ export function validateQuickUpdate(input: QuickUpdateInput): string | null {
     for (const raw of input.text.split(/\r?\n/)) {
       const line = raw.trim();
       if (!line) continue;
-      if (!/,\s*\+[1-9]\d{7,14}\s*$/.test(line) || line.startsWith(",")) {
-        return "Enter each transfer target as Label, +E.164.";
+      if (line.startsWith(",")) return "Transfer numbers must be US or Canada numbers, like +14235550142.";
+      const comma = line.lastIndexOf(",");
+      const number = (comma === -1 ? line : line.slice(comma + 1)).trim();
+      const area = number.slice(2, 5);
+      const exchange = number.slice(5, 8);
+      const nanp = /^\+1[2-9]\d{2}[2-9]\d{6}$/.test(number);
+      if (!nanp || area === "900" || exchange === "900" || exchange === "976") {
+        return "Transfer numbers must be US or Canada numbers, like +14235550142.";
       }
     }
     return null;

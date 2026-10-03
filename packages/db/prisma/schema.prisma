@@ -151,14 +151,15 @@ model Client {
   compliance                      Json?
   weeklyHours                     Json?
   billingStatus                   String    @default("none")
-  stripeCustomerId                String?
-  stripeSubscriptionId            String?
+  stripeCustomerId                String?   @unique
+  stripeSubscriptionId            String?   @unique
   stripeCheckoutUrl               String?
+  stripeCheckoutExpiresAt         DateTime?
   paidAt                          DateTime?
   serviceEndsAt                   DateTime?
-  retellLlmId                     String?
-  retellAgentId                   String?
-  phoneE164                       String?
+  retellLlmId                     String?   @unique
+  retellAgentId                   String?   @unique
+  phoneE164                       String?   @unique
   agentSyncStatus                 String    @default("not_provisioned")
   agentSyncError                  String?
   syncedConfigId                  String?
@@ -418,6 +419,16 @@ model ProvisioningStep {
 
   @@unique([runId, name])
   @@map("provisioning_step")
+}
+
+/// Processed Stripe webhook ids. A duplicate event id is ignored.
+model StripeEvent {
+  id        String   @id @default(cuid())
+  eventId   String   @unique
+  type      String
+  createdAt DateTime @default(now())
+
+  @@map("stripe_event")
 }
 
 /// Stripe Price ids created from the plan catalog. `metered_overage` is reserved for Phase 6.

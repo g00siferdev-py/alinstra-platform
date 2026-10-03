@@ -33,7 +33,7 @@ type Payload = {
   features: Record<string, string | boolean>;
   voice: Record<string, string>;
   knowledge: Record<string, string>;
-  phone: Record<string, string>;
+  phone: Record<string, string | boolean>;
   compliance: Record<string, string | boolean>;
   portalOwnerEmail?: string;
 };
@@ -503,7 +503,7 @@ export function WizardForm({
         <div className="grid gap-3">
           <div>
             <FieldLabel label="Phone setup" hint="New number means Alinstra will provide one later. Forwarding means the existing line sends calls to the receptionist. Nothing is purchased here." />
-            <select className="w-full cursor-pointer rounded-md border border-[var(--line)] px-3 py-2 text-sm" value={payload.phone.mode ?? ""} onChange={(event) => setPayload({ ...payload, phone: { ...payload.phone, mode: event.target.value } })}>
+            <select className="w-full cursor-pointer rounded-md border border-[var(--line)] px-3 py-2 text-sm" value={String(payload.phone.mode ?? "")} onChange={(event) => setPayload({ ...payload, phone: { ...payload.phone, mode: event.target.value } })}>
               <option value="">Choose</option>
               <option value="new_number">New number</option>
               <option value="forward">Forwarding</option>
@@ -511,11 +511,33 @@ export function WizardForm({
           </div>
           <div>
             <FieldLabel label="Carrier" hint="The phone company or phone system the business uses today." />
-            <Input value={payload.phone.carrier ?? ""} onChange={(event) => setPayload({ ...payload, phone: { ...payload.phone, carrier: event.target.value } })} />
+            <Input value={String(payload.phone.carrier ?? "")} onChange={(event) => setPayload({ ...payload, phone: { ...payload.phone, carrier: event.target.value } })} />
           </div>
           <div>
             <FieldLabel label="Current number" hint="The number callers use now." />
-            <Input value={payload.phone.currentNumber ?? ""} onChange={(event) => setPayload({ ...payload, phone: { ...payload.phone, currentNumber: event.target.value } })} />
+            <Input value={String(payload.phone.currentNumber ?? "")} onChange={(event) => setPayload({ ...payload, phone: { ...payload.phone, currentNumber: event.target.value } })} />
+          </div>
+          <div className="flex items-start gap-2 text-sm">
+            <input
+              className="mt-0.5"
+              type="checkbox"
+              checked={payload.phone.tollFree === true}
+              onChange={(event) => setPayload({
+                ...payload,
+                phone: { ...payload.phone, tollFree: event.target.checked, areaCode: event.target.checked ? "" : String(payload.phone.areaCode ?? "") },
+              })}
+            />
+            <FieldLabel label="Toll-free number" hint="Alinstra buys an 800-style number. Leave this checked for client zero. A toll-free number does not use an area code." />
+          </div>
+          <div>
+            <FieldLabel label="Preferred area code (optional, 3 digits)" hint="Used for a local number. Leave it blank to use the staging default, if one is set." />
+            <Input
+              value={String(payload.phone.areaCode ?? "")}
+              inputMode="numeric"
+              maxLength={3}
+              disabled={payload.phone.tollFree === true}
+              onChange={(event) => setPayload({ ...payload, phone: { ...payload.phone, areaCode: event.target.value.replace(/\D/g, "").slice(0, 3) } })}
+            />
           </div>
         </div>
       ) : null}

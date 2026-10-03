@@ -29,6 +29,9 @@ export function SignOutControl({ email, replaceAuthenticator }: { email: string;
       </button>
       {open ? (
         <div className="absolute right-0 z-10 mt-1 grid min-w-48 gap-1 rounded-md border border-[var(--line)] bg-[var(--card)] p-2 shadow-sm" role="menu">
+          <GuardedLink className="rounded px-2 py-1 text-sm text-[var(--ink)] no-underline" href="/account">
+            Account
+          </GuardedLink>
           {replaceAuthenticator ? (
             <GuardedLink className="rounded px-2 py-1 text-sm text-[var(--ink)] no-underline" href="/account/security">
               Replace authenticator

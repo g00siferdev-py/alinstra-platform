@@ -1,19 +1,24 @@
 import type { BillingPlatform, PublishedTool, VoicePlatform } from "@alinstra/providers";
-import { overageLookupKey } from "@alinstra/providers";
-import type { Prisma } from "./generated/prisma/client";
+import { overageLookupKey, TAKE_MESSAGE_PARAMETERS, TRANSFER_CHECK_PARAMETERS } from "@alinstra/providers";
+import { Pool } from "pg";
+import { Prisma } from "./generated/prisma/client";
 import { recordChange, type Actor } from "./changes";
 import { prisma } from "./client";
 import {
+  assertTransferNumber,
   clientIsHealthcare,
   formatTransferTargets,
   maskCaller,
+  normalizeTransferNumber,
   officeOpen,
   parseRecipientEmails,
   parseTransferTargets,
+  plainCallerName,
   retellPrompt,
   type WeeklyHours,
 } from "./domain";
 import { assertTenantContext, type TenantContext } from "./tenant";
+import { testDatabaseUrl } from "./test-database-url";
 
 const PROVISION_STEPS = ["stripe_customer", "stripe_checkout", "retell_llm", "retell_agent", "retell_number", "retell_bind"] as const;
 const TEARDOWN_STEPS = ["retell_number", "retell_agent", "retell_llm"] as const;
@@ -27,7 +32,35 @@ export type Phase3Deps = {
   voiceId: string;
   danielNumber: string | null;
   danielEmail: string | null;
+  defaultAreaCode: string | null;
+  defaultTollFree: boolean;
 };
+
+let lockPool: Pool | undefined;
+
+function provisionLockPool(): Pool {
+  if (!lockPool) {
+    const configured = process.env.DATABASE_URL ?? "";
+    const connectionString = process.env.NODE_ENV === "test" ? testDatabaseUrl(configured, process.env.DATABASE_URL_TEST) : configured;
+    lockPool = new Pool({ connectionString, max: 4, idleTimeoutMillis: 1_000, allowExitOnIdle: true });
+  }
+  return lockPool;
+}
+
+async function withClientLock<T>(clientId: string, work: () => Promise<T>): Promise<T | "busy"> {
+  const client = await provisionLockPool().connect();
+  const key = `alinstra:${clientId}`;
+  let held = false;
+  try {
+    const locked = await client.query<{ locked: boolean }>("SELECT pg_try_advisory_lock(hashtext($1)) AS locked", [key]);
+    held = Boolean(locked.rows[0]?.locked);
+    if (!held) return "busy";
+    return await work();
+  } finally {
+    if (held) await client.query("SELECT pg_advisory_unlock(hashtext($1))", [key]).catch(() => undefined);
+    client.release();
+  }
+}
 
 function origin(appUrl: string): string {
   return appUrl.replace(/\/$/, "");
@@ -126,22 +159,29 @@ export async function replaceTransferTargets(
   return { sync };
 }
 
-function toolsFor(appUrl: string, targets: Array<{ label: string; e164: string }>): PublishedTool[] {
+function liveTransferOn(features: unknown): boolean {
+  return Boolean(features && typeof features === "object" && (features as { liveTransfer?: boolean }).liveTransfer);
+}
+
+function toolsFor(appUrl: string, targets: Array<{ label: string; e164: string }>, features: unknown): PublishedTool[] {
   const base = origin(appUrl);
   const tools: PublishedTool[] = [
     {
       name: "take_message",
-      description: "Save a message for the office. Use this when the office is closed, a transfer is not allowed, or you are unsure. A failure means offer to take a message. Do not invent a booking.",
+      description: "Save a message for the office. Ask for the caller's name, callback number, and message before calling. Use this when the office is closed, a transfer is not allowed, or you are unsure. Do not invent a booking.",
       url: `${base}/api/retell/tools/take-message`,
       timeoutMs: 8000,
+      parameters: TAKE_MESSAGE_PARAMETERS,
     },
   ];
-  if (targets.length === 0) return tools;
+  if (!liveTransferOn(features) || targets.length === 0) return tools;
+  const allowed = targets.map((target) => `${target.label} ${target.e164}`).join("; ");
   tools.push({
     name: "transfer",
-    description: "Ask before transferring. Only the numbers in this account are allowed, and only during business hours. If this tool says the office is closed, take a message.",
+    description: `Ask before transferring. Call this with number set to one of these targets only: ${allowed}. If this tool says the office is closed, take a message.`,
     url: `${base}/api/retell/tools/transfer`,
     timeoutMs: 8000,
+    parameters: TRANSFER_CHECK_PARAMETERS,
   });
   for (const target of targets) {
     tools.push({
@@ -167,7 +207,7 @@ export async function createClientZero(ctx: Actor): Promise<{ id: string; create
   const existing = await prisma.client.findFirst({ where: { internal: true, archivedAt: null }, select: { id: true } });
   if (existing) return { id: existing.id, created: false };
   return prisma.$transaction(async (tx) => {
-    const client = await tx.client.create({ data: { name: "Alinstra", internal: true, status: "lead" } });
+    const client = await tx.client.create({ data: { name: "Alinstra", internal: true, status: "lead", phone: { tollFree: true } } });
     await recordChange(tx, {
       clientId: client.id,
       actor: ctx,
@@ -197,7 +237,8 @@ export async function startProvisioning(ctx: Actor, clientId: string): Promise<{
     orderBy: { createdAt: "desc" },
   });
   if (existing) return { runId: existing.id };
-  return prisma.$transaction(async (tx) => {
+  try {
+  return await prisma.$transaction(async (tx) => {
     const run = await tx.provisioningRun.create({
       data: {
         clientId,
@@ -216,6 +257,43 @@ export async function startProvisioning(ctx: Actor, clientId: string): Promise<{
       summary: `Started provisioning for ${client.name}`,
     });
     return { runId: run.id };
+  });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      const raced = await prisma.provisioningRun.findFirst({
+        where: { clientId, kind: "provision", status: { in: ["running", "failed"] } },
+        orderBy: { createdAt: "desc" },
+      });
+      if (raced) return { runId: raced.id };
+    }
+    throw error;
+  }
+}
+
+export async function failProvisioning(clientId: string, message: string): Promise<void> {
+  const run = await prisma.provisioningRun.findFirst({
+    where: { clientId, kind: "provision", status: "running" },
+    orderBy: { createdAt: "desc" },
+    include: { steps: true },
+  });
+  if (!run) return;
+  const step = run.steps.find((item) => item.status === "running") ?? run.steps.find((item) => item.status === "pending");
+  await prisma.$transaction(async (tx) => {
+    await tx.provisioningRun.update({ where: { id: run.id }, data: { status: "failed" } });
+    if (step) {
+      await tx.provisioningStep.update({
+        where: { id: step.id },
+        data: { status: "failed", error: message.slice(0, 500), finishedAt: new Date() },
+      });
+    }
+    await recordChange(tx, {
+      clientId,
+      actor: WEBHOOK_ACTOR,
+      action: "provision.failed",
+      entityType: "provisioning_run",
+      entityId: run.id,
+      summary: message.slice(0, 300),
+    });
   });
 }
 
@@ -249,9 +327,82 @@ function monthlyCents(client: { overrideMonthlyPriceCents: number | null }, plan
   return client.overrideMonthlyPriceCents ?? plan.monthlyPriceCents;
 }
 
+function lookupKeyFor(kind: "monthly" | "setup", planCode: string, clientId: string, overridden: boolean): string {
+  return overridden ? `client_${clientId}_${kind}` : `plan_${planCode}_${kind}`;
+}
+
+function numberChoice(phone: unknown, defaults: { areaCode: string | null; tollFree: boolean }): { tollFree: boolean; areaCode: number | null } {
+  const row = phone && typeof phone === "object" ? (phone as { tollFree?: unknown; areaCode?: unknown }) : {};
+  const tollFree = typeof row.tollFree === "boolean" ? row.tollFree : defaults.tollFree;
+  if (tollFree) return { tollFree: true, areaCode: null };
+  const chosen = typeof row.areaCode === "string" && /^\d{3}$/.test(row.areaCode) ? row.areaCode : defaults.areaCode ?? "";
+  return { tollFree: false, areaCode: /^\d{3}$/.test(chosen) ? Number(chosen) : null };
+}
+
+const CHECKOUT_REFRESH_MS = 10 * 60 * 1000;
+
+function checkoutStillFresh(url: string | null, expiresAt: Date | null, now = Date.now()): boolean {
+  return Boolean(url && expiresAt && expiresAt.getTime() > now + CHECKOUT_REFRESH_MS);
+}
+
 function setupCents(client: { setupFeeWaived: boolean; overrideSetupFeeCents: number | null }, plan: { setupFeeCents: number }): number | null {
   if (client.setupFeeWaived) return null;
   return client.overrideSetupFeeCents ?? plan.setupFeeCents;
+}
+
+async function openCheckout(clientId: string, deps: Phase3Deps, now = Date.now()): Promise<{ url: string; expiresAt: Date }> {
+  const { client, plan } = await loadReady(clientId);
+  if (client.internal) throw new Error("Client zero is not billed.");
+  if (!plan) throw new Error("Choose a plan before billing.");
+  if (!client.stripeCustomerId) throw new Error("Create the Stripe customer first.");
+  const recurringAmount = monthlyCents(client, plan);
+  const setupAmount = setupCents(client, plan);
+  const recurringKey = lookupKeyFor("monthly", plan.code, clientId, client.overrideMonthlyPriceCents != null);
+  const recurring = await deps.billing.ensurePrice({
+    lookupKey: recurringKey,
+    amountCents: recurringAmount,
+    kind: "recurring",
+    productName: `${plan.name} monthly`,
+    idempotencyKey: `price_${recurringKey}_${recurringAmount}`,
+  });
+  await rememberPrice(recurringKey, recurring.priceId, plan.code, "recurring", recurringAmount);
+  let setupPriceId: string | null = null;
+  if (setupAmount !== null) {
+    const setupKey = lookupKeyFor("setup", plan.code, clientId, client.overrideSetupFeeCents != null);
+    const setup = await deps.billing.ensurePrice({
+      lookupKey: setupKey,
+      amountCents: setupAmount,
+      kind: "setup",
+      productName: `${plan.name} setup`,
+      idempotencyKey: `price_${setupKey}_${setupAmount}`,
+    });
+    await rememberPrice(setupKey, setup.priceId, plan.code, "setup", setupAmount);
+    setupPriceId = setup.priceId;
+  }
+  const base = origin(deps.appUrl);
+  const session = await deps.billing.createCheckout({
+    clientId,
+    customerId: client.stripeCustomerId,
+    recurringPriceId: recurring.priceId,
+    setupPriceId,
+    successUrl: `${base}/billing/thanks`,
+    cancelUrl: `${base}/billing/canceled`,
+    idempotencyKey: `client_${clientId}_checkout_${recurring.priceId}_${now}`,
+  });
+  await prisma.client.update({
+    where: { id: clientId },
+    data: { stripeCheckoutUrl: session.url, stripeCheckoutExpiresAt: session.expiresAt, billingStatus: "checkout_open" },
+  });
+  return { url: session.url, expiresAt: session.expiresAt };
+}
+
+export async function refreshPaymentLink(ctx: Actor, clientId: string, deps: Phase3Deps): Promise<{ url: string }> {
+  if (ctx.role !== "admin") throw new Error("Only an admin can send a payment link.");
+  const { client } = await loadReady(clientId);
+  if (client.internal) throw new Error("Client zero is not billed.");
+  if (client.billingStatus === "paid") throw new Error("This client is already paid.");
+  const session = await openCheckout(clientId, deps);
+  return { url: session.url };
 }
 
 async function rememberPrice(lookupKey: string, stripePriceId: string, planCode: string, kind: string, amountCents: number) {
@@ -266,6 +417,12 @@ async function rememberPrice(lookupKey: string, stripePriceId: string, planCode:
 }
 
 export async function advanceProvisioning(ctx: Actor, clientId: string, deps: Phase3Deps): Promise<{ status: string }> {
+  const locked = await withClientLock(clientId, () => advanceProvisioningBody(ctx, clientId, deps));
+  if (locked === "busy") return { status: "busy" };
+  return locked;
+}
+
+async function advanceProvisioningBody(ctx: Actor, clientId: string, deps: Phase3Deps): Promise<{ status: string }> {
   if (ctx.role !== "admin") throw new Error("Only an admin can provision a client.");
   const run = await prisma.provisioningRun.findFirst({
     where: { clientId, kind: "provision", status: { in: ["running", "failed"] } },
@@ -297,7 +454,8 @@ export async function advanceProvisioning(ctx: Actor, clientId: string, deps: Ph
 
 async function ensureDanielTarget(clientId: string, number: string | null) {
   const count = await prisma.transferTarget.count({ where: { clientId } });
-  if (count > 0 || !number || !/^\+[1-9]\d{7,14}$/.test(number)) return;
+  if (count > 0 || !number) return;
+  assertTransferNumber(number);
   await prisma.transferTarget.create({ data: { clientId, label: "Daniel", e164: number } });
 }
 
@@ -313,14 +471,14 @@ async function publishInput(clientId: string, deps: Phase3Deps) {
     targets,
     prompt: retellPrompt(loaded.config.promptText, loaded.client.timezone),
     beginMessage: loaded.config.greeting?.trim() || "Thank you for calling.",
-    tools: toolsFor(deps.appUrl, targets),
+    tools: toolsFor(deps.appUrl, targets, loaded.client.features),
     webhookUrl: `${base}/api/retell/webhook`,
     inboundWebhookUrl: `${base}/api/retell/inbound`,
   };
 }
 
 async function runProvisionStep(name: (typeof PROVISION_STEPS)[number], clientId: string, deps: Phase3Deps): Promise<string> {
-  const { client, plan } = await loadReady(clientId);
+  const { client } = await loadReady(clientId);
   if (name === "stripe_customer") {
     if (client.internal) return "skipped";
     if (client.stripeCustomerId) return client.stripeCustomerId;
@@ -337,51 +495,14 @@ async function runProvisionStep(name: (typeof PROVISION_STEPS)[number], clientId
   if (name === "stripe_checkout") {
     if (client.internal) return "skipped";
     if (client.billingStatus === "paid") return client.stripeSubscriptionId ?? "paid";
-    if (client.stripeCheckoutUrl) return client.stripeCheckoutUrl;
-    if (!plan) throw new Error("Choose a plan before billing.");
-    const recurringAmount = monthlyCents(client, plan);
-    const setupAmount = setupCents(client, plan);
-    const recurringKey = `plan_${plan.code}_monthly`;
-    const recurring = await deps.billing.ensurePrice({
-      lookupKey: recurringKey,
-      amountCents: recurringAmount,
-      kind: "recurring",
-      productName: `${plan.name} monthly`,
-      idempotencyKey: `price_${recurringKey}_${recurringAmount}`,
-    });
-    await rememberPrice(recurringKey, recurring.priceId, plan.code, "recurring", recurringAmount);
-    let setupPriceId: string | null = null;
-    if (setupAmount !== null) {
-      const setupKey = `plan_${plan.code}_setup`;
-      const setup = await deps.billing.ensurePrice({
-        lookupKey: setupKey,
-        amountCents: setupAmount,
-        kind: "setup",
-        productName: `${plan.name} setup`,
-        idempotencyKey: `price_${setupKey}_${setupAmount}`,
-      });
-      await rememberPrice(setupKey, setup.priceId, plan.code, "setup", setupAmount);
-      setupPriceId = setup.priceId;
-    }
-    if (!client.stripeCustomerId) throw new Error("Create the Stripe customer first.");
-    const base = origin(deps.appUrl);
-    const session = await deps.billing.createCheckout({
-      clientId,
-      customerId: client.stripeCustomerId,
-      recurringPriceId: recurring.priceId,
-      setupPriceId,
-      successUrl: `${base}/admin/clients/${clientId}?billing=return`,
-      cancelUrl: `${base}/admin/clients/${clientId}?billing=cancel`,
-      idempotencyKey: `client_${clientId}_checkout_${recurring.priceId}`,
-    });
-    await prisma.client.update({ where: { id: clientId }, data: { stripeCheckoutUrl: session.url, billingStatus: "checkout_open" } });
+    if (checkoutStillFresh(client.stripeCheckoutUrl, client.stripeCheckoutExpiresAt)) return client.stripeCheckoutUrl ?? "open";
+    const session = await openCheckout(clientId, deps);
     return session.url;
   }
   const published = await publishInput(clientId, deps);
   if (name === "retell_llm") {
     if (client.retellLlmId) return client.retellLlmId;
-    const found = await deps.voice.findLlmId(clientId);
-    const llmId = found ?? (await deps.voice.createLlm({
+    const llmId = (await deps.voice.createLlm({
       clientId,
       prompt: published.prompt,
       beginMessage: published.beginMessage,
@@ -412,10 +533,13 @@ async function runProvisionStep(name: (typeof PROVISION_STEPS)[number], clientId
     if (client.phoneE164) return client.phoneE164;
     if (!client.retellAgentId) throw new Error("Create the Retell agent first.");
     const found = await deps.voice.findNumber(clientId);
+    const choice = numberChoice(client.phone, { areaCode: deps.defaultAreaCode, tollFree: deps.defaultTollFree });
     const e164 = found ?? (await deps.voice.createNumber({
       clientId,
       agentId: client.retellAgentId,
       inboundWebhookUrl: published.inboundWebhookUrl,
+      tollFree: choice.tollFree,
+      areaCode: choice.areaCode,
     })).e164;
     await prisma.client.update({ where: { id: clientId }, data: { phoneE164: e164 } });
     return e164;
@@ -501,6 +625,11 @@ export async function syncProvisionedAgent(clientId: string, deps: Phase3Deps): 
 }
 
 async function teardown(clientId: string, deps: Phase3Deps, actor: Actor): Promise<void> {
+  const locked = await withClientLock(clientId, () => teardownBody(clientId, deps, actor));
+  if (locked === "busy") throw new Error("Another provisioning job is running for this client.");
+}
+
+async function teardownBody(clientId: string, deps: Phase3Deps, actor: Actor): Promise<void> {
   const client = await prisma.client.findFirst({ where: { id: clientId } });
   if (!client || client.status === "churned") return;
   let run = await prisma.provisioningRun.findFirst({
@@ -553,7 +682,17 @@ async function teardown(clientId: string, deps: Phase3Deps, actor: Actor): Promi
     await tx.provisioningRun.update({ where: { id: run.id }, data: { status: "succeeded", finishedAt: new Date() } });
     await tx.client.update({
       where: { id: clientId },
-      data: { status: "churned", billingStatus: client.billingStatus === "none" ? "none" : "canceled", agentSyncStatus: "not_provisioned" },
+      data: {
+        status: "churned",
+        billingStatus: client.billingStatus === "none" ? "none" : "canceled",
+        agentSyncStatus: "not_provisioned",
+        phoneE164: null,
+        retellAgentId: null,
+        retellLlmId: null,
+        stripeCheckoutUrl: null,
+        stripeCheckoutExpiresAt: null,
+        syncedConfigId: null,
+      },
     });
     await recordChange(tx, {
       clientId,
@@ -599,15 +738,32 @@ export async function endServiceNow(ctx: Actor, clientId: string, deps: Phase3De
   await teardown(clientId, deps, ctx);
 }
 
-export async function runDueTeardowns(deps: Phase3Deps, now = new Date()): Promise<number> {
+const EARLIEST_SERVICE_END = new Date("2020-01-01T00:00:00.000Z");
+
+export async function runDueTeardowns(
+  deps: Phase3Deps,
+  now = new Date(),
+): Promise<{ completed: number; skipped: string[]; failed: Array<{ clientId: string; error: string }> }> {
   const due = await prisma.client.findMany({
     where: { billingStatus: "cancel_scheduled", serviceEndsAt: { lte: now }, status: { not: "churned" } },
-    select: { id: true },
+    select: { id: true, serviceEndsAt: true, paidAt: true },
   });
+  const skipped: string[] = [];
+  const failed: Array<{ clientId: string; error: string }> = [];
+  let completed = 0;
   for (const client of due) {
-    await teardown(client.id, deps, WEBHOOK_ACTOR);
+    if (!client.serviceEndsAt || client.serviceEndsAt < EARLIEST_SERVICE_END || (client.paidAt && client.serviceEndsAt < client.paidAt)) {
+      skipped.push(client.id);
+      continue;
+    }
+    try {
+      await teardown(client.id, deps, WEBHOOK_ACTOR);
+      completed += 1;
+    } catch (error) {
+      failed.push({ clientId: client.id, error: error instanceof Error ? error.message : "Teardown failed" });
+    }
   }
-  return due.length;
+  return { completed, skipped, failed };
 }
 
 function recipientsOf(features: unknown, internal: boolean, danielEmail: string | null): string[] {
@@ -631,7 +787,7 @@ export async function recordTakenMessage(
     const row = await tx.clientMessage.create({
       data: {
         clientId,
-        callerName: (args.callerName ?? "Caller").trim().slice(0, 120) || "Caller",
+        callerName: plainCallerName(args.callerName ?? "Caller"),
         callbackNumber: (args.callbackNumber ?? "").trim().slice(0, 40),
         body: body.slice(0, 4000),
       },
@@ -652,11 +808,12 @@ export async function decideTransfer(clientId: string, number: string, now = new
   const client = await prisma.client.findFirst({ where: { id: clientId, archivedAt: null } });
   if (!client) return "I can't transfer this call. I'll take a message instead.";
   const targets = await prisma.transferTarget.findMany({ where: { clientId } });
-  const allowed = targets.some((target) => target.e164 === number);
+  const normalized = normalizeTransferNumber(number);
+  const allowed = normalized !== null && targets.some((target) => target.e164 === normalized);
   if (!allowed || !officeOpen(client.weeklyHours, client.timezone, now)) {
     return "The office can't take a transfer right now. Offer to take a message instead.";
   }
-  return `Transfer is allowed to ${number}.`;
+  return `Transfer is allowed to ${normalized}.`;
 }
 
 export async function inboundVariables(toNumber: string, now = new Date()): Promise<{ office_open: "yes" | "no"; allowed_numbers: string }> {
@@ -738,49 +895,121 @@ export async function applyRetellCall(payload: CallPayload): Promise<void> {
 }
 
 type StripeEvent = {
+  id?: string;
   type?: string;
   data?: { object?: Record<string, unknown> };
 };
 
-export async function applyStripeEvent(event: StripeEvent): Promise<void> {
+export type StripeApplyResult = { notify?: { subject: string; text: string } };
+
+function stripeCustomerId(object: Record<string, unknown>): string {
+  if (typeof object.customer === "string") return object.customer;
+  if (object.customer && typeof object.customer === "object" && typeof (object.customer as { id?: unknown }).id === "string") {
+    return (object.customer as { id: string }).id;
+  }
+  return "";
+}
+
+function unixDate(value: unknown, fallback: Date): Date {
+  const seconds = Number(value);
+  if (!Number.isFinite(seconds) || seconds <= 0) return fallback;
+  return new Date(seconds * 1000);
+}
+
+export async function applyStripeEvent(event: StripeEvent, now = new Date()): Promise<StripeApplyResult> {
+  const eventId = event.id ?? "";
+  if (!eventId || !event.type) return {};
   const object = event.data?.object ?? {};
   const metadata = object.metadata && typeof object.metadata === "object" ? (object.metadata as { client_id?: string }) : {};
   const clientId = metadata.client_id ?? (typeof object.client_reference_id === "string" ? object.client_reference_id : "");
-  if (event.type === "checkout.session.completed" && clientId) {
-    const subscriptionId = typeof object.subscription === "string" ? object.subscription : null;
+  let notify: StripeApplyResult["notify"];
+  try {
     await prisma.$transaction(async (tx) => {
-      const client = await tx.client.findFirst({ where: { id: clientId, archivedAt: null } });
-      if (!client || client.internal) return;
-      const live = Boolean(client.phoneE164);
-      await tx.client.update({
-        where: { id: clientId },
-        data: {
-          billingStatus: "paid",
-          paidAt: client.paidAt ?? new Date(),
-          stripeSubscriptionId: subscriptionId ?? client.stripeSubscriptionId,
-          status: live ? "live" : client.status,
-          liveAt: live ? client.liveAt ?? new Date() : client.liveAt,
-        },
-      });
-      await recordChange(tx, {
-        clientId,
-        actor: WEBHOOK_ACTOR,
-        action: "billing.paid",
-        entityType: "client",
-        entityId: clientId,
-        summary: `Payment received for ${client.name}`,
-        after: { billingStatus: "paid" },
-      });
+      await tx.stripeEvent.create({ data: { eventId, type: event.type ?? "unknown" } });
+      if (event.type === "checkout.session.completed" && clientId) {
+        const paymentStatus = typeof object.payment_status === "string" ? object.payment_status : "";
+        if (paymentStatus !== "paid" && paymentStatus !== "no_payment_required") return;
+        const subscriptionId = typeof object.subscription === "string" ? object.subscription : null;
+        const client = await tx.client.findFirst({ where: { id: clientId, archivedAt: null } });
+        if (!client || client.internal) return;
+        const live = Boolean(client.phoneE164);
+        await tx.client.update({
+          where: { id: clientId },
+          data: {
+            billingStatus: "paid",
+            paidAt: client.paidAt ?? now,
+            stripeSubscriptionId: subscriptionId ?? client.stripeSubscriptionId,
+            status: live ? "live" : client.status,
+            liveAt: live ? client.liveAt ?? now : client.liveAt,
+          },
+        });
+        await recordChange(tx, {
+          clientId,
+          actor: WEBHOOK_ACTOR,
+          action: "billing.paid",
+          entityType: "client",
+          entityId: clientId,
+          summary: `Payment received for ${client.name}`,
+          after: { billingStatus: "paid" },
+        });
+      }
+      if (event.type === "checkout.session.expired" && clientId) {
+        await tx.client.updateMany({
+          where: { id: clientId, billingStatus: "checkout_open" },
+          data: { stripeCheckoutUrl: null, stripeCheckoutExpiresAt: null },
+        });
+      }
+      if (event.type === "invoice.payment_failed") {
+        const customer = stripeCustomerId(object);
+        const client = customer
+          ? await tx.client.findFirst({ where: { stripeCustomerId: customer, archivedAt: null, internal: false } })
+          : null;
+        if (!client) return;
+        await tx.client.update({ where: { id: client.id }, data: { billingStatus: "past_due" } });
+        await recordChange(tx, {
+          clientId: client.id,
+          actor: WEBHOOK_ACTOR,
+          action: "billing.past_due",
+          entityType: "client",
+          entityId: client.id,
+          summary: `A payment failed for ${client.name}`,
+          after: { billingStatus: "past_due" },
+        });
+        notify = {
+          subject: `Payment failed for ${client.name}`,
+          text: `Stripe reported a failed invoice for ${client.name}. The client is past due.`,
+        };
+      }
+      if (event.type === "customer.subscription.deleted") {
+        const subscriptionId = typeof object.id === "string" ? object.id : "";
+        if (!subscriptionId) return;
+        const client = await tx.client.findFirst({ where: { stripeSubscriptionId: subscriptionId, archivedAt: null } });
+        if (!client || client.status === "churned") return;
+        const serviceEndsAt = unixDate(object.ended_at, now);
+        await tx.client.update({
+          where: { id: client.id },
+          data: { billingStatus: "cancel_scheduled", serviceEndsAt },
+        });
+        await recordChange(tx, {
+          clientId: client.id,
+          actor: WEBHOOK_ACTOR,
+          action: "billing.subscription_deleted",
+          entityType: "client",
+          entityId: client.id,
+          summary: `Stripe canceled the subscription for ${client.name}`,
+          after: { billingStatus: "cancel_scheduled", serviceEndsAt: serviceEndsAt.toISOString() },
+        });
+        notify = {
+          subject: `Subscription canceled for ${client.name}`,
+          text: `Stripe canceled the subscription for ${client.name}. Service is scheduled to stop.`,
+        };
+      }
     });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") return {};
+    throw error;
   }
-  if (event.type === "invoice.payment_failed" && clientId) {
-    await prisma.client.updateMany({ where: { id: clientId, internal: false }, data: { billingStatus: "past_due" } });
-  }
-  if (event.type === "customer.subscription.deleted") {
-    const subscriptionId = typeof object.id === "string" ? object.id : "";
-    if (!subscriptionId) return;
-    await prisma.client.updateMany({ where: { stripeSubscriptionId: subscriptionId }, data: { billingStatus: "canceled" } });
-  }
+  return notify ? { notify } : {};
 }
 
 export function formatTargetsFor(rows: Array<{ label: string; e164: string }>): string {

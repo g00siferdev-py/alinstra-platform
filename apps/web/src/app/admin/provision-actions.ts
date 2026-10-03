@@ -4,6 +4,7 @@ import { getEnv, log } from "@alinstra/config";
 import {
   createClientZero,
   endServiceNow,
+  refreshPaymentLink,
   replaceTransferTargets,
   scheduleChurn,
   startProvisioning,
@@ -27,6 +28,8 @@ function deps() {
     voiceId: env.RETELL_DEFAULT_VOICE_ID,
     danielNumber: env.DANIEL_TRANSFER_NUMBER || null,
     danielEmail: env.ADMIN_EMAIL,
+    defaultAreaCode: env.RETELL_DEFAULT_AREA_CODE || null,
+    defaultTollFree: env.RETELL_DEFAULT_TOLL_FREE === "true",
   };
 }
 
@@ -83,6 +86,17 @@ export async function endServiceNowAction(clientId: string) {
     return { ok: true };
   } catch (error) {
     return { error: message(error, "Could not end service.") };
+  }
+}
+
+export async function refreshPaymentLinkAction(clientId: string) {
+  const session = await requireAdmin();
+  try {
+    const link = await refreshPaymentLink(adminActor(session), clientId, deps());
+    revalidatePath(`/admin/clients/${clientId}`);
+    return { url: link.url };
+  } catch (error) {
+    return { error: message(error, "Could not create a payment link.") };
   }
 }
 

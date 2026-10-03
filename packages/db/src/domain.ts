@@ -118,6 +118,8 @@ export const phoneSchema = z.object({
   carrier: optionalText,
   currentNumber: optionalText,
   notes: optionalText,
+  areaCode: z.preprocess(emptyToUndefined, z.string().regex(/^\d{3}$/, "Preferred area code must be 3 digits.").optional()),
+  tollFree: z.preprocess((value) => value === true || value === "true", z.boolean()).optional(),
 });
 
 export const complianceSchema = z.object({
@@ -161,6 +163,38 @@ export function emptyWizardPayload(): WizardPayload {
 }
 
 export const E164 = /^\+[1-9]\d{7,14}$/;
+export const NANP_E164 = /^\+1[2-9]\d{2}[2-9]\d{6}$/;
+export const TRANSFER_NUMBER_ERROR = "Transfer numbers must be US or Canada numbers, like +14235550142.";
+
+export function assertTransferNumber(e164: string): void {
+  const area = e164.slice(2, 5);
+  const exchange = e164.slice(5, 8);
+  if (!NANP_E164.test(e164) || area === "900" || exchange === "900" || exchange === "976") {
+    throw new Error(TRANSFER_NUMBER_ERROR);
+  }
+}
+
+export function normalizeTransferNumber(input: string): string | null {
+  const digits = input.replace(/\D/g, "");
+  const withCountry = digits.length === 10 ? `1${digits}` : digits;
+  const e164 = `+${withCountry}`;
+  try {
+    assertTransferNumber(e164);
+    return e164;
+  } catch {
+    return null;
+  }
+}
+
+export function plainCallerName(value: string): string {
+  let cleaned = "";
+  for (const char of value) {
+    const code = char.codePointAt(0) ?? 0;
+    const control = code <= 31 || code === 127 || code === 0x2028 || code === 0x2029;
+    cleaned += control ? " " : char;
+  }
+  return cleaned.replace(/\s+/g, " ").trim().slice(0, 120) || "Caller";
+}
 
 const DAY_KEYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
 export type DayKey = (typeof DAY_KEYS)[number];
@@ -198,7 +232,8 @@ export function parseTransferTargets(text: string): Array<{ label: string; e164:
     const comma = line.lastIndexOf(",");
     const label = (comma === -1 ? "" : line.slice(0, comma)).trim();
     const e164 = (comma === -1 ? line : line.slice(comma + 1)).trim();
-    if (!label || !E164.test(e164)) throw new Error("Enter each transfer target as Label, +E.164.");
+    if (!label) throw new Error(TRANSFER_NUMBER_ERROR);
+    assertTransferNumber(e164);
     rows.push({ label, e164 });
   }
   return rows;
@@ -251,9 +286,14 @@ export function maskCaller(value: string): string {
   return `${prefix}${"*".repeat(digits.length - 4)}${digits.slice(-4)}`;
 }
 
+const OFFICE_LINE =
+  "Office open right now (computed by the system): {{office_open}}. If this says yes, treat the office as open. If no, closed. If unknown, use the current time and hours.";
+
 export function retellPrompt(stored: string, timezone: string): string {
   const zone = /^[A-Za-z0-9_+\-/]+$/.test(timezone) ? timezone : DEFAULT_TIMEZONE;
-  return stored.replace(/\{\{current_time\}\}(?!_)/g, `{{current_time_${zone}}}`);
+  const rewritten = stored.replace(/\{\{current_time\}\}(?!_)/g, `{{current_time_${zone}}}`);
+  if (rewritten.includes("{{office_open}}")) return rewritten;
+  return `${rewritten}\n\n${OFFICE_LINE}`;
 }
 
 export function clientIsHealthcare(client: { industry: string | null; compliance: unknown }): boolean {

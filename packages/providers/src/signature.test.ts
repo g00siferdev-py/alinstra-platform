@@ -18,6 +18,8 @@ describe("Stripe signatures", () => {
   it("accepts a fresh signature and rejects a tampered body or a stale timestamp", () => {
     const header = signStripe(body, Math.floor(now / 1000), "whsec_test");
     expect(verifyStripe(body, header, "whsec_test", now)).toBe(true);
+    expect(verifyStripe(body, `${header},v1=deadbeef`, "whsec_test", now)).toBe(true);
+    expect(verifyStripe(body, header.replace(/v1=[0-9a-f]+/, "v1=deadbeef") + `,v1=${header.split("v1=")[1]}`, "whsec_test", now)).toBe(true);
     expect(verifyStripe("{}", header, "whsec_test", now)).toBe(false);
     expect(verifyStripe(body, header, "whsec_test", now + 6 * 60 * 1000)).toBe(false);
   });

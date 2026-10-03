@@ -1,6 +1,6 @@
 import { getEnv, log } from "@alinstra/config";
-import { prisma } from "@alinstra/db";
-import { enqueueSendPasswordReset, getRedis } from "@alinstra/queue";
+import { prisma, recordEmailChange } from "@alinstra/db";
+import { enqueueAccountEmail, enqueueSendPasswordReset, getRedis } from "@alinstra/queue";
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { twoFactor } from "better-auth/plugins";
@@ -26,6 +26,8 @@ function adminCapFromContext(context: unknown): Date | null {
   return new Date(new Date(session.session.createdAt).getTime() + ADMIN_SESSION_MS);
 }
 
+const pendingEmailChange = new Map<string, string>();
+
 const env = getEnv();
 
 export const auth = betterAuth({
@@ -34,6 +36,15 @@ export const auth = betterAuth({
   secret: env.BETTER_AUTH_SECRET,
   trustedOrigins: [env.APP_URL],
   database: prismaAdapter(prisma, { provider: "postgresql" }),
+  emailVerification: {
+    sendVerificationEmail: async ({ user, url }) => {
+      await enqueueAccountEmail({
+        to: user.email,
+        subject: "Confirm your Alinstra email",
+        text: `Confirm this email address for Alinstra:\n\n${url}\n\nIf you did not ask for this, you can ignore the message.`,
+      });
+    },
+  },
   emailAndPassword: {
     enabled: true,
     disableSignUp: true,
@@ -46,6 +57,9 @@ export const auth = betterAuth({
     },
   },
   user: {
+    changeEmail: {
+      enabled: true,
+    },
     additionalFields: {
       role: {
         type: "string",
@@ -87,6 +101,33 @@ export const auth = betterAuth({
     }),
   ],
   databaseHooks: {
+    user: {
+      update: {
+        before: async (data, context) => {
+          const nextEmail = typeof (data as { email?: unknown }).email === "string" ? (data as { email: string }).email : "";
+          const current = (context as { context?: { session?: { user?: { id?: string; email?: string } } } } | null)?.context?.session?.user;
+          if (nextEmail && current?.id && current.email && nextEmail.toLowerCase() !== current.email.toLowerCase()) {
+            pendingEmailChange.set(current.id, current.email);
+          }
+          return { data };
+        },
+        after: async (user) => {
+          const row = user as { id?: string; email?: string; role?: string; clientId?: string | null };
+          if (!row.id || !row.email) return;
+          const previous = pendingEmailChange.get(row.id);
+          if (!previous) return;
+          pendingEmailChange.delete(row.id);
+          const role = row.role === "admin" || row.role === "client_owner" || row.role === "client_staff" ? row.role : "client_staff";
+          await recordEmailChange({
+            userId: row.id,
+            role,
+            clientId: row.clientId ?? null,
+            previousEmail: previous,
+            nextEmail: row.email,
+          });
+        },
+      },
+    },
     session: {
       create: {
         before: async (session) => {

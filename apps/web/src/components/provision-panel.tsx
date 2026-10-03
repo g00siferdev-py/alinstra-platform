@@ -3,6 +3,7 @@
 import {
   createClientZeroAction,
   endServiceNowAction,
+  refreshPaymentLinkAction,
   retrySyncAction,
   saveTransferTargetsAction,
   scheduleChurnAction,
@@ -70,6 +71,9 @@ export function ProvisionPanel({
       <p>Billing: {internal ? "Client zero, not billed" : billingStatus}</p>
       <p>Retell: {syncLabel}{syncError ? ` · ${syncError}` : ""}</p>
       {checkoutUrl && billingStatus !== "paid" ? <a href={checkoutUrl}>Payment link</a> : null}
+      {!internal && billingStatus !== "paid" ? (
+        <Button tone="secondary" disabled={pending} onClick={() => void run(() => refreshPaymentLinkAction(clientId))}>New payment link</Button>
+      ) : null}
       {error ? <ErrorText>{error}</ErrorText> : null}
       <div className="flex flex-wrap gap-2">
         <Button disabled={pending} onClick={() => void run(() => startProvisioningAction(clientId))}>Start provisioning</Button>

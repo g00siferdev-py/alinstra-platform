@@ -252,8 +252,8 @@ async function insertConfig(
       createdById: args.createdById,
     },
   });
-  if (args.status === "active") await flagAgentSync(tx, args.clientId, args.actor);
-  return created;
+  const sync = args.status === "active" ? await flagAgentSync(tx, args.clientId, args.actor) : false;
+  return { ...created, sync };
 }
 
 export async function createDraftAgentConfig(ctx: Actor, tx: Prisma.TransactionClient, clientId: string) {
@@ -588,6 +588,7 @@ export async function applyQuickUpdate(ctx: Actor, input: QuickUpdateInput): Pro
         subject: `Quick update applied for ${loaded.client.name}`,
         text: `A ${input.kind} update is now version ${config.version} for ${loaded.client.name}.`,
       },
+      sync: config.sync,
     };
   });
 }

@@ -13,11 +13,6 @@ export class MemoryVoice implements VoicePlatform {
   failSync = false;
   version = 0;
 
-  async findLlmId(clientId: string): Promise<string | null> {
-    for (const [id, row] of this.llms) if (row.clientId === clientId) return id;
-    return null;
-  }
-
   async createLlm(input: { clientId: string; prompt: string; beginMessage: string; tools: PublishedTool[] }): Promise<{ llmId: string }> {
     this.creates.llm += 1;
     const llmId = `llm_${input.clientId}`;
@@ -42,7 +37,7 @@ export class MemoryVoice implements VoicePlatform {
     return null;
   }
 
-  async createNumber(input: { clientId: string; agentId: string; inboundWebhookUrl: string }): Promise<{ e164: string }> {
+  async createNumber(input: { clientId: string; agentId: string; inboundWebhookUrl: string; tollFree: boolean; areaCode: number | null }): Promise<{ e164: string }> {
     this.creates.number += 1;
     const e164 = `+1555000${String(this.creates.number).padStart(4, "0")}`;
     this.numbers.set(e164, { ...input, e164 });
@@ -86,6 +81,7 @@ export class MemoryBilling implements BillingPlatform {
   customers = new Map<string, string>();
   prices = new Map<string, { priceId: string; amountCents: number; kind: PriceKind }>();
   checkouts = new Map<string, { url: string; subscriptionId: string }>();
+  lastCheckout: { successUrl: string; cancelUrl: string; idempotencyKey: string } | null = null;
   canceled = new Set<string>();
   periodEnd = new Map<string, Date>();
   creates = { customer: 0, price: 0, checkout: 0 };
@@ -120,15 +116,17 @@ export class MemoryBilling implements BillingPlatform {
     successUrl: string;
     cancelUrl: string;
     idempotencyKey: string;
-  }): Promise<{ sessionId: string; url: string }> {
+  }): Promise<{ sessionId: string; url: string; expiresAt: Date }> {
+    this.lastCheckout = { successUrl: input.successUrl, cancelUrl: input.cancelUrl, idempotencyKey: input.idempotencyKey };
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
     const existing = this.checkouts.get(input.idempotencyKey);
-    if (existing) return { sessionId: `cs_${input.clientId}`, url: existing.url };
+    if (existing) return { sessionId: `cs_${input.clientId}`, url: existing.url, expiresAt };
     this.creates.checkout += 1;
-    const url = `https://checkout.stripe.test/${input.clientId}`;
+    const url = `https://checkout.stripe.test/${input.clientId}/${this.creates.checkout}`;
     const subscriptionId = `sub_${input.clientId}`;
     this.checkouts.set(input.idempotencyKey, { url, subscriptionId });
     this.periodEnd.set(subscriptionId, new Date(Date.now() + 30 * 24 * 60 * 60 * 1000));
-    return { sessionId: `cs_${input.clientId}`, url };
+    return { sessionId: `cs_${input.clientId}`, url, expiresAt };
   }
 
   subscriptionFor(clientId: string): string {

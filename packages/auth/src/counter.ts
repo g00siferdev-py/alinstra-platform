@@ -36,7 +36,7 @@ let redisCounter: Counter | undefined;
 
 function redisBackedCounter(): Counter {
   if (!redisCounter) {
-    const redis = new Redis(getEnv().REDIS_URL, { maxRetriesPerRequest: null, lazyConnect: true });
+    const redis = new Redis(getEnv().REDIS_URL, { maxRetriesPerRequest: null, lazyConnect: true, family: 0 });
     redisCounter = {
       async increment(key, windowSeconds) {
         const count = await redis.incr(key);

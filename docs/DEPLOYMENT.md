@@ -265,6 +265,24 @@ Stop it with:
 docker compose --profile prod-smoke down
 ```
 
+## Staging lessons from the first deploy
+
+The `railway.toml` files are reference only. New Railway services cannot opt in to config-as-code. The dashboard is the source of truth. Copy settings from the toml, then confirm each one in the service settings.
+
+Check Settings → Source on web and worker. The first web service was still on `phase-2` and failed its health check. Staging that should run this work tracks `phase-3` until that branch is the one you mean to run. Do not point staging at `main` for Phase 3.
+
+Deploy once before adding the custom domain. Railway detects the port from the running service. Adding the domain first leaves the target port unset.
+
+Railway's one-click Cloudflare DNS turns the proxy on. The `staging` CNAME must be DNS only (grey cloud).
+
+Never click Add under Railway's Suggested Variables. Those values come from `.env.example`, including `change-me-min-12-chars`, and the production guard refuses to start.
+
+Seed the admin from the web service's Console tab: `pnpm db:seed`. Then delete `ADMIN_INITIAL_PASSWORD` after two-factor is enrolled.
+
+Redis on Railway's private network is dual-stack. The ioredis clients use `family: 0` so they can resolve that hostname.
+
+Admin notice emails go to the worker's `ADMIN_EMAIL` variable. Changing the admin's login email on `/account` does not change that variable. Update `ADMIN_EMAIL` on the worker (and web, for client-zero message mail) separately.
+
 ## Phase 3 keys (only after the phase-3 branch is what staging runs)
 
 Leave these empty until you are ready for one real Retell number. Empty keys make the process use fakes and refuse live provisioning when `NODE_ENV=production`.
@@ -273,15 +291,21 @@ Leave these empty until you are ready for one real Retell number. Empty keys mak
 | --- | --- | --- |
 | `RETELL_API_KEY` | both | Retell dashboard → API keys. One key with the webhook badge. Staging and production are different keys. |
 | `RETELL_DEFAULT_VOICE_ID` | both | The id from the voice card after you pick in `docs/voice-options.md`. |
+| `RETELL_DEFAULT_AREA_CODE` | both | Optional 3-digit US area code for local numbers when the wizard leaves it blank. |
+| `RETELL_DEFAULT_TOLL_FREE` | both | `true` or `false`. Default `false`. Used only when the wizard has not chosen. Client zero's wizard starts with toll-free checked. |
 | `STRIPE_SECRET_KEY` | both | Stripe test mode secret key (`sk_test_...`) for staging. |
 | `STRIPE_WEBHOOK_SECRET` | web | Stripe → Developers → Webhooks → endpoint `https://staging.alinstra.com/api/stripe/webhook` → signing secret. |
-| `DANIEL_TRANSFER_NUMBER` | both | Your cell in E.164, for client zero. |
+| `DANIEL_TRANSFER_NUMBER` | both | Your cell as a US or Canada number, `+1` then 10 digits, for client zero. |
 
-Retell webhook URL: `https://staging.alinstra.com/api/retell/webhook`. Inbound URL is set by the app when it buys the number. There is no Retell sandbox and no spend cap in the API. Use one number. End service, or delete the number, to stop the monthly charge. Watch the Retell Billing tab.
+Stripe webhook API version: `2026-09-30.endive`. Subscribe to `checkout.session.completed`, `checkout.session.expired`, `customer.subscription.deleted`, and `invoice.payment_failed`.
+
+Retell webhook URL: `https://staging.alinstra.com/api/retell/webhook`. Inbound URL is set by the app when it buys the number. There is no Retell sandbox and no API spend cap. Before buying the first number, set cost and usage alerts in the Retell dashboard. Use one number. End service, or delete the number, to stop the monthly charge.
+
+Toll-free numbers need a toll-free verification before they can send texts. That is a Phase 5 step, not part of buying the number for voice.
 
 ### How to verify this step
 
-- A client with two-factor admin can start provisioning and the page shows a Checkout link before the client is live.
+- A client with two-factor admin can start provisioning and the page shows a Checkout link before the client is live. The link opens `/billing/thanks` after payment, which does not require an admin login.
 - Client zero skips Checkout, gets a number, and shows In sync after a config change.
 - A browser upload still works. The health check is still `"db": "up"` and `"redis": "up"`.
 

@@ -1,6 +1,16 @@
 # Phase 3
 
-Status: implemented on `phase-3`. Not on `main`. No live Retell or Stripe calls until `RETELL_API_KEY` and `STRIPE_SECRET_KEY` are set. Local development and tests use in-memory fakes.
+Status: implemented on `phase-3`, with the 3 October 2026 review fixes. Not on `main`. No live Retell or Stripe calls until `RETELL_API_KEY` and `STRIPE_SECRET_KEY` are set. Local development and tests use in-memory fakes.
+
+## Docs checked on 3 October 2026
+
+- [Create phone number](https://docs.retellai.com/api-references/create-phone-number) (spec `2026-09-14-b240eb0`). Bind with `inbound_agents: [{ agent_id, weight: 1 }]`. `agent_version` is optional. The schema does not say what happens when it is omitted, so the app sends `agent_version: "latest_published"`. That tag is defined as the most recently published version. `allowed_outbound_country_list` empty means every country. We send `["US", "CA"]`. `area_code` is a 3-digit integer and currently only a US area code. `toll_free: true` buys a toll-free number. `country_code` is `US` or `CA` and defaults to `US` when omitted, including for toll-free, so a toll-free buy does not send `area_code` or `country_code`.
+- [Phone number single-agent fields](https://docs.retellai.com/deprecation-notice/2026/03-31_phone_number_agent_fields). `inbound_agent_id` was removed after 31 March 2026. The replacement is `inbound_agents`.
+- [Custom function](https://docs.retellai.com/build/single-multi-prompt/custom-function) and the create-LLM `CustomTool.parameters` schema. Parameters are a JSON Schema object (`type: "object"`, `properties`, `required`). Omitting them defines a function with an empty parameter list. The model fills properties that have a `description`.
+- [Create Retell LLM](https://docs.retellai.com/api-references/create-retell-llm). `default_dynamic_variables` is a string map used when a request does not supply the variable. The create request has no name and no metadata field, so an LLM cannot be found again by `alinstra-<clientId>`. `findLlmId` is gone. An orphan LLM has no monthly fee; deleting it is cleanup.
+- [Inbound call webhook](https://docs.retellai.com/features/inbound-call-webhook). The body is `{ event: "call_inbound", call_inbound: { to_number, ... } }`. The response is `{ call_inbound: { dynamic_variables } }`. A non-2xx is retried, with a 10-second timeout.
+- [Stripe subscription billing periods](https://docs.stripe.com/changelog/basil/2025-03-31/deprecate-subscription-current-period-start-and-end). `current_period_end` is on the subscription item. The current Stripe API version is `2026-09-30.endive` ([versioning](https://docs.stripe.com/api/versioning)). Monthly releases after basil are non-breaking, so item periods are still the shape. Every Stripe request sends `Stripe-Version: 2026-09-30.endive`.
+- [Stripe signatures](https://docs.stripe.com/webhooks/signatures). During secret rotation the header contains more than one `v1=` signature. Verification accepts the header when any `v1` matches.
 
 Checked against the live docs on 2 October 2026:
 

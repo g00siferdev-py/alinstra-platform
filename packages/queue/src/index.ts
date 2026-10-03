@@ -34,6 +34,12 @@ export const provisionClient = z.object({
   clientId: z.string().min(1),
 });
 
+export const sendAccountEmail = z.object({
+  to: z.string().email(),
+  subject: z.string().min(1).max(200),
+  text: z.string().min(1).max(5000),
+});
+
 export const sendMessageEmail = z.object({
   clientId: z.string().min(1),
   recipients: z.array(z.string().email()).min(1),
@@ -43,6 +49,7 @@ export const sendMessageEmail = z.object({
 
 export type SyncAgent = z.infer<typeof syncAgent>;
 export type ProvisionClient = z.infer<typeof provisionClient>;
+export type SendAccountEmail = z.infer<typeof sendAccountEmail>;
 export type SendMessageEmail = z.infer<typeof sendMessageEmail>;
 
 export const EMAIL_QUEUE = "email";
@@ -56,6 +63,7 @@ export function getRedis(): Redis {
     redis = new Redis(getEnv().REDIS_URL, {
       maxRetriesPerRequest: null,
       lazyConnect: true,
+      family: 0,
     });
   }
   return redis;
@@ -70,6 +78,7 @@ export function bullConnection(): ConnectionOptions {
     password: url.password ? decodeURIComponent(url.password) : undefined,
     db: url.pathname && url.pathname !== "/" ? Number(url.pathname.slice(1)) : undefined,
     maxRetriesPerRequest: null,
+    family: 0,
   };
 }
 
@@ -138,20 +147,44 @@ export async function enqueueExtractKnowledge(data: ExtractKnowledgeText): Promi
   });
 }
 
+function alreadyQueued(error: unknown): boolean {
+  return error instanceof Error && /already exists/i.test(error.message);
+}
+
 export async function enqueueSyncAgent(data: SyncAgent): Promise<void> {
   const payload = syncAgent.parse(data);
-  await provisionJobs().add("sync-agent", payload, {
-    attempts: 3,
-    backoff: { type: "exponential", delay: 2000 },
-    removeOnComplete: 100,
-    removeOnFail: 100,
-  });
+  try {
+    await provisionJobs().add("sync-agent", payload, {
+      jobId: `sync-${payload.clientId}`,
+      attempts: 3,
+      backoff: { type: "exponential", delay: 2000 },
+      removeOnComplete: true,
+      removeOnFail: true,
+    });
+  } catch (error) {
+    if (!alreadyQueued(error)) throw error;
+  }
 }
 
 export async function enqueueProvisionClient(data: ProvisionClient): Promise<void> {
   const payload = provisionClient.parse(data);
-  await provisionJobs().add("provision-client", payload, {
-    attempts: 1,
+  try {
+    await provisionJobs().add("provision-client", payload, {
+      jobId: `provision-${payload.clientId}`,
+      attempts: 1,
+      removeOnComplete: true,
+      removeOnFail: true,
+    });
+  } catch (error) {
+    if (!alreadyQueued(error)) throw error;
+  }
+}
+
+export async function enqueueAccountEmail(data: SendAccountEmail): Promise<void> {
+  const payload = sendAccountEmail.parse(data);
+  await emailJobs().add("send-account-email", payload, {
+    attempts: 5,
+    backoff: { type: "exponential", delay: 2000 },
     removeOnComplete: 100,
     removeOnFail: 100,
   });

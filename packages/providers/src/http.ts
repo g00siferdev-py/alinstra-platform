@@ -1,8 +1,13 @@
-import { ProviderRequestError, type AgentPublish, type BillingPlatform, type PriceKind, type PublishedTool, type VoicePlatform } from "./types";
+import { ProviderRequestError, STRIPE_API_VERSION, type AgentPublish, type BillingPlatform, type PriceKind, type PublishedTool, type VoicePlatform } from "./types";
 
 type FetchLike = (url: string, init?: RequestInit) => Promise<Response>;
 
 const RETELL = "https://api.retellai.com";
+
+const DEFAULT_DYNAMIC_VARIABLES = {
+  office_open: "unknown",
+  allowed_numbers: "",
+};
 
 function toolsOf(tools: PublishedTool[]): unknown[] {
   return tools.map((tool) => {
@@ -24,8 +29,21 @@ function toolsOf(tools: PublishedTool[]): unknown[] {
       execution_message_description: "One moment.",
       timeout_ms: tool.timeoutMs ?? 8000,
       method: "POST",
+      parameters: tool.parameters,
     };
   });
+}
+
+export function subscriptionPeriodEnd(body: Record<string, unknown>, now = Date.now()): Date {
+  const items = body.items as { data?: Array<{ current_period_end?: unknown }> } | undefined;
+  const ends = (items?.data ?? [])
+    .map((item) => Number(item.current_period_end))
+    .filter((value) => Number.isFinite(value));
+  if (ends.length === 0) throw new Error("Stripe did not return a subscription item period end. Nothing was saved.");
+  const seconds = Math.max(...ends);
+  const endsAt = new Date(seconds * 1000);
+  if (!(endsAt.getTime() > now)) throw new Error("Stripe period end is not in the future. Nothing was saved.");
+  return endsAt;
 }
 
 async function readJson(response: Response): Promise<Record<string, unknown>> {
@@ -52,16 +70,6 @@ export function httpVoice(apiKey: string, fetchImpl: FetchLike = fetch): VoicePl
   }
 
   return {
-    async findLlmId(clientId) {
-      const listed = await send("/v2/list-retell-llms", { method: "GET" }).catch(() => null);
-      const items = Array.isArray(listed?.body.items) ? listed.body.items : Array.isArray(listed?.body) ? listed.body : [];
-      for (const item of items) {
-        if (!item || typeof item !== "object") continue;
-        const row = item as { llm_id?: string; llm_name?: string };
-        if (row.llm_name === `alinstra-${clientId}` && row.llm_id) return row.llm_id;
-      }
-      return null;
-    },
     async createLlm(input) {
       const { body } = await send("/create-retell-llm", {
         method: "POST",
@@ -70,6 +78,7 @@ export function httpVoice(apiKey: string, fetchImpl: FetchLike = fetch): VoicePl
           begin_message: input.beginMessage,
           general_tools: toolsOf(input.tools),
           start_speaker: "agent",
+          default_dynamic_variables: DEFAULT_DYNAMIC_VARIABLES,
         }),
       });
       const llmId = String(body.llm_id ?? "");
@@ -114,9 +123,11 @@ export function httpVoice(apiKey: string, fetchImpl: FetchLike = fetch): VoicePl
       const { body } = await send("/create-phone-number", {
         method: "POST",
         body: JSON.stringify({
-          inbound_agent_id: input.agentId,
+          inbound_agents: [{ agent_id: input.agentId, agent_version: "latest_published", weight: 1 }],
           inbound_webhook_url: input.inboundWebhookUrl,
           nickname: `alinstra-${input.clientId}`,
+          allowed_outbound_country_list: ["US", "CA"],
+          ...(input.tollFree ? { toll_free: true } : input.areaCode ? { area_code: input.areaCode } : {}),
         }),
       });
       const e164 = String(body.phone_number ?? "");
@@ -139,6 +150,7 @@ export function httpVoice(apiKey: string, fetchImpl: FetchLike = fetch): VoicePl
           general_prompt: input.prompt,
           begin_message: input.beginMessage,
           general_tools: toolsOf(input.tools),
+          default_dynamic_variables: DEFAULT_DYNAMIC_VARIABLES,
         }),
       });
       await send(`/update-agent/${input.agentId}?version=${version}`, {
@@ -198,6 +210,7 @@ export function httpBilling(secretKey: string, fetchImpl: FetchLike = fetch): Bi
     const headers: Record<string, string> = {
       authorization: `Bearer ${secretKey}`,
       "content-type": "application/x-www-form-urlencoded",
+      "Stripe-Version": STRIPE_API_VERSION,
     };
     if (init.idempotencyKey) headers["Idempotency-Key"] = init.idempotencyKey;
     const response = await fetchImpl(`https://api.stripe.com${path}`, { ...init, headers });
@@ -266,15 +279,16 @@ export function httpBilling(secretKey: string, fetchImpl: FetchLike = fetch): Bi
         idempotencyKey: input.idempotencyKey,
         body: formBody(fields),
       });
-      return { sessionId: String(body.id), url: String(body.url) };
+      const expiresSeconds = Number(body.expires_at);
+      if (!Number.isFinite(expiresSeconds)) throw new Error("Stripe did not return a checkout expiry.");
+      return { sessionId: String(body.id), url: String(body.url), expiresAt: new Date(expiresSeconds * 1000) };
     },
     async cancelAtPeriodEnd(subscriptionId) {
       const { body } = await send(`/v1/subscriptions/${subscriptionId}`, {
         method: "POST",
         body: formBody({ cancel_at_period_end: "true" }),
       });
-      const seconds = Number(body.current_period_end ?? 0);
-      return { serviceEndsAt: new Date(seconds * 1000) };
+      return { serviceEndsAt: subscriptionPeriodEnd(body) };
     },
     async cancelNow(subscriptionId) {
       try {
