@@ -244,6 +244,11 @@ export const WIZARD_STEP_TITLES = [
 /** Steps whose data reaches the receptionist. Plan, Portal access, and Review stay out. */
 export const AGENT_AFFECTING_STEPS: ReadonlySet<number> = new Set([1, 4, 5, 6, 7, 8, 9]);
 
+/** Owner portal: Plan and Compliance stay admin-only. Retention is edited separately on My Business. */
+export const OWNER_BLOCKED_STEPS: ReadonlySet<number> = new Set([3, 9]);
+export const OWNER_SUPPORT_EMAIL = "support@alinstra.com";
+export const OWNER_BLOCKED_STEP_HINT = `Email ${OWNER_SUPPORT_EMAIL} to change this.`;
+
 export function wizardStepTitle(step: number): string {
   return WIZARD_STEP_TITLES[step - 1] ?? `Step ${step}`;
 }

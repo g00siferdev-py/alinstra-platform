@@ -82,7 +82,17 @@ export {
 } from "./provision";
 export { clientEditPayload, editClientStep, type ClientEditResult } from "./wizard";
 export { diffSection, type FieldChange } from "./edit-diff";
-export { AGENT_AFFECTING_STEPS, CALL_TIMING_HINTS, callTimingOf, callTimingSchema, WIZARD_STEP_TITLES, wizardStepTitle } from "./domain";
+export {
+  AGENT_AFFECTING_STEPS,
+  CALL_TIMING_HINTS,
+  callTimingOf,
+  callTimingSchema,
+  OWNER_BLOCKED_STEP_HINT,
+  OWNER_BLOCKED_STEPS,
+  OWNER_SUPPORT_EMAIL,
+  WIZARD_STEP_TITLES,
+  wizardStepTitle,
+} from "./domain";
 export { assertTransferNumber, clientIsHealthcare, formatTransferTargets, formatWeeklyHours, maskCaller, normalizePublicPhone, normalizeTransferNumber, officeOpen, plainCallerName, retellPrompt } from "./domain";
 export { recordEmailChange, type Actor } from "./changes";
 export {

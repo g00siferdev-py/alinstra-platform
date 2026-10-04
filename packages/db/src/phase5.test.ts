@@ -1,0 +1,115 @@
+import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { prisma } from "./client";
+import { OWNER_BLOCKED_STEP_HINT } from "./domain";
+import { resetTestDatabase } from "./reset-test-database";
+import { clientEditPayload, editClientStep } from "./wizard";
+
+const admin = { id: "admin_phase5", role: "admin" as const };
+
+async function seedClient(name = "North HVAC") {
+  const plan = await prisma.plan.upsert({
+    where: { code: "plan_p5" },
+    update: {},
+    create: {
+      code: "plan_p5",
+      name: "Starter",
+      monthlyPriceCents: 10000,
+      includedMinutes: 100,
+      overagePerMinuteCents: 40,
+      setupFeeCents: 5000,
+      extraChangeFeeCents: 4900,
+      recallMonthlyCents: 0,
+      recallPerBookingCents: 0,
+      sortOrder: 1,
+    },
+  });
+  const client = await prisma.client.create({
+    data: {
+      name,
+      status: "live",
+      industry: "hvac",
+      timezone: "America/New_York",
+      wizardSubmittedAt: new Date(),
+      planId: plan.id,
+      contactEmail: "owner@example.com",
+      weeklyHours: { fri: { start: "09:00", end: "17:00" } },
+      compliance: { healthcareSensitive: false, healthcareTouched: true },
+      features: { messageRecipients: "office@example.com", liveTransfer: true, bookingMode: "request_only" },
+      voice: { voiceId: "voice_1", assistantName: "Ava", disclosureMode: "on_request" },
+      coverage: { afterHours: "Take a message." },
+      phone: { mode: "new_number" },
+    },
+  });
+  await prisma.agentConfig.create({
+    data: {
+      clientId: client.id,
+      version: 1,
+      status: "active",
+      promptText: "Hello.",
+      templateId: "general",
+      templateVersion: "6",
+      documentIds: [],
+      tools: [],
+      settings: {},
+      greeting: "Thanks for calling.",
+      source: "test",
+      createdById: admin.id,
+    },
+  });
+  await prisma.knowledgeBase.create({
+    data: { clientId: client.id, version: 1, status: "active", hours: "Mon-Fri 9-5", staff: "Dana" },
+  });
+  const owner = await prisma.user.create({
+    data: { id: `owner_${client.id}`, name: "Owner", email: `owner_${client.id}@example.com`, role: "client_owner", clientId: client.id },
+  });
+  const staff = await prisma.user.create({
+    data: { id: `staff_${client.id}`, name: "Staff", email: `staff_${client.id}@example.com`, role: "client_staff", clientId: client.id },
+  });
+  return { client, owner, staff, plan };
+}
+
+describe("phase 5 owner edit", () => {
+  beforeEach(() => resetTestDatabase());
+  afterAll(async () => {
+    await prisma.$disconnect();
+  });
+
+  it("lets the owner edit their client and writes an owner_edit change log", async () => {
+    const { client, owner } = await seedClient();
+    const actor = { id: owner.id, role: "client_owner" as const, clientId: client.id };
+    const before = await clientEditPayload(actor, client.id);
+    const result = await editClientStep(actor, {
+      clientId: client.id,
+      step: 1,
+      payload: { ...before, business: { ...before.business, contactName: "Pat Owner" } },
+    });
+    expect(result.changed).toEqual([{ field: "contactName", before: "(empty)", after: "Pat Owner" }]);
+    // Not provisioned yet, so rebuild writes a new config without enqueueing a Retell sync.
+    expect(result.configVersion).toBe(2);
+    expect(result.sync).toBe(false);
+    expect((await prisma.client.findUniqueOrThrow({ where: { id: client.id } })).contactName).toBe("Pat Owner");
+    const log = await prisma.changeLog.findFirstOrThrow({ where: { clientId: client.id, action: "owner_edit" }, orderBy: { createdAt: "desc" } });
+    expect(log.summary).toContain("Business and contact");
+    expect(log.after).toMatchObject({ kind: "owner_edit", step: 1, title: "Business and contact" });
+    expect(log.actorRole).toBe("client_owner");
+  });
+
+  it("refuses staff edits and blocked plan/compliance steps, and scopes by clientId", async () => {
+    const { client, owner, staff } = await seedClient();
+    const other = await seedClient("Other Co");
+    const base = await clientEditPayload({ id: owner.id, role: "client_owner", clientId: client.id }, client.id);
+    await expect(
+      editClientStep({ id: staff.id, role: "client_staff", clientId: client.id }, { clientId: client.id, step: 1, payload: base }),
+    ).rejects.toThrow(/owner or an admin/i);
+    await expect(
+      editClientStep({ id: owner.id, role: "client_owner", clientId: client.id }, { clientId: client.id, step: 3, payload: base }),
+    ).rejects.toThrow(OWNER_BLOCKED_STEP_HINT);
+    await expect(
+      editClientStep({ id: owner.id, role: "client_owner", clientId: client.id }, { clientId: client.id, step: 9, payload: base }),
+    ).rejects.toThrow(OWNER_BLOCKED_STEP_HINT);
+    await expect(
+      editClientStep({ id: owner.id, role: "client_owner", clientId: client.id }, { clientId: other.client.id, step: 1, payload: base }),
+    ).rejects.toThrow(/owner or an admin|not available/i);
+    await expect(clientEditPayload({ id: owner.id, role: "client_owner", clientId: client.id }, other.client.id)).rejects.toThrow(/owner or an admin/i);
+  });
+});

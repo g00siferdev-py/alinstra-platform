@@ -1,6 +1,6 @@
 "use client";
 
-import { continueWizardAction, discardWizardAction, editClientStepAction, previewWizardPromptAction, saveDraftAction, submitWizardAction } from "@/app/admin/actions";
+import { continueWizardAction, discardWizardAction, editClientStepAction, previewWizardPromptAction, saveDraftAction, submitWizardAction, type EditStepResult } from "@/app/admin/actions";
 import { useNavigationGuard } from "@/components/navigation-guard";
 import { useToast } from "@/components/toast";
 import { Button, ErrorText, FileDropzone, Input } from "@/components/ui";
@@ -27,7 +27,7 @@ const INDUSTRIES = [
 
 const HEALTHCARE = new Set(["dental", "medical_office"]);
 
-type Payload = {
+export type WizardFormPayload = {
   version: 1;
   business: Record<string, string>;
   websiteNotes?: string;
@@ -49,7 +49,11 @@ type Payload = {
   portalOwnerEmail?: string;
 };
 
+type Payload = WizardFormPayload;
+
 type DocumentRow = { id: string; originalFilename: string; extractionStatus: string; extractionError: string | null };
+
+export type SaveEditStep = (input: { clientId: string; step: number; payload: unknown }) => Promise<EditStepResult>;
 
 function greetingPreview(business: string, assistantName: string, mode: string, recordingNotice: boolean): string {
   const name = assistantName.trim() || "Ava";
@@ -131,6 +135,8 @@ export function WizardForm({
   mode = "create",
   hasStripeSubscription = false,
   provisioned = false,
+  saveEditStep = editClientStepAction,
+  backHref,
 }: {
   clientId: string;
   initialStep: number;
@@ -142,7 +148,12 @@ export function WizardForm({
   mode?: "create" | "edit";
   hasStripeSubscription?: boolean;
   provisioned?: boolean;
+  /** Defaults to the admin action; the owner edit page passes its own action. */
+  saveEditStep?: SaveEditStep;
+  /** Where "Back" goes in edit mode. Defaults to the admin client page. */
+  backHref?: string;
 }) {
+  const editBackHref = backHref ?? `/admin/clients/${clientId}`;
   const router = useRouter();
   const toast = useToast();
   const editing = mode === "edit";
@@ -248,7 +259,7 @@ export function WizardForm({
     setPending(true);
     setEditNote(null);
     setError(null);
-    const result = await editClientStepAction({ clientId, step, payload });
+    const result = await saveEditStep({ clientId, step, payload });
     setPending(false);
     if (!result.ok) {
       setError(result.error);
@@ -702,7 +713,7 @@ export function WizardForm({
             {step < 11 ? <Button tone="secondary" onClick={() => { setEditNote(null); setStep((value) => value + 1); }}>Next</Button> : null}
             {step < 11 ? <Button disabled={pending} onClick={() => void saveEdit()}>{pending ? "Saving…" : "Save step"}</Button> : null}
             <div className="ml-auto">
-              <Button tone="secondary" onClick={() => router.push(`/admin/clients/${clientId}`)}>Back to client</Button>
+              <Button tone="secondary" onClick={() => router.push(editBackHref)}>Back</Button>
             </div>
           </div>
           {editNote ? (

@@ -293,12 +293,15 @@ export async function createDraftAgentConfig(ctx: Actor, tx: Prisma.TransactionC
 }
 
 /**
- * Rebuilds the receptionist config from the client's current data after an admin edit. A client with an
- * active config gets a new active version (and a sync flag when it is provisioned); a client that is still
- * waiting on provisioning gets a fresh draft in place of the old one.
+ * Rebuilds the receptionist config from the client's current data after an admin or owner edit. A client
+ * with an active config gets a new active version (and a sync flag when it is provisioned); a client that
+ * is still waiting on provisioning gets a fresh draft in place of the old one.
  */
 export async function rebuildAgentConfig(ctx: Actor, tx: Prisma.TransactionClient, clientId: string, source: string) {
-  assertAdmin(ctx);
+  assertTenantContext(ctx);
+  if (ctx.role !== "admin" && !(ctx.role === "client_owner" && ctx.clientId === clientId)) {
+    throw new Error("Only the client owner or an admin can rebuild this config.");
+  }
   const active = await tx.agentConfig.findFirst({ where: { clientId, status: "active" }, select: { id: true } });
   if (!active) {
     await tx.agentConfig.updateMany({ where: { clientId, status: "draft" }, data: { status: "superseded" } });
@@ -317,13 +320,14 @@ export async function rebuildAgentConfig(ctx: Actor, tx: Prisma.TransactionClien
     features: loaded.client.features,
     coverage: loaded.client.coverage,
   });
+  const from = source === "owner_edit" ? "an owner edit" : "an admin edit";
   await recordChange(tx, {
     clientId,
     actor: ctx,
     action: active ? "agent_config.activated" : "agent_config.created",
     entityType: "agent_config",
     entityId: config.id,
-    summary: `${active ? "Activated" : "Created draft"} receptionist config v${config.version} for ${loaded.client.name} from an admin edit`,
+    summary: `${active ? "Activated" : "Created draft"} receptionist config v${config.version} for ${loaded.client.name} from ${from}`,
     after: { version: config.version, status: config.status, templateVersion: config.templateVersion, source },
   });
   return config;

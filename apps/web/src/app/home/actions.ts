@@ -1,12 +1,15 @@
 "use server";
 
+import type { EditStepResult } from "@/app/admin/actions";
 import { log } from "@alinstra/config";
 import {
   applyQuickUpdate,
   cancelChangeRequest,
   changeAllowance,
+  editClientStep,
   previewQuickUpdate,
   setCallAccess,
+  setCallRetention,
   submitChangeRequest,
   type Actor,
   type QuickUpdateInput,
@@ -107,5 +110,50 @@ export async function cancelChangeRequestAction(id: string) {
     return { ok: true };
   } catch (error) {
     return { error: message(error, "Could not cancel that request.") };
+  }
+}
+
+/**
+ * Owner edit of one wizard step on their own client. Staff and foreign clients are refused inside
+ * `editClientStep` / `ownerActor`. Plan and Compliance stay blocked with the support-email hint.
+ */
+export async function ownerEditClientStepAction(input: { clientId: string; step: number; payload: unknown }): Promise<EditStepResult> {
+  const session = await requireUser();
+  try {
+    const actor = ownerActor(session);
+    if (input.clientId !== actor.clientId) {
+      return { ok: false, error: "That client is not available." };
+    }
+    const result = await editClientStep(actor, input);
+    if (result.sync) {
+      await enqueueSyncAgent({ clientId: actor.clientId }).catch((error: unknown) => {
+        log("warn", "sync enqueue failed after owner edit", { clientId: actor.clientId, error: error instanceof Error ? error.message : "unknown" });
+      });
+    }
+    revalidatePath("/home/business");
+    revalidatePath(`/home/business/edit/${input.step}`);
+    return {
+      ok: true,
+      title: result.title,
+      changedCount: result.changed.length,
+      configVersion: result.configVersion,
+      sync: result.sync,
+      stripeWarning: result.stripeWarning,
+    };
+  } catch (error) {
+    return { ok: false, error: message(error, "Check this step and try again.") };
+  }
+}
+
+/** Owner sets call retention days (Compliance fields stay admin-only). */
+export async function setCallRetentionAction(input: { days: number }) {
+  const session = await requireUser();
+  try {
+    const actor = ownerActor(session);
+    await setCallRetention(actor, { clientId: actor.clientId, days: input.days });
+    revalidatePath("/home/business");
+    return { ok: true };
+  } catch (error) {
+    return { error: message(error, "Could not update retention.") };
   }
 }

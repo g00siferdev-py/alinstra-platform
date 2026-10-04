@@ -7,6 +7,8 @@ import {
   businessSchema,
   clientCanBeRemoved,
   complianceSchema,
+  OWNER_BLOCKED_STEP_HINT,
+  OWNER_BLOCKED_STEPS,
   coverageSchema,
   emptyWizardPayload,
   featuresSchema,
@@ -424,9 +426,15 @@ function bool(value: unknown): boolean | undefined {
  * Builds the wizard payload from what is saved on the client right now. Edit mode reads this and never the
  * WizardDraft, which stops being the source of truth the moment the wizard is submitted.
  */
-export async function clientEditPayload(ctx: Actor, clientId: string): Promise<WizardPayload> {
+function assertCanEditClient(ctx: Actor, clientId: string): void {
   assertTenantContext(ctx);
-  if (ctx.role !== "admin") throw new Error("Only admin can edit a client");
+  if (ctx.role === "admin") return;
+  if (ctx.role === "client_owner" && ctx.clientId === clientId) return;
+  throw new Error("Only the client owner or an admin can edit this client.");
+}
+
+export async function clientEditPayload(ctx: Actor, clientId: string): Promise<WizardPayload> {
+  assertCanEditClient(ctx, clientId);
   const client = await prisma.client.findFirst({ where: { id: clientId, archivedAt: null } });
   if (!client) throw new Error("That client is not available.");
   if (!client.wizardSubmittedAt) throw new Error("Finish the wizard before editing this client.");
@@ -523,14 +531,17 @@ export async function editClientStep(
   ctx: Actor,
   input: { clientId: string; step: number; payload: unknown },
 ): Promise<ClientEditResult> {
-  assertTenantContext(ctx);
-  if (ctx.role !== "admin") throw new Error("Only admin can edit a client");
+  assertCanEditClient(ctx, input.clientId);
   const step = Math.trunc(input.step);
   if (step < 1 || step > 10) throw new Error("Choose a step to edit.");
+  if (ctx.role === "client_owner" && OWNER_BLOCKED_STEPS.has(step)) {
+    throw new Error(OWNER_BLOCKED_STEP_HINT);
+  }
   const payload = asPayload(input.payload);
   const before = await clientEditPayload(ctx, input.clientId);
   const section = SECTION_BY_STEP[step] ?? "business";
   const title = wizardStepTitle(step);
+  const editKind = ctx.role === "client_owner" ? "owner_edit" : "admin_edit";
   return prisma.$transaction(async (tx) => {
     const client = await tx.client.findFirst({ where: { id: input.clientId, archivedAt: null } });
     if (!client?.wizardSubmittedAt) throw new Error("Finish the wizard before editing this client.");
@@ -539,7 +550,7 @@ export async function editClientStep(
     let configVersion: number | null = null;
     let sync = false;
     if (AGENT_AFFECTING_STEPS.has(step)) {
-      const config = await rebuildAgentConfig(ctx, tx, input.clientId, "admin_edit");
+      const config = await rebuildAgentConfig(ctx, tx, input.clientId, editKind);
       configVersion = config.version;
       sync = Boolean(config.sync);
     }
@@ -547,12 +558,12 @@ export async function editClientStep(
     await recordChange(tx, {
       clientId: input.clientId,
       actor: ctx,
-      action: "admin_edit",
+      action: editKind,
       entityType: "client",
       entityId: input.clientId,
       summary: `Edited ${title} for ${client.name}${changed.length === 0 ? " (no field changed)" : ""}`,
       after: {
-        kind: "admin_edit",
+        kind: editKind,
         step,
         title,
         fields: changeLogFields(changed),
