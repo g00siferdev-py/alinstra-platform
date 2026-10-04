@@ -9,6 +9,7 @@ import {
   assertTransferNumber,
   callTimingOf,
   clientIsHealthcare,
+  emptyWizardPayload,
   formatTransferTargets,
   maskCaller,
   normalizeTransferNumber,
@@ -206,12 +207,47 @@ async function loadReady(clientId: string) {
   return { client, config, plan, targets };
 }
 
+const CLIENT_ZERO_TIMEZONE = "America/New_York";
+
+/**
+ * Gives an unsubmitted client the WizardDraft and draft knowledge base that `startWizard` would have created,
+ * pre-filled from the client row, so the admin "Continue wizard" link works. Returns true when a draft was added.
+ */
+async function ensureWizardDraft(
+  tx: Prisma.TransactionClient,
+  ctx: Actor,
+  client: { id: string; name: string; timezone: string; phone: unknown; wizardSubmittedAt: Date | null },
+): Promise<boolean> {
+  if (client.wizardSubmittedAt) return false;
+  const draft = await tx.wizardDraft.findFirst({ where: { clientId: client.id, discardedAt: null }, select: { id: true } });
+  if (draft) return false;
+  const tollFree = Boolean(client.phone && typeof client.phone === "object" && (client.phone as { tollFree?: boolean }).tollFree);
+  const payload = {
+    ...emptyWizardPayload(),
+    business: { name: client.name, timezone: client.timezone },
+    phone: { mode: "new_number", tollFree },
+  };
+  await tx.wizardDraft.create({
+    data: { clientId: client.id, currentStep: 1, payload: payload as Prisma.InputJsonValue, createdById: ctx.id },
+  });
+  const knowledge = await tx.knowledgeBase.findFirst({ where: { clientId: client.id }, select: { id: true } });
+  if (!knowledge) await tx.knowledgeBase.create({ data: { clientId: client.id, version: 1, status: "draft" } });
+  return true;
+}
+
 export async function createClientZero(ctx: Actor): Promise<{ id: string; created: boolean }> {
   if (ctx.role !== "admin") throw new Error("Only an admin can create client zero.");
-  const existing = await prisma.client.findFirst({ where: { internal: true, archivedAt: null }, select: { id: true } });
-  if (existing) return { id: existing.id, created: false };
+  const existing = await prisma.client.findFirst({ where: { internal: true, archivedAt: null } });
+  if (existing) {
+    // Older client zero rows were created without a draft; add one so Continue stops 404ing.
+    await prisma.$transaction((tx) => ensureWizardDraft(tx, ctx, existing));
+    return { id: existing.id, created: false };
+  }
   return prisma.$transaction(async (tx) => {
-    const client = await tx.client.create({ data: { name: "Alinstra", internal: true, status: "lead", phone: { tollFree: true } } });
+    const client = await tx.client.create({
+      data: { name: "Alinstra", internal: true, status: "lead", timezone: CLIENT_ZERO_TIMEZONE, phone: { mode: "new_number", tollFree: true } },
+    });
+    await ensureWizardDraft(tx, ctx, client);
     await recordChange(tx, {
       clientId: client.id,
       actor: ctx,

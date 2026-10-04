@@ -7,6 +7,7 @@ import { diffSection } from "./edit-diff";
 import { clientEditPayload, editClientStep } from "./wizard";
 import {
   advanceProvisioning,
+  createClientZero,
   decideTransfer,
   inboundVariables,
   replaceTransferTargets,
@@ -306,6 +307,31 @@ describe("phase 4 privacy", () => {
     expect(callTimingOf({})).toEqual(CALL_TIMING_DEFAULTS);
     expect(() => coverageSchema.parse({ callTiming: { maxCallMinutes: "90" } })).toThrow(/at most 60/);
     expect(coverageSchema.parse({}).callTiming).toEqual(CALL_TIMING_DEFAULTS);
+  });
+
+  it("creates client zero with a wizard draft the Continue link can open, and stays idempotent", async () => {
+    const first = await createClientZero(admin);
+    expect(first.created).toBe(true);
+    const draft = await prisma.wizardDraft.findFirstOrThrow({ where: { clientId: first.id, discardedAt: null } });
+    expect(draft.currentStep).toBe(1);
+    expect(draft.payload).toMatchObject({ business: { name: "Alinstra", timezone: "America/New_York" }, phone: { tollFree: true } });
+    expect(await prisma.knowledgeBase.count({ where: { clientId: first.id, status: "draft" } })).toBe(1);
+    const client = await prisma.client.findUniqueOrThrow({ where: { id: first.id } });
+    expect(client).toMatchObject({ internal: true, status: "lead", phone: { tollFree: true } });
+
+    const again = await createClientZero(admin);
+    expect(again).toEqual({ id: first.id, created: false });
+    expect(await prisma.wizardDraft.count({ where: { clientId: first.id } })).toBe(1);
+
+    await prisma.wizardDraft.deleteMany({ where: { clientId: first.id } });
+    const repaired = await createClientZero(admin);
+    expect(repaired).toEqual({ id: first.id, created: false });
+    expect(await prisma.wizardDraft.count({ where: { clientId: first.id, discardedAt: null } })).toBe(1);
+
+    await prisma.client.update({ where: { id: first.id }, data: { wizardSubmittedAt: new Date() } });
+    await prisma.wizardDraft.deleteMany({ where: { clientId: first.id } });
+    await createClientZero(admin);
+    expect(await prisma.wizardDraft.count({ where: { clientId: first.id } })).toBe(0);
   });
 
   it("normalizes and validates the public phone and email", () => {
