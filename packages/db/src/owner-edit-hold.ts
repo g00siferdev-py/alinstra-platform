@@ -23,20 +23,20 @@ function asText(value: unknown): string {
 /** Flatten the step's human-edited text for the sensitive-price/discount hold scan. */
 export function ownerStepHoldTexts(step: number, payload: WizardPayload): string {
   if (step === 4) {
-    const coverage = payload.coverage ?? {};
-    return [coverage.afterHours, coverage.lunchHours, coverage.weekends, coverage.holidays, coverage.holdOverflow].map(asText).join("\n");
+    const coverage = payload.coverage;
+    return [coverage?.afterHours, coverage?.lunchHours, coverage?.weekends, coverage?.holidays, coverage?.holdOverflow].map(asText).join("\n");
   }
   if (step === 5) {
-    const features = payload.features ?? {};
-    return [features.messages, features.emergencyHandling, features.transferTargetsText, features.weeklyHoursText, features.bookingMode].map(asText).join("\n");
+    const features = payload.features;
+    return [features?.messages, features?.emergencyHandling, features?.transferTargetsText, features?.weeklyHoursText, features?.bookingMode].map(asText).join("\n");
   }
   if (step === 6) {
-    const voice = payload.voice ?? {};
-    return [voice.greeting, voice.tone, voice.assistantName, voice.languages].map(asText).join("\n");
+    const voice = payload.voice;
+    return [voice?.greeting, voice?.tone, voice?.assistantName, voice?.languages].map(asText).join("\n");
   }
   if (step === 7) {
-    const knowledge = payload.knowledge ?? {};
-    return [knowledge.hours, knowledge.services, knowledge.faqs, knowledge.policies, knowledge.staff].map(asText).join("\n");
+    const knowledge = payload.knowledge;
+    return [knowledge?.hours, knowledge?.services, knowledge?.faqs, knowledge?.policies, knowledge?.staff].map(asText).join("\n");
   }
   return "";
 }
