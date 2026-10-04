@@ -101,7 +101,16 @@ describe("repository contract", () => {
       const exported = [...extra.matchAll(/^export (?:async )?function (\w+)\(([^)]*)\)/gm)];
       expect(exported.length, file).toBeGreaterThan(0);
       for (const match of exported) {
-        if (match[1] === "seedPlans") continue;
+        // Tenant-free helpers: plan seeds/catalog for marketing, and pure formatters.
+        if (
+          match[1] === "seedPlans" ||
+          match[1] === "publicPlans" ||
+          match[1] === "formatPlanCents" ||
+          match[1] === "formatOveragePerMinute" ||
+          match[1] === "formatIncludedChanges"
+        ) {
+          continue;
+        }
         expect(match[2], `${file} ${match[1]}`).toMatch(/ctx: (?:TenantContext|Actor)/);
       }
     }
