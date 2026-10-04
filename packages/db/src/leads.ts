@@ -94,12 +94,40 @@ export async function linkLeadToClient(ctx: Actor, leadId: string, clientId: str
   });
 }
 
+const LEAD_INDUSTRY_LABELS: Record<string, string> = {
+  "hvac-home-services": "HVAC & home services",
+  hvac_home: "HVAC & home services",
+  veterinary: "Veterinary",
+  "salons-grooming": "Salons & grooming",
+  "auto-repair": "Auto repair",
+  "contractors-trades": "Contractors & trades",
+  "law-accounting": "Law & accounting offices",
+  "property-management": "Property management",
+  "restaurants-catering": "Restaurants & catering",
+};
+
 export function leadIndustryLabel(value: string): string {
-  if (value === "hvac_home") return "HVAC / home services";
-  if (value === "veterinary") return "Veterinary";
   if (value.startsWith("other:")) return value.slice("other:".length) || "Other";
-  if (value === "other") return "Other";
-  return value;
+  if (value === "other") return "Other (tell us)";
+  return LEAD_INDUSTRY_LABELS[value] ?? value;
+}
+
+/** Maps a lead industry slug to a wizard industry code when one fits. */
+export function leadIndustryToWizard(value: string): string {
+  if (value.startsWith("other:")) return "other";
+  const map: Record<string, string> = {
+    "hvac-home-services": "hvac",
+    hvac_home: "hvac",
+    veterinary: "veterinary",
+    "salons-grooming": "salon_spa",
+    "auto-repair": "auto_repair",
+    "contractors-trades": "home_services",
+    "law-accounting": "professional_services",
+    "property-management": "professional_services",
+    "restaurants-catering": "other",
+    other: "other",
+  };
+  return map[value] ?? "";
 }
 
 export function leadMissedCallsLabel(value: string): string {

@@ -2,6 +2,7 @@
 
 import { submitLeadAction, type LeadFormState } from "@/app/(marketing)/start/actions";
 import { Button, ErrorText, Input, Label } from "@/components/ui";
+import { LEAD_FORM_INDUSTRIES } from "@/lib/marketing-audiences";
 import { useActionState, useState } from "react";
 
 const CONFIRMATION =
@@ -52,14 +53,16 @@ export function LeadForm() {
           <option value="" disabled>
             Choose one
           </option>
-          <option value="hvac_home">HVAC / home services</option>
-          <option value="veterinary">Veterinary</option>
-          <option value="other">Other</option>
+          {LEAD_FORM_INDUSTRIES.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
         </select>
       </div>
       {industry === "other" ? (
         <div>
-          <Label htmlFor="industryOther">Your industry</Label>
+          <Label htmlFor="industryOther">Tell us your industry</Label>
           <Input id="industryOther" name="industryOther" required maxLength={120} />
         </div>
       ) : (

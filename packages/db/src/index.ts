@@ -16,6 +16,7 @@ export {
   createLead,
   leadAdminNotice,
   leadIndustryLabel,
+  leadIndustryToWizard,
   leadMissedCallsLabel,
   LEAD_INDUSTRIES,
   LEAD_MISSED_CALLS,

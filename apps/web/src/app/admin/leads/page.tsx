@@ -1,5 +1,5 @@
 import { MarkContactedButton } from "@/components/marketing/mark-contacted-button";
-import { formatLocalTime, leadIndustryLabel, leadMissedCallsLabel, listLeads } from "@alinstra/db";
+import { formatLocalTime, leadIndustryLabel, leadIndustryToWizard, leadMissedCallsLabel, listLeads } from "@alinstra/db";
 import { requireAdmin } from "@/lib/session";
 import Link from "next/link";
 
@@ -28,7 +28,7 @@ export default async function AdminLeadsPage() {
             contactName: lead.name,
             contactPhone: lead.phone,
             contactEmail: lead.email,
-            industry: lead.industry.startsWith("other:") ? "other" : lead.industry === "hvac_home" ? "hvac" : lead.industry === "veterinary" ? "veterinary" : "",
+            industry: leadIndustryToWizard(lead.industry),
             leadId: lead.id,
           });
           return (

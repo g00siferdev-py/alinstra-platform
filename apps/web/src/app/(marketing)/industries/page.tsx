@@ -1,46 +1,42 @@
-import { ASSISTANT_NAME } from "@/lib/brand";
+import { MARKETING_AUDIENCE_COMING, MARKETING_AUDIENCES } from "@/lib/marketing-audiences";
 import { marketingMetadata } from "@/lib/marketing-seo";
 import Link from "next/link";
 
 export const revalidate = 3600;
 
 export const metadata = marketingMetadata({
-  title: "Industries",
-  description: "AI phone coverage for HVAC, home services, veterinary clinics, and more industries on the way.",
+  title: "Who it's for",
+  description:
+    "Any business that lives on the phone — HVAC, vet clinics, salons, auto shops, contractors, law offices, property managers, restaurants, and more.",
   path: "/industries",
 });
 
 export default function IndustriesPage() {
+  const cards = [...MARKETING_AUDIENCES, MARKETING_AUDIENCE_COMING];
   return (
-    <main className="mx-auto grid max-w-5xl gap-12 px-6 py-16">
-      <h1 className="text-4xl font-semibold tracking-tight">Industries</h1>
-
-      <section className="grid max-w-3xl gap-3">
-        <h2 className="text-2xl font-semibold tracking-tight">HVAC and home services</h2>
-        <p className="text-[var(--muted)]">
-          Your techs are on roofs and in crawlspaces. {ASSISTANT_NAME} takes the &quot;my AC just died&quot; call at 9 p.m., gets the
-          address and the problem to the on-call tech, or books the morning slot. Come fall, hand her your maintenance-plan list and
-          she calls to schedule the furnace tune-up before the first cold snap.
+    <main className="mx-auto grid max-w-5xl gap-10 px-6 py-16">
+      <div className="grid gap-3">
+        <h1 className="text-4xl font-semibold tracking-tight">Who it&apos;s for</h1>
+        <p className="max-w-2xl text-[var(--muted)]">
+          Any business that lives on the phone. If a missed call costs you a customer, Ava&apos;s for you.
         </p>
-      </section>
+      </div>
 
-      <section className="grid max-w-3xl gap-3">
-        <h2 className="text-2xl font-semibold tracking-tight">Veterinary clinics</h2>
-        <p className="text-[var(--muted)]">
-          Front desk slammed, three on hold, the phone keeps ringing. {ASSISTANT_NAME} takes the refill request and the &quot;is this
-          an emergency&quot; call, gives your after-hours instructions word for word, and never guesses on medical advice. And when a
-          patient&apos;s rabies booster or flea refill comes due, give {ASSISTANT_NAME} the recall list and she calls the owner and
-          books the visit, so that list stops being a sticky note.
-        </p>
-      </section>
+      <ul className="grid gap-4 sm:grid-cols-2">
+        {cards.map((card) => (
+          <li key={card.slug} className="grid gap-2 rounded-xl border border-[var(--line)] p-5">
+            {/* href reserved for future /for/[slug] landing pages */}
+            <h2 className="text-lg font-semibold tracking-tight">
+              <span data-audience-slug={card.slug}>{card.title}</span>
+            </h2>
+            <p className="text-sm text-[var(--muted)]">{card.blurb}</p>
+          </li>
+        ))}
+      </ul>
 
-      <section className="grid max-w-3xl gap-3">
-        <h2 className="text-2xl font-semibold tracking-tight">More coming.</h2>
-        <p className="text-[var(--muted)]">
-          Dental, med spa, chiropractic, and medical weight management are on the way with a HIPAA-ready tier.{" "}
-          <Link href="/start">Tell us your industry</Link>
-        </p>
-      </section>
+      <p className="text-sm text-[var(--muted)]">
+        Don&apos;t see your industry? <Link href="/start">Tell us</Link> — we&apos;ll still set you up.
+      </p>
     </main>
   );
 }

@@ -29,7 +29,7 @@ const valid = {
   name: "Pat",
   phone: "555-0100",
   email: "pat@example.com",
-  industry: "hvac_home",
+  industry: "hvac-home-services",
   industryOther: "",
   missedCalls: "5_to_15",
   notes: "",
@@ -47,7 +47,7 @@ describe("submitLeadAction", () => {
       name: "Pat",
       phone: "555-0100",
       email: "pat@example.com",
-      industry: "hvac_home",
+      industry: "hvac-home-services",
       missedCalls: "5_to_15",
       notes: null,
     });

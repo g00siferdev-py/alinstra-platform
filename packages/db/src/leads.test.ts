@@ -17,7 +17,7 @@ describe("leads", () => {
       name: "Pat Owner",
       phone: "+14155550100",
       email: "pat@example.com",
-      industry: "hvac_home",
+      industry: "hvac-home-services",
       missedCalls: "5_to_15",
       notes: "After-hours coverage",
     });
@@ -25,7 +25,7 @@ describe("leads", () => {
     const notice = leadAdminNotice(lead);
     expect(notice.subject).toBe("New lead: North HVAC");
     expect(notice.text).toContain("Pat Owner");
-    expect(notice.text).toContain("HVAC / home services");
+    expect(notice.text).toContain("HVAC & home services");
   });
 
   it("lists newest first for admin and marks contacted", async () => {
@@ -53,8 +53,8 @@ describe("leads", () => {
   });
 
   it("rejects incomplete lead input", () => {
-    expect(() => parseLeadInput({ business: "", name: "A", phone: "1", email: "a@b.com", industry: "hvac_home", missedCalls: "under_5" })).toThrow(
-      /business name/i,
-    );
+    expect(() =>
+      parseLeadInput({ business: "", name: "A", phone: "1", email: "a@b.com", industry: "hvac-home-services", missedCalls: "under_5" }),
+    ).toThrow(/business name/i);
   });
 });

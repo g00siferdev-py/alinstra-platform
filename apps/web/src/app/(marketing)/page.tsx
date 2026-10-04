@@ -60,6 +60,15 @@ export default async function MarketingHomePage() {
       </section>
 
       <section className="border-t border-[var(--line)]">
+        <div className="mx-auto max-w-5xl px-6 py-10">
+          <p className="max-w-3xl text-[var(--muted)]">
+            Any business that lives on the phone. HVAC, vet clinics, salons, auto shops, contractors, law offices, property
+            managers, restaurants. If a missed call costs you a customer, {ASSISTANT_NAME}&apos;s for you.
+          </p>
+        </div>
+      </section>
+
+      <section className="border-t border-[var(--line)]">
         <div className="mx-auto grid max-w-5xl gap-8 px-6 py-16">
           <h2 className="text-2xl font-semibold tracking-tight">How it works</h2>
           <ol className="grid gap-6 md:grid-cols-3">
@@ -90,8 +99,8 @@ export default async function MarketingHomePage() {
         <div className="mx-auto grid max-w-5xl gap-4 px-6 py-16">
           <h2 className="text-2xl font-semibold tracking-tight">{ASSISTANT_NAME} calls them back, too.</h2>
           <p className="max-w-3xl text-[var(--muted)]">
-            Flea and tick refills. Annual vaccines. Grooming. Furnace tune-ups. Every business with a repeat schedule loses revenue
-            to customers who simply forgot. Give {ASSISTANT_NAME} your recall list and she calls when it&apos;s due, offers the next
+            Reorders. Annual checkups. Tune-ups. Membership renewals. Every business with a repeat schedule loses revenue to
+            customers who simply forgot. Give {ASSISTANT_NAME} your recall list and she calls when it&apos;s due, offers the next
             appointment, and books it. One reminder call that lands is worth the whole month.
           </p>
           <p className="max-w-3xl text-sm text-[var(--muted)] italic">
