@@ -1,6 +1,6 @@
 # Phase 5
 
-Status: on branch `phase-5`, not yet on `main`. Owner self-service, own-number forwarding UI, and a greeting dead-air fix. No new env vars. No Stripe changes. Toll-free SMS verification is deferred (no SMS in this phase).
+Status: shipped on branch `phase-5` (not yet merged to `main`). Owner self-service, own-number forwarding UI, and a greeting dead-air fix. No new env vars. No Stripe changes. Toll-free SMS verification is deferred (no SMS in this phase).
 
 ## Spec source
 

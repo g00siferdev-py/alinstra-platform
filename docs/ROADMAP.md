@@ -1,6 +1,6 @@
 # Roadmap
 
-Written 4 October 2026 after Phase 4. Nothing below is implemented. Each phase gets its own plan document before work starts, following the pattern of `docs/phase-3-plan.md`.
+Updated 4 October 2026 after Phase 5. Phases below Phase 6 are not yet implemented. Each phase gets its own plan document before work starts, following the pattern of `docs/phase-3-plan.md`.
 
 ## Where things stand
 
@@ -8,17 +8,17 @@ Written 4 October 2026 after Phase 4. Nothing below is implemented. Each phase g
 - Phase 4 fixed what the first live call exposed: Ava only speaks public contact details, admins edit a submitted client step by step, call timing is per client, provisioning shows its state plainly and asks before buying a number, the admin has a Services page, and the voice map lives in one file.
 - Phase 4b stores call transcripts and recordings encrypted at rest with per-client retention, role-based access (owner grants staff), playback through our own route, and calls screens in the admin and the portal. The structured `transcriptTurns` (roles, offsets, tool invocations) are the input Phase 8 builds on.
 - Phase 4c hardens recording-job enqueue (rollback + stale-pending sweep) and strengthens Ava's `end_call` prompt so she hangs up after goodbye instead of waiting on the caller.
+- **Phase 5 shipped** (branch `phase-5`, plan `docs/phase-5-plan.md`): owner edit flow on My Business with `owner_edit` ChangeLog; held `owner_step` QuickUpdates for voice / transfer / booking / sensitive text; own-number forwarding page (`phone.mode = "forward"`); continuous greeting opening (template v7) with inbound `begin_message` override; recent calls card on My Business. **Toll-free SMS verification is deferred** to a later phase (no SMS in Phase 5).
 
-## Phase 5: owner self-service and the client's own number
+## Phase 5: owner self-service and the client's own number (shipped)
 
-Goal: the owner can do for their own business what the admin does on the client page, with holds where a change could hurt.
+Shipped. Details in `docs/phase-5-plan.md` and `docs/DEPLOYMENT.md` ("Shipped in Phase 5"). Summary of what landed:
 
-- **Owner-portal edit flow.** Reuse the Phase 4 admin edit flow (`clientEditPayload` / `editClientStep`) behind the owner's `TenantContext`. The owner sees the same step list on My Business. Each step saves to the client and writes an `owner_edit` ChangeLog with the redacted diff.
-- **Review holds.** Steps that change what Ava says (greeting, voice, knowledge, coverage, features) go into the existing held-update queue instead of publishing directly when the text trips `sensitiveHoldReason`, or when the owner changes the voice, transfer targets, or booking mode. The admin approves from the home page as today. Safe changes publish and enqueue a sync, the same as the admin path.
-- **Plan and billing steps stay admin-only.** Owners see the plan but cannot change it; the page points them to email.
-- **Client using their own number.** Surface the carrier-forwarding copy drafted in `docs/DEPLOYMENT.md` ("Client using their own number") on the owner portal, keyed off wizard step 8 `phone.mode = "own_number"`. Show the Alinstra number to forward to, with a copy button and a "test it" checklist. No app-side forwarding; the carrier does it.
-- **Toll-free verification for SMS.** Only if texts ship in this phase. Buying the number for voice does not need it.
-- **Owner-visible call log.** Shipped in Phase 4b as the portal Calls pages (list, detail, transcript, recording). Phase 5 only needs to surface them from My Business.
+- **Owner-portal edit flow.** Reuses `clientEditPayload` / `editClientStep` behind the owner's `TenantContext`. Step list on My Business; Plan and Compliance are read-only (email support). Retention stays editable separately.
+- **Review holds.** Risky owner step edits create held `owner_step` QuickUpdates; admin approves/rejects from home; rejection reason is visible to the owner. QuickUpdateForms (hours, notices, staff, FAQ) still publish directly.
+- **Own-number forwarding.** `/home/business/forwarding` when `phone.mode = "forward"` (schema name; ROADMAP historically said `own_number`).
+- **Greeting dead-air fix.** Template version 7; one continuous opening; inbound webhook overrides `begin_message` for open vs closed.
+- **Recent calls** card on My Business for owner and granted staff.
 
 ## Phase 6: admin dashboard and client reports
 

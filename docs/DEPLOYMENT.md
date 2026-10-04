@@ -302,7 +302,7 @@ The webhook endpoint created on 4 October 2026 is on `2026-08-26.dahlia` because
 
 Retell webhook URL: `https://staging.alinstra.com/api/retell/webhook`. Inbound URL is set by the app when it buys the number. There is no Retell sandbox and no API spend cap. Before buying the first number, set cost and usage alerts in the Retell dashboard. Use one number. End service, or delete the number, to stop the monthly charge.
 
-Toll-free numbers need a toll-free verification before they can send texts. That is a Phase 5 step, not part of buying the number for voice.
+Toll-free numbers need a toll-free verification before they can send texts. That is deferred past Phase 5 (no SMS yet); buying the number for voice does not need it.
 
 ### Retell billing (learned on the first live call)
 
@@ -352,9 +352,17 @@ Phase 3 stored call metadata only. Phase 4b deliberately reverses that: transcri
 
 **Retention setting.** `Client.callRetentionDays` (7–365, default 90) lives on the Compliance wizard step and the admin edit flow. Healthcare-sensitive clients see a "shorter is better" hint; nothing is forced.
 
-### Client using their own number (Phase 5 copy, not yet surfaced)
+### Shipped in Phase 5
 
-This section is written for the owner portal and is not shown anywhere yet. Nothing in the app sets up forwarding.
+#### Owner edit flow and review holds
+
+Owners edit their submitted client from **My Business** (`/home/business`) through the same step list the admin sees. Each editable step opens `/home/business/edit/[step]` and calls `editClientStep` under the owner's `TenantContext` (scoped to their `clientId`). Saves write the client row, rebuild an `AgentConfig` when the step affects Ava, enqueue a sync when provisioned, and append an `owner_edit` ChangeLog with the same redacted diff shape as `admin_edit`. **Plan (step 3) and Compliance (step 9)** stay admin-only; the owner sees them read-only with "Email support@alinstra.com to change this." Call retention stays editable on My Business via `setCallRetention`. Staff see My Business read-only.
+
+Risky owner step edits do not publish immediately. When the edited text trips `sensitiveHoldReason`, or when voice, transfer targets, or booking mode change, the save creates a held `QuickUpdate` of kind `owner_step`. The owner sees **Waiting for review** (with the submitted values) on My Business; the admin approves or rejects from the home held-update queue as today. Approval applies the step and syncs; rejection stores a reason the owner can read. Existing QuickUpdateForms (hours, closure notices, staff, one FAQ) keep publishing directly unless their own sensitive-text hold fires.
+
+#### Client using their own number
+
+Surfaced on `/home/business/forwarding` when wizard step 8 `phone.mode = "forward"` (the schema value; older docs said `own_number`). Linked from My Business; Alinstra-number clients (`new_number`) see a muted note that forwarding is not needed. Nothing in the app sets up forwarding — the carrier does it.
 
 A client who keeps their existing business number forwards it to their Alinstra number only when they do not answer, so Ava takes the calls they miss. Set **conditional call forwarding** (no answer and busy), not unconditional forwarding.
 
@@ -363,7 +371,11 @@ A client who keeps their existing business number forwards it to their Alinstra 
 - **T-Mobile:** dial `**61*1<alinstra number>#` for no answer and `**67*1<alinstra number>#` for busy. Cancel with `##61#` / `##67#`.
 - **Landline and VoIP providers (Comcast, Spectrum, RingCentral, Ooma, and others):** the codes vary; most expose "Forward when unanswered" and "Forward when busy" in the account portal. Set both to the Alinstra number and pick the ring count before forwarding (3–4 rings).
 
-Carrier codes change and some business lines have forwarding disabled by default. Tell the client to confirm the exact codes with their carrier, then test by calling their number from a cell and letting it ring out; Ava should answer with the client's greeting.
+Carrier codes change and some business lines have forwarding disabled by default. Confirm the exact codes with the carrier, then test by calling the business number from a cell and letting it ring out; Ava should answer with the client's greeting. The portal page shows the Alinstra number large, a copy button, and a short test checklist with a link to Calls.
+
+#### Continuous greeting (template v7)
+
+Ava's opening is one continuous utterance: greeting, optional recording notice, and (when closed) the after-hours line, ending in "How can I help?". The inbound webhook overrides Retell's `begin_message` from `office_open` so she does not pause for the caller mid-greeting. Prompt template version is `"7"`.
 
 ### Number purchase approval (Phase 4)
 
