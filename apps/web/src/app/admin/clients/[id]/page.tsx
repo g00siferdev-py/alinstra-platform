@@ -1,9 +1,11 @@
 import { ClientActions } from "@/components/client-actions";
 import { ProvisionPanel } from "@/components/provision-panel";
 import { getEnv } from "@alinstra/config";
+import { OutcomeBadge } from "@/components/calls-list";
+import { formatDuration } from "@/lib/call-view";
 import {
   AGENT_AFFECTING_STEPS,
-  callRecords,
+  callLinksFor,
   changeLogs,
   clientCanBeRemoved,
   clientMessages,
@@ -13,6 +15,7 @@ import {
   formatTransferTargets,
   knowledgeBases,
   knowledgeDocuments,
+  listCalls,
   numberPurchaseFor,
   plans,
   PROVISION_STEPS,
@@ -37,10 +40,11 @@ function orderedSteps(steps: Array<{ name: string; status: string; error: string
 }
 
 export default async function ClientDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  await requireAdmin();
+  const session = await requireAdmin();
   const { id } = await params;
   const client = await clients({ role: "admin" }).getById(id);
   if (!client) notFound();
+  const viewer = { id: session.user.id, role: "admin" as const };
   const [plan, knowledge, documents, logs, people, targets, messages, calls, run] = await Promise.all([
     client.planId ? plans({ role: "admin" }).getById(client.planId) : Promise.resolve(null),
     knowledgeBases({ role: "admin" }).getCurrent(id),
@@ -49,9 +53,10 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
     users({ role: "admin", clientId: id }).list(),
     transferTargets({ role: "admin" }).list(id),
     clientMessages({ role: "admin" }).list(id),
-    callRecords({ role: "admin" }).list(id),
+    listCalls(viewer, id, { limit: 5 }),
     provisioningRuns({ role: "admin" }).latest(id),
   ]);
+  const callLinks = await callLinksFor(viewer, id, messages.map((row) => row.retellCallId));
   const when = (value: Date) => formatLocalTime(value, client.timezone);
   const clientVoice = client.voice && typeof client.voice === "object" ? (client.voice as { voiceId?: unknown; assistantName?: unknown }) : {};
   const env = getEnv();
@@ -122,13 +127,19 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
           </ol>
         </section>
       ) : null}
-      <section className="rounded-xl border border-[var(--line)] p-4">
+      <section className="rounded-xl border border-[var(--line)] p-4" id="messages">
         <h2 className="mb-2 font-medium">Messages</h2>
         {messages.length === 0 ? <p className="text-sm text-[var(--muted)]">No messages yet.</p> : null}
         <ul className="grid gap-2 text-sm">
-          {messages.map((message) => (
-            <li key={message.id}>{when(message.createdAt)} · {message.callerName} · {message.callbackNumber} · {message.body}</li>
-          ))}
+          {messages.map((message) => {
+            const callId = message.retellCallId ? callLinks.get(message.retellCallId) : undefined;
+            return (
+              <li key={message.id}>
+                {when(message.createdAt)} · {message.callerName} · {message.callbackNumber} · {message.body}
+                {callId ? <> · <Link href={`/admin/clients/${client.id}/calls/${callId}`}>View call</Link></> : null}
+              </li>
+            );
+          })}
         </ul>
       </section>
       <section className="rounded-xl border border-[var(--line)] p-4">
@@ -136,10 +147,14 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
           <h2 className="font-medium">Calls</h2>
           <Link className="text-sm underline" href={`/admin/clients/${client.id}/calls`}>All calls</Link>
         </div>
-        {calls.length === 0 ? <p className="text-sm text-[var(--muted)]">No calls yet.</p> : null}
+        {calls.rows.length === 0 ? <p className="text-sm text-[var(--muted)]">No calls yet.</p> : null}
         <ul className="grid gap-1 text-sm">
-          {calls.map((call) => (
-            <li key={call.id}>{call.callerMasked} · {call.durationSeconds ?? "—"}s · {call.endReason ?? "in progress"}</li>
+          {calls.rows.map((call) => (
+            <li key={call.id} className="flex flex-wrap items-center gap-2">
+              <Link href={`/admin/clients/${client.id}/calls/${call.id}`}>{call.startedAt ? when(call.startedAt) : "—"}</Link>
+              <span>· {formatPhone(call.caller) || call.caller} · {formatDuration(call.durationSeconds)}</span>
+              <OutcomeBadge outcome={call.outcome} />
+            </li>
           ))}
         </ul>
         <p className="mt-3 text-sm text-[var(--muted)]">

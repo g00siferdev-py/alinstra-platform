@@ -1,6 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import {
   applyRetellCall,
+  callLinksFor,
   canAccessCall,
   getCall,
   listCalls,
@@ -361,5 +362,8 @@ describe("phase 4b calls", () => {
     expect(detail?.message).toMatchObject({ callerName: "Pat", body: "Furnace out" });
     const message = await prisma.clientMessage.findFirstOrThrow({ where: { clientId: client.id } });
     expect(message.retellCallId).toBe("call_link");
+    // Message → call: links only for viewers who may open the call.
+    expect(await callLinksFor(ownerActor, client.id, [message.retellCallId, null, "call_unknown"])).toEqual(new Map([["call_link", callRecordId]]));
+    expect((await callLinksFor({ id: staff.id, role: "client_staff", clientId: client.id, canViewCalls: false }, client.id, [message.retellCallId])).size).toBe(0);
   });
 });

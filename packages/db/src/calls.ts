@@ -363,6 +363,15 @@ export async function getCall(viewer: CallViewer, callId: string): Promise<CallD
   };
 }
 
+/** Message → call links: CallRecord ids by Retell call id, only for calls the viewer may open. */
+export async function callLinksFor(viewer: CallViewer, clientId: string, retellCallIds: Array<string | null | undefined>): Promise<Map<string, string>> {
+  assertTenantContext(viewerContext(viewer));
+  const ids = [...new Set(retellCallIds.filter((id): id is string => typeof id === "string" && id.length > 0))];
+  if (ids.length === 0 || !canViewClientCalls(viewer, clientId)) return new Map();
+  const rows = await prisma.callRecord.findMany({ where: { clientId, retellCallId: { in: ids } }, select: { id: true, retellCallId: true } });
+  return new Map(rows.map((row) => [row.retellCallId, row.id]));
+}
+
 /** Storage location for playback, after the same access check as `getCall`. */
 export async function recordingForPlayback(viewer: CallViewer, callId: string): Promise<{ key: string; contentType: string; bytes: number | null } | null> {
   assertTenantContext(viewerContext(viewer));

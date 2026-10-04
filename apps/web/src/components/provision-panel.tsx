@@ -10,6 +10,7 @@ import {
   scheduleChurnAction,
   startProvisioningAction,
 } from "@/app/admin/provision-actions";
+import { CopyButton } from "@/components/copy-button";
 import { useToast } from "@/components/toast";
 import { Button, ErrorText } from "@/components/ui";
 import { AWAITING_APPROVAL, numberCostText, numberKindText, provisionHeadline, type NumberPurchaseView, type ProvisionStepView } from "@/lib/provision-view";
@@ -37,24 +38,6 @@ export function CreateClientZeroButton() {
       }}>Create client zero</Button>
       {error ? <ErrorText>{error}</ErrorText> : null}
     </div>
-  );
-}
-
-function CopyButton({ value, label }: { value: string; label: string }) {
-  const toast = useToast();
-  return (
-    <button
-      type="button"
-      className="cursor-pointer rounded-md border border-[var(--line)] bg-white px-2 py-1 text-xs"
-      onClick={() => {
-        void navigator.clipboard.writeText(value).then(
-          () => toast.success(`Copied ${label}`),
-          () => toast.error(`Could not copy ${label}`),
-        );
-      }}
-    >
-      Copy {label}
-    </button>
   );
 }
 
