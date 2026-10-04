@@ -1,3 +1,4 @@
+export { checkRetellHealth, checkStripeHealth, type ServiceHealth } from "./health";
 export { httpBilling, httpVoice } from "./http";
 export { platformsFor } from "./local";
 export { MemoryBilling, MemoryVoice } from "./memory";

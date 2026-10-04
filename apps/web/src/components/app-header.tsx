@@ -12,6 +12,7 @@ export async function AppHeader() {
           ["/home", "Home"],
           ["/admin/clients", "Clients"],
           ["/admin/plans", "Plans"],
+          ["/admin/services", "Services"],
         ]
       : role === "client_owner"
         ? [
