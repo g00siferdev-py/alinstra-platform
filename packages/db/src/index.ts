@@ -43,6 +43,7 @@ export {
   emptyWizardPayload,
   healthcareRequired,
   wizardPayloadSchema,
+  type WizardPayload,
 } from "./domain";
 export { assertTenantContext, ROLES, type Role, type TenantContext } from "./tenant";
 export {
@@ -70,5 +71,8 @@ export {
   type Phase3Deps,
   type TransferDecision,
 } from "./provision";
+export { clientEditPayload, editClientStep, type ClientEditResult } from "./wizard";
+export { diffSection, type FieldChange } from "./edit-diff";
+export { AGENT_AFFECTING_STEPS, WIZARD_STEP_TITLES, wizardStepTitle } from "./domain";
 export { assertTransferNumber, clientIsHealthcare, formatTransferTargets, formatWeeklyHours, maskCaller, normalizePublicPhone, normalizeTransferNumber, officeOpen, plainCallerName, retellPrompt } from "./domain";
 export { recordEmailChange, type Actor } from "./changes";

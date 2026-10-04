@@ -1,6 +1,6 @@
 "use client";
 
-import { continueWizardAction, discardWizardAction, previewWizardPromptAction, saveDraftAction, submitWizardAction } from "@/app/admin/actions";
+import { continueWizardAction, discardWizardAction, editClientStepAction, previewWizardPromptAction, saveDraftAction, submitWizardAction } from "@/app/admin/actions";
 import { useNavigationGuard } from "@/components/navigation-guard";
 import { Button, ErrorText, FileDropzone, Input } from "@/components/ui";
 import { useRouter } from "next/navigation";
@@ -94,6 +94,9 @@ function FieldLabel({ label, hint }: { label: string; hint: string }) {
   );
 }
 
+const EDIT_BANNER = "Editing a live client. Saving this step will update Ava within about a minute.";
+const STRIPE_WARNING = "Stripe subscription not changed — handle plan changes in Stripe for now.";
+
 export function WizardForm({
   clientId,
   initialStep,
@@ -101,6 +104,9 @@ export function WizardForm({
   initialPayload,
   plans,
   documents,
+  mode = "create",
+  hasStripeSubscription = false,
+  provisioned = false,
 }: {
   clientId: string;
   initialStep: number;
@@ -108,9 +114,15 @@ export function WizardForm({
   initialPayload: Payload;
   plans: { id: string; name: string; monthlyPriceCents: number }[];
   documents: DocumentRow[];
+  /** "edit" saves each step straight onto a submitted client; "create" autosaves a draft. */
+  mode?: "create" | "edit";
+  hasStripeSubscription?: boolean;
+  provisioned?: boolean;
 }) {
   const router = useRouter();
+  const editing = mode === "edit";
   const [step, setStep] = useState(initialStep);
+  const [editNote, setEditNote] = useState<{ tone: "ok" | "warn"; text: string } | null>(null);
   const [payload, setPayload] = useState<Payload>(initialPayload);
   const [updatedAt, setUpdatedAt] = useState(initialUpdatedAt);
   const updatedRef = useRef(updatedAt);
@@ -170,15 +182,17 @@ export function WizardForm({
   }
 
   useEffect(() => {
+    if (editing) return;
     setSaveState("saving");
     const timer = setTimeout(() => {
       if (saveLock.current) return;
       void enqueueSave();
     }, 800);
     return () => clearTimeout(timer);
-  }, [clientId, payload, step]);
+  }, [clientId, payload, step, editing]);
 
   useEffect(() => {
+    if (editing) return;
     function warn(event: BeforeUnloadEvent) {
       if (saveState === "saving" || saveState === "error") {
         event.preventDefault();
@@ -187,10 +201,10 @@ export function WizardForm({
     }
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
-  }, [saveState]);
+  }, [saveState, editing]);
 
   useEffect(() => {
-    if (!guard) return;
+    if (!guard || editing) return;
     guard.register(async () => {
       if (saveState === "saving" || saveState === "error") {
         const leave = window.confirm(
@@ -203,7 +217,29 @@ export function WizardForm({
       return enqueueSave();
     });
     return () => guard.register(null);
-  }, [guard, saveState]);
+  }, [guard, saveState, editing]);
+
+  async function saveEdit() {
+    setPending(true);
+    setEditNote(null);
+    setError(null);
+    const result = await editClientStepAction({ clientId, step, payload });
+    setPending(false);
+    if (!result.ok) {
+      setError(result.error);
+      return;
+    }
+    const synced = result.sync
+      ? " Ava updates within about a minute."
+      : result.configVersion !== null && provisioned
+        ? " Ava updates on the next sync."
+        : "";
+    const text = result.changedCount === 0
+      ? `${result.title} saved. Nothing changed.`
+      : `${result.title} saved.${synced}`;
+    setEditNote(result.stripeWarning ? { tone: "warn", text: `${text} ${STRIPE_WARNING}` } : { tone: "ok", text });
+    router.refresh();
+  }
 
   async function saveAndExit() {
     setExitNote(null);
@@ -287,11 +323,19 @@ export function WizardForm({
   const current = STEPS[step - 1];
   return (
     <div className="grid gap-4">
+      {editing ? (
+        <div role="status" className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          {EDIT_BANNER}
+        </div>
+      ) : null}
       <div>
-        <h2 className="text-lg font-semibold">Step {step} of 11 — {current?.title}</h2>
-        <p className="text-sm text-[var(--muted)]">{current?.intro} Drafts save automatically.</p>
+        <h2 className="text-lg font-semibold">Step {step} of 11 — {editing && step === 11 ? "Review" : current?.title}</h2>
+        <p className="text-sm text-[var(--muted)]">{current?.intro} {editing ? "Changes apply when you save this step." : "Drafts save automatically."}</p>
       </div>
       {error ? <ErrorText>{error}</ErrorText> : null}
+      {editing && step === 3 && hasStripeSubscription ? (
+        <p className="text-sm text-amber-900">{STRIPE_WARNING}</p>
+      ) : null}
 
       {step === 1 ? (
         <div className="grid gap-3">
@@ -582,29 +626,95 @@ export function WizardForm({
 
       {step === 11 ? (
         <div className="grid gap-2 text-sm">
-          <p>Business: {business.name} ({business.industry})</p>
-          <p>Owner email: {payload.portalOwnerEmail}</p>
+          <ReviewSummary payload={payload} plans={plans} onEdit={editing ? (target) => { setEditNote(null); setError(null); setStep(target); } : undefined} />
           <PromptPreview clientId={clientId} payload={payload} />
-          <Button disabled={pending} onClick={() => { saveLock.current = true; setPending(true); void submitWizardAction({ clientId, payload, updatedAt: updatedRef.current }).then((result) => { saveLock.current = false; setPending(false); if (result?.error) setError(result.error); }); }}>Submit wizard</Button>
+          {editing ? null : (
+            <Button disabled={pending} onClick={() => { saveLock.current = true; setPending(true); void submitWizardAction({ clientId, payload, updatedAt: updatedRef.current }).then((result) => { saveLock.current = false; setPending(false); if (result?.error) setError(result.error); }); }}>Submit wizard</Button>
+          )}
         </div>
       ) : null}
 
-      <div className="flex flex-wrap items-center gap-2">
-        {step > 1 ? <Button tone="secondary" onClick={() => setStep((current) => current - 1)}>Back</Button> : null}
-        <Button tone="secondary" onClick={() => void saveAndExit()}>Save & exit</Button>
-        {step < 11 ? <Button disabled={pending} onClick={() => void continueStep()}>{pending ? "Saving…" : "Continue"}</Button> : null}
-        <div className="ml-auto">
-          <Button tone="danger" onClick={discardDraft}>Discard draft</Button>
-        </div>
-      </div>
-      <p className="text-sm text-[var(--muted)]">
-        {exitNote ? exitNote : saveState === "saving" ? "Saving…" : saveState === "error" ? (
-          <button type="button" className="cursor-pointer text-[var(--danger)] underline" onClick={() => void enqueueSave()}>
-            Couldn&apos;t save — retry
-          </button>
-        ) : "All changes saved"}
-      </p>
+      {editing ? (
+        <>
+          <div className="flex flex-wrap items-center gap-2">
+            {step > 1 ? <Button tone="secondary" onClick={() => { setEditNote(null); setStep((value) => value - 1); }}>Back</Button> : null}
+            {step < 11 ? <Button tone="secondary" onClick={() => { setEditNote(null); setStep((value) => value + 1); }}>Next</Button> : null}
+            {step < 11 ? <Button disabled={pending} onClick={() => void saveEdit()}>{pending ? "Saving…" : "Save step"}</Button> : null}
+            <div className="ml-auto">
+              <Button tone="secondary" onClick={() => router.push(`/admin/clients/${clientId}`)}>Back to client</Button>
+            </div>
+          </div>
+          {editNote ? (
+            <p role="status" className={editNote.tone === "warn" ? "text-sm text-amber-900" : "text-sm text-[var(--muted)]"}>{editNote.text}</p>
+          ) : null}
+        </>
+      ) : (
+        <>
+          <div className="flex flex-wrap items-center gap-2">
+            {step > 1 ? <Button tone="secondary" onClick={() => setStep((current) => current - 1)}>Back</Button> : null}
+            <Button tone="secondary" onClick={() => void saveAndExit()}>Save & exit</Button>
+            {step < 11 ? <Button disabled={pending} onClick={() => void continueStep()}>{pending ? "Saving…" : "Continue"}</Button> : null}
+            <div className="ml-auto">
+              <Button tone="danger" onClick={discardDraft}>Discard draft</Button>
+            </div>
+          </div>
+          <p className="text-sm text-[var(--muted)]">
+            {exitNote ? exitNote : saveState === "saving" ? "Saving…" : saveState === "error" ? (
+              <button type="button" className="cursor-pointer text-[var(--danger)] underline" onClick={() => void enqueueSave()}>
+                Couldn&apos;t save — retry
+              </button>
+            ) : "All changes saved"}
+          </p>
+        </>
+      )}
     </div>
+  );
+}
+
+function summarize(value: unknown): string {
+  if (value === undefined || value === null || value === "") return "—";
+  if (typeof value === "boolean") return value ? "yes" : "no";
+  return String(value);
+}
+
+function ReviewSummary({
+  payload,
+  plans,
+  onEdit,
+}: {
+  payload: Payload;
+  plans: { id: string; name: string; monthlyPriceCents: number }[];
+  onEdit?: (step: number) => void;
+}) {
+  const plan = plans.find((row) => row.id === payload.plan.planId);
+  const rows: Array<{ step: number; lines: string[] }> = [
+    { step: 1, lines: [`${payload.business.name || "—"} (${payload.business.industry || "no industry"})`, `Contact: ${summarize(payload.business.contactName)}`, `Public phone: ${summarize(payload.business.publicPhone)} · Public email: ${summarize(payload.business.publicEmail)}`] },
+    { step: 2, lines: [payload.websiteNotes?.trim() ? `${payload.websiteNotes.trim().slice(0, 120)}${payload.websiteNotes.trim().length > 120 ? "…" : ""}` : "—"] },
+    { step: 3, lines: [`${plan ? `${plan.name} ($${(plan.monthlyPriceCents / 100).toFixed(0)}/mo)` : "—"}${payload.plan.setupFeeWaived ? " · setup fee waived" : ""}`] },
+    { step: 4, lines: [`Rings before answering: ${summarize(payload.coverage.unansweredAfterRings)}`, `After hours: ${summarize(payload.coverage.afterHours)}`] },
+    { step: 5, lines: [`Booking: ${summarize(payload.features.bookingMode)} · Live transfer: ${summarize(Boolean(payload.features.liveTransfer))}`, `Transfer targets: ${String(payload.features.transferTargetsText ?? "").split("\n").filter(Boolean).length}`] },
+    { step: 6, lines: [`Voice: ${summarize(payload.voice.voiceId)} · Name: ${payload.voice.assistantName || "Ava"} · Disclosure: ${payload.voice.disclosureMode || "on_request"}`] },
+    { step: 7, lines: [["hours", "services", "faqs", "policies", "staff"].map((field) => `${field}: ${payload.knowledge[field]?.trim() ? "set" : "empty"}`).join(" · ")] },
+    { step: 8, lines: [`${summarize(payload.phone.mode)}${payload.phone.tollFree === true ? " · toll-free" : payload.phone.areaCode ? ` · area code ${payload.phone.areaCode}` : ""}`] },
+    { step: 9, lines: [`Healthcare: ${summarize(Boolean(payload.compliance.healthcareSensitive))} · Review done: ${summarize(Boolean(payload.compliance.complianceReviewDone))}`] },
+    { step: 10, lines: [`Owner email: ${summarize(payload.portalOwnerEmail)}`] },
+  ];
+  return (
+    <ul className="grid gap-2">
+      {rows.map((row) => (
+        <li key={row.step} className="rounded-md border border-[var(--line)] p-3">
+          <div className="flex items-center justify-between gap-2">
+            <span className="font-medium">{STEPS[row.step - 1]?.title}</span>
+            {onEdit ? (
+              <button type="button" className="cursor-pointer text-xs underline" onClick={() => onEdit(row.step)}>Edit</button>
+            ) : null}
+          </div>
+          {row.lines.map((line) => (
+            <p key={line} className="text-[var(--muted)]">{line}</p>
+          ))}
+        </li>
+      ))}
+    </ul>
   );
 }
 

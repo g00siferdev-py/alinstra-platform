@@ -179,6 +179,28 @@ export const wizardPayloadSchema = z.object({
 
 export type WizardPayload = z.infer<typeof wizardPayloadSchema>;
 
+/** Wizard step titles, indexed from step 1. Shared by the wizard UI, the edit flow, and the change log. */
+export const WIZARD_STEP_TITLES = [
+  "Business and contact",
+  "Website notes",
+  "Plan",
+  "Coverage",
+  "Features",
+  "Voice and personality",
+  "Knowledge base",
+  "Phone setup",
+  "Compliance",
+  "Portal access",
+  "Review and submit",
+] as const;
+
+/** Steps whose data reaches the receptionist. Plan, Portal access, and Review stay out. */
+export const AGENT_AFFECTING_STEPS: ReadonlySet<number> = new Set([1, 4, 5, 6, 7, 8, 9]);
+
+export function wizardStepTitle(step: number): string {
+  return WIZARD_STEP_TITLES[step - 1] ?? `Step ${step}`;
+}
+
 export function emptyWizardPayload(): WizardPayload {
   return { version: 1, compliance: { aiDisclosure: true, recordingNotice: true } };
 }

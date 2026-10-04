@@ -1,6 +1,6 @@
 import { ClientActions } from "@/components/client-actions";
 import { ProvisionPanel } from "@/components/provision-panel";
-import { callRecords, changeLogs, clientCanBeRemoved, clientMessages, clients, formatTransferTargets, knowledgeBases, knowledgeDocuments, plans, provisioningRuns, transferTargets, users } from "@alinstra/db";
+import { AGENT_AFFECTING_STEPS, callRecords, changeLogs, clientCanBeRemoved, clientMessages, clients, formatTransferTargets, knowledgeBases, knowledgeDocuments, plans, provisioningRuns, transferTargets, users, WIZARD_STEP_TITLES } from "@alinstra/db";
 import { requireAdmin } from "@/lib/session";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -66,6 +66,29 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
         runKind={run?.kind ?? null}
         steps={(run?.steps ?? []).map((step) => ({ name: step.name, status: step.status, error: step.error }))}
       />
+      {client.wizardSubmittedAt ? (
+        <section className="rounded-xl border border-[var(--line)] p-4">
+          <h2 className="mb-1 font-medium">Edit</h2>
+          <p className="mb-3 text-sm text-[var(--muted)]">
+            Each step saves straight to this client. Steps marked with a dot update Ava{client.retellAgentId ? " within about a minute" : " once the client is live"}.
+          </p>
+          <ol className="grid gap-1 text-sm sm:grid-cols-2">
+            {WIZARD_STEP_TITLES.map((title, index) => {
+              const step = index + 1;
+              const review = step === WIZARD_STEP_TITLES.length;
+              return (
+                <li key={title} className="flex items-center justify-between gap-2 rounded-md border border-[var(--line)] px-3 py-1.5">
+                  <span>
+                    {step}. {review ? "Review" : title}
+                    {AGENT_AFFECTING_STEPS.has(step) ? <span aria-label="updates Ava" className="ml-1 text-[var(--muted)]">·</span> : null}
+                  </span>
+                  <Link className="text-xs underline" href={`/admin/clients/${client.id}/wizard?step=${step}&mode=edit`}>{review ? "Open" : "Edit"}</Link>
+                </li>
+              );
+            })}
+          </ol>
+        </section>
+      ) : null}
       <section className="rounded-xl border border-[var(--line)] p-4">
         <h2 className="mb-2 font-medium">Messages</h2>
         {messages.length === 0 ? <p className="text-sm text-[var(--muted)]">No messages yet.</p> : null}

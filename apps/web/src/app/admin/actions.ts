@@ -6,6 +6,7 @@ import {
   clients,
   continueWizard,
   discardWizard,
+  editClientStep,
   removeClient,
   saveWizardDraft,
   previewWizardPrompt,
@@ -14,8 +15,10 @@ import {
   updatePlan,
   type Actor,
 } from "@alinstra/db";
+import { enqueueSyncAgent } from "@alinstra/queue";
 import { getStorage } from "@alinstra/storage";
 import { requireAdmin } from "@/lib/session";
+import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 function rethrowRedirect(error: unknown): void {
@@ -73,6 +76,37 @@ export async function continueWizardAction(input: {
     return { ok: true, updatedAt: draft.updatedAt.toISOString() };
   } catch (error) {
     return { error: error instanceof Error ? error.message : "Check this step and try again." };
+  }
+}
+
+export type EditStepResult =
+  | { ok: true; title: string; changedCount: number; configVersion: number | null; sync: boolean; stripeWarning: boolean }
+  | { ok: false; error: string };
+
+/**
+ * Edit mode: writes one wizard step onto a submitted client and, when the step affects the receptionist of a
+ * provisioned client, queues the `sync-<clientId>` job so Ava picks the change up within about a minute.
+ */
+export async function editClientStepAction(input: { clientId: string; step: number; payload: unknown }): Promise<EditStepResult> {
+  const session = await requireAdmin();
+  try {
+    const result = await editClientStep(adminActor(session), input);
+    if (result.sync) {
+      await enqueueSyncAgent({ clientId: input.clientId }).catch((error: unknown) => {
+        log("warn", "sync enqueue failed after admin edit", { clientId: input.clientId, error: error instanceof Error ? error.message : "unknown" });
+      });
+    }
+    revalidatePath(`/admin/clients/${input.clientId}`);
+    return {
+      ok: true,
+      title: result.title,
+      changedCount: result.changed.length,
+      configVersion: result.configVersion,
+      sync: result.sync,
+      stripeWarning: result.stripeWarning,
+    };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : "Check this step and try again." };
   }
 }
 

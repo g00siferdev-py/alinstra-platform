@@ -3,6 +3,8 @@ import { MemoryBilling, MemoryVoice } from "@alinstra/providers";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { prisma } from "./client";
 import { businessSchema } from "./domain";
+import { diffSection } from "./edit-diff";
+import { clientEditPayload, editClientStep } from "./wizard";
 import {
   advanceProvisioning,
   decideTransfer,
@@ -175,6 +177,95 @@ describe("phase 4 privacy", () => {
     const refreshed = voice.llms.get(stored.retellLlmId ?? "")?.prompt ?? "";
     expect(refreshed.split("+18883871525")).toHaveLength(2);
     expect(refreshed).not.toContain(stored.phoneE164 ?? "none");
+  });
+
+  it("edits a live client step by step: new config, redacted change log, sync only when Ava is affected", async () => {
+    const client = await seedClient();
+    const voice = new MemoryVoice();
+    await startProvisioning(admin, client.id);
+    await advanceProvisioning(admin, client.id, deps(voice, new MemoryBilling()));
+    const before = await prisma.agentConfig.findFirstOrThrow({ where: { clientId: client.id, status: "active" } });
+    const base = await clientEditPayload(admin, client.id);
+
+    const coverage = await editClientStep(admin, {
+      clientId: client.id,
+      step: 4,
+      payload: { ...base, coverage: { ...base.coverage, afterHours: "Take a message and promise a callback by 9am." } },
+    });
+    expect(coverage.sync).toBe(true);
+    expect(coverage.configVersion).toBe(before.version + 1);
+    expect(coverage.changed).toEqual([{ field: "afterHours", before: "(empty)", after: "Take a message and promise a callback by 9am." }]);
+    const active = await prisma.agentConfig.findFirstOrThrow({ where: { clientId: client.id, status: "active" } });
+    expect(active.version).toBe(before.version + 1);
+    expect(active.source).toBe("admin_edit");
+    expect(active.settings).toMatchObject({ coverage: { afterHours: "Take a message and promise a callback by 9am." } });
+    const stored = await prisma.client.findUniqueOrThrow({ where: { id: client.id } });
+    expect(stored.agentSyncStatus).toBe("syncing");
+    const log = await prisma.changeLog.findFirstOrThrow({ where: { clientId: client.id, action: "admin_edit" }, orderBy: { createdAt: "desc" } });
+    expect(log.summary).toContain("Coverage");
+    expect(log.after).toMatchObject({ kind: "admin_edit", step: 4, title: "Coverage", configVersion: before.version + 1 });
+
+    const portal = await editClientStep(admin, { clientId: client.id, step: 10, payload: { ...base, portalOwnerEmail: "new-owner@example.com" } });
+    expect(portal.sync).toBe(false);
+    expect(portal.configVersion).toBeNull();
+    expect(await prisma.agentConfig.count({ where: { clientId: client.id } })).toBe(before.version + 1);
+    expect((await prisma.client.findUniqueOrThrow({ where: { id: client.id } })).portalOwnerEmail).toBe("new-owner@example.com");
+    const portalLog = await prisma.changeLog.findFirstOrThrow({ where: { clientId: client.id, action: "admin_edit" }, orderBy: { createdAt: "desc" } });
+    expect(JSON.stringify(portalLog.after)).not.toContain("new-owner@example.com");
+    expect(portalLog.after).toMatchObject({ fields: [{ field: "portalOwnerEmail", value: "(changed)" }] });
+
+    const contact = await editClientStep(admin, {
+      clientId: client.id,
+      step: 1,
+      payload: { ...base, business: { ...base.business, contactName: "Dana Lee", publicPhone: "(888) 387-1525", contactPhone: "+14155550777" } },
+    });
+    expect(contact.changed).toEqual([
+      { field: "contactName", before: "(empty)", after: "Dana Lee" },
+      { field: "contactPhone", redacted: true },
+      { field: "publicPhone", redacted: true },
+    ]);
+    const contactLog = await prisma.changeLog.findFirstOrThrow({ where: { clientId: client.id, action: "admin_edit" }, orderBy: { createdAt: "desc" } });
+    expect(JSON.stringify(contactLog.after)).not.toMatch(/\d{7,}/);
+    const prompt = (await prisma.agentConfig.findFirstOrThrow({ where: { clientId: client.id, status: "active" } })).promptText;
+    expect(prompt.split("+18883871525")).toHaveLength(2);
+    expect(prompt).not.toContain("+14155550777");
+
+    const plan = await editClientStep(admin, { clientId: client.id, step: 3, payload: base });
+    expect(plan.stripeWarning).toBe(false);
+    await prisma.client.update({ where: { id: client.id }, data: { stripeSubscriptionId: "sub_test_1" } });
+    expect((await editClientStep(admin, { clientId: client.id, step: 3, payload: base })).stripeWarning).toBe(true);
+  });
+
+  it("edit mode reads the client, never a stale wizard draft, and refuses unsubmitted clients", async () => {
+    const client = await seedClient();
+    await prisma.wizardDraft.create({
+      data: {
+        clientId: client.id,
+        currentStep: 11,
+        createdById: admin.id,
+        payload: { version: 1, business: { name: "Stale Draft Name", timezone: "America/Chicago" }, coverage: { afterHours: "stale" } },
+      },
+    });
+    const payload = await clientEditPayload(admin, client.id);
+    expect(payload.business?.name).toBe("West Dental Lab");
+    expect(payload.business?.timezone).toBe("America/New_York");
+    expect(payload.coverage?.afterHours).toBeUndefined();
+    expect(payload.features?.transferTargetsText).toBe("Front desk, +14155550100\nDr. Patel, +14155550123\nBilling, +14155550177");
+    expect(payload.features?.weeklyHoursText).toBe("fri 09:00-17:00");
+    expect(payload.knowledge?.staff).toBe("Owner: Dana Lee");
+
+    await prisma.client.update({ where: { id: client.id }, data: { wizardSubmittedAt: null } });
+    await expect(clientEditPayload(admin, client.id)).rejects.toThrow(/Finish the wizard/);
+    await expect(editClientStep(admin, { clientId: client.id, step: 2, payload: { version: 1, websiteNotes: "x" } })).rejects.toThrow(/Finish the wizard/);
+  });
+
+  it("diffs a section field by field and hides contact values", () => {
+    expect(diffSection("business", { name: "A", publicPhone: "+18883871525" }, { name: "B", publicPhone: "+18883871526" })).toEqual([
+      { field: "name", before: "A", after: "B" },
+      { field: "publicPhone", redacted: true },
+    ]);
+    expect(diffSection("websiteNotes", "old", "old")).toEqual([]);
+    expect(diffSection("portalOwnerEmail", "a@x.com", "b@x.com")).toEqual([{ field: "portalOwnerEmail", redacted: true }]);
   });
 
   it("normalizes and validates the public phone and email", () => {

@@ -292,6 +292,43 @@ export async function createDraftAgentConfig(ctx: Actor, tx: Prisma.TransactionC
 }
 
 /**
+ * Rebuilds the receptionist config from the client's current data after an admin edit. A client with an
+ * active config gets a new active version (and a sync flag when it is provisioned); a client that is still
+ * waiting on provisioning gets a fresh draft in place of the old one.
+ */
+export async function rebuildAgentConfig(ctx: Actor, tx: Prisma.TransactionClient, clientId: string, source: string) {
+  assertAdmin(ctx);
+  const active = await tx.agentConfig.findFirst({ where: { clientId, status: "active" }, select: { id: true } });
+  if (!active) {
+    await tx.agentConfig.updateMany({ where: { clientId, status: "draft" }, data: { status: "superseded" } });
+  }
+  const loaded = await load(tx, clientId);
+  const config = await insertConfig(tx, {
+    clientId,
+    status: active ? "active" : "draft",
+    source,
+    createdById: ctx.id,
+    actor: ctx,
+    input: loaded.input,
+    knowledge: loaded.knowledge,
+    documentIds: loaded.documents.map((document) => document.id),
+    voice: loaded.client.voice,
+    features: loaded.client.features,
+    coverage: loaded.client.coverage,
+  });
+  await recordChange(tx, {
+    clientId,
+    actor: ctx,
+    action: active ? "agent_config.activated" : "agent_config.created",
+    entityType: "agent_config",
+    entityId: config.id,
+    summary: `${active ? "Activated" : "Created draft"} receptionist config v${config.version} for ${loaded.client.name} from an admin edit`,
+    after: { version: config.version, status: config.status, templateVersion: config.templateVersion, source },
+  });
+  return config;
+}
+
+/**
  * Rebuilds the active config from current client data when the stored prompt was rendered by an older
  * template, or when the public contact details changed since it was rendered. Returns the new version or null.
  */

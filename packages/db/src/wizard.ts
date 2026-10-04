@@ -1,15 +1,19 @@
 import { Prisma } from "./generated/prisma/client";
 import { prisma } from "./client";
-import { createDraftAgentConfig } from "./agent";
+import { createDraftAgentConfig, rebuildAgentConfig } from "./agent";
 import { recordChange, type Actor } from "./changes";
 import {
+  AGENT_AFFECTING_STEPS,
   businessSchema,
   clientCanBeRemoved,
   complianceSchema,
   coverageSchema,
   emptyWizardPayload,
   featuresSchema,
+  formatTransferTargets,
+  formatWeeklyHours,
   healthcareRequired,
+  INDUSTRIES,
   parseRecipientEmails,
   parseTransferTargets,
   parseWeeklyHours,
@@ -18,8 +22,11 @@ import {
   planSelectionSchema,
   voiceSchema,
   wizardPayloadSchema,
+  wizardStepTitle,
+  type WeeklyHours,
   type WizardPayload,
 } from "./domain";
+import { changeLogFields, diffSection, SECTION_BY_STEP, type FieldChange } from "./edit-diff";
 import { assertTenantContext, type TenantContext } from "./tenant";
 
 function stripEmptyStrings(value: unknown): unknown {
@@ -110,7 +117,18 @@ export async function saveWizardDraft(
   });
 }
 
-async function applyStep(tx: Prisma.TransactionClient, clientId: string, step: number, payload: WizardPayload) {
+/**
+ * Writes one wizard step onto the client. In "draft" mode (the create flow) knowledge lands on the draft
+ * knowledge base and transfer targets wait for submit. In "edit" mode (a submitted client) knowledge lands on
+ * the latest knowledge base and transfer targets are replaced right away.
+ */
+async function applyStep(
+  tx: Prisma.TransactionClient,
+  clientId: string,
+  step: number,
+  payload: WizardPayload,
+  mode: "draft" | "edit" = "draft",
+) {
   if (step === 1) {
     const business = businessSchema.parse({ timezone: "America/New_York", ...payload.business });
     await tx.client.update({
@@ -160,7 +178,7 @@ async function applyStep(tx: Prisma.TransactionClient, clientId: string, step: n
   if (step === 5) {
     const features = featuresSchema.parse(payload.features ?? {});
     const weeklyHours = parseWeeklyHours(features.weeklyHoursText ?? "");
-    parseTransferTargets(features.transferTargetsText ?? "");
+    const targets = parseTransferTargets(features.transferTargetsText ?? "");
     if (features.messageRecipients) parseRecipientEmails(features.messageRecipients);
     await tx.client.update({
       where: { id: clientId },
@@ -169,14 +187,21 @@ async function applyStep(tx: Prisma.TransactionClient, clientId: string, step: n
         weeklyHours: Object.keys(weeklyHours).length > 0 ? weeklyHours : Prisma.DbNull,
       },
     });
+    if (mode === "edit") {
+      await tx.transferTarget.deleteMany({ where: { clientId } });
+      for (const target of targets) {
+        await tx.transferTarget.create({ data: { clientId, label: target.label, e164: target.e164 } });
+      }
+    }
   }
   if (step === 6) {
     await tx.client.update({ where: { id: clientId }, data: { voice: json(voiceSchema.parse(payload.voice ?? {})) } });
   }
   if (step === 7) {
     const fields = knowledgeFieldsSchema.parse(payload.knowledge ?? {});
+    const latest = mode === "edit" ? await tx.knowledgeBase.findFirst({ where: { clientId }, orderBy: { version: "desc" }, select: { id: true } }) : null;
     await tx.knowledgeBase.updateMany({
-      where: { clientId, status: "draft" },
+      where: latest ? { id: latest.id } : { clientId, status: "draft" },
       data: {
         hours: fields.hours ?? Prisma.DbNull,
         services: fields.services ?? Prisma.DbNull,
@@ -381,3 +406,160 @@ export function changeLogs(ctx: TenantContext) {
     },
   };
 }
+
+function record(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return value as Record<string, unknown>;
+}
+
+function text(value: unknown): string | undefined {
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function bool(value: unknown): boolean | undefined {
+  return typeof value === "boolean" ? value : undefined;
+}
+
+/**
+ * Builds the wizard payload from what is saved on the client right now. Edit mode reads this and never the
+ * WizardDraft, which stops being the source of truth the moment the wizard is submitted.
+ */
+export async function clientEditPayload(ctx: Actor, clientId: string): Promise<WizardPayload> {
+  assertTenantContext(ctx);
+  if (ctx.role !== "admin") throw new Error("Only admin can edit a client");
+  const client = await prisma.client.findFirst({ where: { id: clientId, archivedAt: null } });
+  if (!client) throw new Error("That client is not available.");
+  if (!client.wizardSubmittedAt) throw new Error("Finish the wizard before editing this client.");
+  const [knowledge, targets] = await Promise.all([
+    prisma.knowledgeBase.findFirst({ where: { clientId }, orderBy: { version: "desc" } }),
+    prisma.transferTarget.findMany({ where: { clientId }, orderBy: { createdAt: "asc" } }),
+  ]);
+  const features = record(client.features);
+  const voice = record(client.voice);
+  const phone = record(client.phone);
+  const compliance = record(client.compliance);
+  const coverage = record(client.coverage);
+  const payload: WizardPayload = {
+    version: 1,
+    business: {
+      name: client.name,
+      industry: (INDUSTRIES as readonly string[]).includes(client.industry ?? "") ? (client.industry as (typeof INDUSTRIES)[number]) : undefined,
+      contactName: client.contactName ?? undefined,
+      contactEmail: client.contactEmail ?? undefined,
+      contactPhone: client.contactPhone ?? undefined,
+      addressLine1: client.addressLine1 ?? undefined,
+      addressLine2: client.addressLine2 ?? undefined,
+      city: client.city ?? undefined,
+      region: client.region ?? undefined,
+      postalCode: client.postalCode ?? undefined,
+      country: client.country ?? undefined,
+      timezone: client.timezone,
+      websiteUrl: client.websiteUrl ?? undefined,
+      namePronunciation: client.namePronunciation ?? undefined,
+      publicPhone: client.publicPhone ?? undefined,
+      publicEmail: client.publicEmail ?? undefined,
+    },
+    websiteNotes: client.websiteNotes ?? undefined,
+    plan: {
+      planId: client.planId ?? undefined,
+      overrideMonthlyPriceCents: client.overrideMonthlyPriceCents,
+      overrideIncludedMinutes: client.overrideIncludedMinutes,
+      overrideOveragePerMinuteCents: client.overrideOveragePerMinuteCents,
+      overrideSetupFeeCents: client.overrideSetupFeeCents,
+      overrideIncludedChangesPerMonth: client.overrideIncludedChangesPerMonth,
+      setupFeeWaived: client.setupFeeWaived,
+    },
+    coverage: {
+      ...coverage,
+      unansweredAfterRings: typeof coverage.unansweredAfterRings === "number" ? coverage.unansweredAfterRings : undefined,
+    } as WizardPayload["coverage"],
+    features: {
+      ...features,
+      weeklyHoursText: formatWeeklyHours(client.weeklyHours as WeeklyHours | null),
+      transferTargetsText: formatTransferTargets(targets),
+    } as WizardPayload["features"],
+    voice: voice as WizardPayload["voice"],
+    knowledge: {
+      hours: text(knowledge?.hours),
+      services: text(knowledge?.services),
+      faqs: text(knowledge?.faqs),
+      policies: text(knowledge?.policies),
+      staff: text(knowledge?.staff),
+    },
+    phone: phone as WizardPayload["phone"],
+    compliance: {
+      aiDisclosure: true,
+      recordingNotice: bool(compliance.recordingNotice) ?? true,
+      healthcareSensitive: bool(compliance.healthcareSensitive) ?? false,
+      healthcareTouched: bool(compliance.healthcareTouched) ?? false,
+      complianceReviewDone: bool(compliance.complianceReviewDone) ?? false,
+      complianceReviewNote: text(compliance.complianceReviewNote) ?? "",
+      recallConsent: bool(compliance.recallConsent) ?? false,
+    },
+    portalOwnerEmail: client.portalOwnerEmail ?? undefined,
+  };
+  return asPayload(payload);
+}
+
+export type ClientEditResult = {
+  step: number;
+  title: string;
+  changed: FieldChange[];
+  /** New receptionist config version, when the step touches the agent. */
+  configVersion: number | null;
+  /** True when the client is provisioned and a `sync-<clientId>` job should run. */
+  sync: boolean;
+  /** True when the plan changed for a client with a Stripe subscription that was left untouched. */
+  stripeWarning: boolean;
+};
+
+/**
+ * Saves one wizard step straight onto a submitted client. Validates with the same schemas as the wizard,
+ * records an `admin_edit` change with a redacted diff, and rebuilds the receptionist config when the step
+ * affects the agent. Nothing here talks to Stripe or Retell; the caller enqueues the sync job when `sync` is true.
+ */
+export async function editClientStep(
+  ctx: Actor,
+  input: { clientId: string; step: number; payload: unknown },
+): Promise<ClientEditResult> {
+  assertTenantContext(ctx);
+  if (ctx.role !== "admin") throw new Error("Only admin can edit a client");
+  const step = Math.trunc(input.step);
+  if (step < 1 || step > 10) throw new Error("Choose a step to edit.");
+  const payload = asPayload(input.payload);
+  const before = await clientEditPayload(ctx, input.clientId);
+  const section = SECTION_BY_STEP[step] ?? "business";
+  const title = wizardStepTitle(step);
+  return prisma.$transaction(async (tx) => {
+    const client = await tx.client.findFirst({ where: { id: input.clientId, archivedAt: null } });
+    if (!client?.wizardSubmittedAt) throw new Error("Finish the wizard before editing this client.");
+    await applyStep(tx, input.clientId, step, payload, "edit");
+    const stripeWarning = step === 3 && Boolean(client.stripeSubscriptionId);
+    let configVersion: number | null = null;
+    let sync = false;
+    if (AGENT_AFFECTING_STEPS.has(step)) {
+      const config = await rebuildAgentConfig(ctx, tx, input.clientId, "admin_edit");
+      configVersion = config.version;
+      sync = Boolean(config.sync);
+    }
+    const changed = diffSection(section, before[section], payload[section]);
+    await recordChange(tx, {
+      clientId: input.clientId,
+      actor: ctx,
+      action: "admin_edit",
+      entityType: "client",
+      entityId: input.clientId,
+      summary: `Edited ${title} for ${client.name}${changed.length === 0 ? " (no field changed)" : ""}`,
+      after: {
+        kind: "admin_edit",
+        step,
+        title,
+        fields: changeLogFields(changed),
+        configVersion,
+        stripeWarning,
+      },
+    });
+    return { step, title, changed, configVersion, sync, stripeWarning };
+  });
+}
+
