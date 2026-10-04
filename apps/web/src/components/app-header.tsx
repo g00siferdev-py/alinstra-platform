@@ -18,12 +18,15 @@ export async function AppHeader() {
         ? [
             ["/home", "Home"],
             ["/home/business", "My Business"],
+            ["/home/calls", "Calls"],
             ["/home/changes", "Change Requests"],
             ["/home/team", "Team"],
           ]
         : [
             ["/home", "Home"],
             ["/home/business", "My Business"],
+            // Staff only see Calls once the owner grants call access.
+            ...(session.user.canViewCalls === true ? [["/home/calls", "Calls"]] : []),
           ];
 
   return (

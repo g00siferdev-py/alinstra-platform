@@ -7,6 +7,7 @@ const userSelect = {
   name: true,
   role: true,
   clientId: true,
+  canViewCalls: true,
   twoFactorEnabled: true,
   createdAt: true,
 } as const;

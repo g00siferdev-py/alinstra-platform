@@ -6,6 +6,7 @@ import {
   cancelChangeRequest,
   changeAllowance,
   previewQuickUpdate,
+  setCallAccess,
   submitChangeRequest,
   type Actor,
   type QuickUpdateInput,
@@ -83,6 +84,18 @@ export async function submitChangeRequestAction(input: { category: string; descr
     return { ok: true };
   } catch (error) {
     return { error: message(error, "Could not submit that request.") };
+  }
+}
+
+/** Owner grants or removes a staff member's access to call transcripts and recordings. */
+export async function setCallAccessAction(input: { userId: string; canViewCalls: boolean }) {
+  const session = await requireUser();
+  try {
+    const result = await setCallAccess(ownerActor(session), input);
+    revalidatePath("/home/team");
+    return { ok: true, changed: result.changed };
+  } catch (error) {
+    return { error: message(error, "Could not change call access.") };
   }
 }
 

@@ -1,0 +1,103 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+type Viewer = { id?: string; role: string; clientId?: string | null; canViewCalls?: boolean | null };
+
+const state = vi.hoisted(() => ({
+  user: null as null | { id: string; role: string; clientId?: string | null; canViewCalls?: boolean; twoFactorEnabled?: boolean },
+  rangeCalls: [] as Array<[number, number]>,
+}));
+
+const BYTES = Buffer.from("0123456789abcdef");
+
+vi.mock("@/lib/session", () => ({ getSession: async () => (state.user ? { user: state.user } : null) }));
+vi.mock("@alinstra/db", () => ({
+  // Mirrors canAccessCall: admin → all, owner → own client, staff → own client with the grant; else null (404).
+  recordingForPlayback: async (viewer: Viewer, callId: string) => {
+    if (callId !== "call_1") return null;
+    const call = { clientId: "client_1" };
+    const allowed =
+      viewer.role === "admin" ||
+      (viewer.clientId === call.clientId && (viewer.role === "client_owner" || (viewer.role === "client_staff" && viewer.canViewCalls === true)));
+    return allowed ? { key: "clients/client_1/calls/call_1.wav", contentType: "audio/wav", bytes: BYTES.byteLength } : null;
+  },
+}));
+vi.mock("@alinstra/storage", () => ({
+  getStorage: () => ({
+    get: async () => BYTES,
+    getRange: async (_key: string, start: number, end: number) => {
+      state.rangeCalls.push([start, end]);
+      return BYTES.subarray(start, end + 1);
+    },
+    byteSize: async () => BYTES.byteLength,
+  }),
+}));
+
+import { GET } from "./route";
+
+function get(id: string, range?: string) {
+  const headers = range ? { range } : undefined;
+  return GET(new Request(`http://localhost/api/calls/${id}/recording`, { headers }), { params: Promise.resolve({ id }) });
+}
+
+const roles = {
+  admin: { id: "a", role: "admin", twoFactorEnabled: true },
+  adminNo2fa: { id: "a2", role: "admin", twoFactorEnabled: false },
+  owner: { id: "o", role: "client_owner", clientId: "client_1" },
+  foreignOwner: { id: "o2", role: "client_owner", clientId: "client_2" },
+  staff: { id: "s", role: "client_staff", clientId: "client_1", canViewCalls: false },
+  grantedStaff: { id: "s2", role: "client_staff", clientId: "client_1", canViewCalls: true },
+  foreignGrantedStaff: { id: "s3", role: "client_staff", clientId: "client_2", canViewCalls: true },
+};
+
+describe("recording playback route", () => {
+  beforeEach(() => {
+    state.user = null;
+    state.rangeCalls.length = 0;
+  });
+
+  it("requires a session", async () => {
+    expect((await get("call_1")).status).toBe(401);
+    state.user = roles.adminNo2fa;
+    expect((await get("call_1")).status).toBe(401);
+  });
+
+  it.each([
+    ["admin", roles.admin, 200],
+    ["owner of the client", roles.owner, 200],
+    ["owner of another client", roles.foreignOwner, 404],
+    ["staff without the grant", roles.staff, 404],
+    ["staff with the grant", roles.grantedStaff, 200],
+    ["granted staff of another client", roles.foreignGrantedStaff, 404],
+  ])("%s", async (_label, user, status) => {
+    state.user = user;
+    const response = await get("call_1");
+    expect(response.status).toBe(status);
+    expect(response.headers.get("cache-control")).toBe("private, no-store");
+    if (status === 200) {
+      expect(response.headers.get("content-type")).toBe("audio/wav");
+      expect(response.headers.get("accept-ranges")).toBe("bytes");
+      expect(Buffer.from(await response.arrayBuffer()).equals(BYTES)).toBe(true);
+    }
+  });
+
+  it("answers 404, not 403, for unknown calls", async () => {
+    state.user = roles.admin;
+    expect((await get("call_missing")).status).toBe(404);
+  });
+
+  it("serves byte ranges for seeking and refuses impossible ones", async () => {
+    state.user = roles.owner;
+    const partial = await get("call_1", "bytes=4-7");
+    expect(partial.status).toBe(206);
+    expect(partial.headers.get("content-range")).toBe("bytes 4-7/16");
+    expect(partial.headers.get("content-length")).toBe("4");
+    expect(Buffer.from(await partial.arrayBuffer()).toString()).toBe("4567");
+    expect(state.rangeCalls).toEqual([[4, 7]]);
+    const open = await get("call_1", "bytes=12-");
+    expect(open.status).toBe(206);
+    expect(open.headers.get("content-range")).toBe("bytes 12-15/16");
+    const bad = await get("call_1", "bytes=16-");
+    expect(bad.status).toBe(416);
+    expect(bad.headers.get("content-range")).toBe("bytes */16");
+  });
+});
