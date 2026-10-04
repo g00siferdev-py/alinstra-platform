@@ -4,7 +4,7 @@ import { verifyRetell } from "@alinstra/providers";
 
 export const dynamic = "force-dynamic";
 
-const UNKNOWN = { call_inbound: { dynamic_variables: { office_open: "unknown", allowed_numbers: "" } } };
+const UNKNOWN = { call_inbound: { dynamic_variables: { office_open: "unknown", allowed_targets: "" } } };
 
 export async function POST(request: Request): Promise<Response> {
   const env = getEnv();

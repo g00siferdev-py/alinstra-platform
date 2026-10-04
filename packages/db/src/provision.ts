@@ -1,7 +1,8 @@
 import type { BillingPlatform, PublishedTool, VoicePlatform } from "@alinstra/providers";
-import { overageLookupKey, TAKE_MESSAGE_PARAMETERS, TRANSFER_CHECK_PARAMETERS } from "@alinstra/providers";
+import { overageLookupKey, TAKE_MESSAGE_PARAMETERS, TRANSFER_CHECK_PARAMETERS, transferToolNames } from "@alinstra/providers";
 import { Pool } from "pg";
 import { Prisma } from "./generated/prisma/client";
+import { refreshStaleAgentConfig } from "./agent";
 import { recordChange, type Actor } from "./changes";
 import { prisma } from "./client";
 import {
@@ -175,21 +176,22 @@ function toolsFor(appUrl: string, targets: Array<{ label: string; e164: string }
     },
   ];
   if (!liveTransferOn(features) || targets.length === 0) return tools;
-  const allowed = targets.map((target) => `${target.label} ${target.e164}`).join("; ");
+  const names = transferToolNames(targets.map((target) => target.label));
+  const labels = targets.map((target) => target.label.trim()).join("; ");
   tools.push({
     name: "transfer",
-    description: `Ask before transferring. Call this with number set to one of these targets only: ${allowed}. If this tool says the office is closed, take a message.`,
+    description: `Ask the caller before transferring. Call this with target set to one of: ${labels}. If the response says allowed is true, use the tool it names right away. If allowed is false, read the reason and take a message instead. Never tell the caller any phone number.`,
     url: `${base}/api/retell/tools/transfer`,
     timeoutMs: 8000,
     parameters: TRANSFER_CHECK_PARAMETERS,
   });
-  for (const target of targets) {
+  targets.forEach((target, index) => {
     tools.push({
-      name: `transfer_${target.e164.replace(/\D/g, "")}`,
-      description: `Cold transfer to ${target.label} (${target.e164}) only after the transfer tool allows it and only during business hours.`,
+      name: names[index] ?? `transfer_${index + 1}`,
+      description: `Cold transfer to ${target.label.trim()}. Use this only after the transfer tool allowed it and named this tool, and only during business hours.`,
       transferTo: target.e164,
     });
-  }
+  });
   return tools;
 }
 
@@ -460,6 +462,7 @@ async function ensureDanielTarget(clientId: string, number: string | null) {
 }
 
 async function publishInput(clientId: string, deps: Phase3Deps) {
+  await refreshStaleAgentConfig(WEBHOOK_ACTOR, clientId);
   const loaded = await loadReady(clientId);
   if (!loaded.config) throw new Error("Activate a receptionist config before provisioning.");
   if (!deps.voiceId) throw new Error("Set RETELL_DEFAULT_VOICE_ID after a voice is chosen. See docs/voice-options.md.");
@@ -541,7 +544,10 @@ async function runProvisionStep(name: (typeof PROVISION_STEPS)[number], clientId
       tollFree: choice.tollFree,
       areaCode: choice.areaCode,
     })).e164;
-    await prisma.client.update({ where: { id: clientId }, data: { phoneE164: e164 } });
+    await prisma.client.update({
+      where: { id: clientId },
+      data: { phoneE164: e164, ...(client.internal && !client.publicPhone ? { publicPhone: e164 } : {}) },
+    });
     return e164;
   }
   if (!client.retellLlmId || !client.retellAgentId) throw new Error("Create the Retell agent before binding it.");
@@ -574,6 +580,7 @@ async function runProvisionStep(name: (typeof PROVISION_STEPS)[number], clientId
 export async function syncProvisionedAgent(clientId: string, deps: Phase3Deps): Promise<"in_sync" | "failed" | "skipped"> {
   const client = await prisma.client.findFirst({ where: { id: clientId, archivedAt: null } });
   if (!client?.retellLlmId || !client.retellAgentId) return "skipped";
+  await refreshStaleAgentConfig(WEBHOOK_ACTOR, clientId);
   const config = await prisma.agentConfig.findFirst({ where: { clientId, status: "active" } });
   if (!config) return "skipped";
   if (client.agentSyncStatus === "in_sync" && client.syncedConfigId === config.id) return "in_sync";
@@ -804,25 +811,43 @@ export async function recordTakenMessage(
   return { sentence: "I've passed that message to the office.", recipients };
 }
 
-export async function decideTransfer(clientId: string, number: string, now = new Date()): Promise<string> {
+export type TransferDecision = { allowed: true; tool: string } | { allowed: false; reason: string };
+
+export const TRANSFER_UNAVAILABLE = "I can't transfer this call. I'll take a message instead.";
+export const TRANSFER_CLOSED = "The office can't take a transfer right now. Offer to take a message instead.";
+export const TRANSFER_UNKNOWN_TARGET = "That person is not on the transfer list. Offer to take a message instead.";
+
+/**
+ * Resolves a transfer by label. `number` is accepted for one release for agents published before labels.
+ * The result never contains a phone number.
+ */
+export async function decideTransfer(
+  clientId: string,
+  args: { target?: string | null; number?: string | null },
+  now = new Date(),
+): Promise<TransferDecision> {
   const client = await prisma.client.findFirst({ where: { id: clientId, archivedAt: null } });
-  if (!client) return "I can't transfer this call. I'll take a message instead.";
-  const targets = await prisma.transferTarget.findMany({ where: { clientId } });
-  const normalized = normalizeTransferNumber(number);
-  const allowed = normalized !== null && targets.some((target) => target.e164 === normalized);
-  if (!allowed || !officeOpen(client.weeklyHours, client.timezone, now)) {
-    return "The office can't take a transfer right now. Offer to take a message instead.";
+  if (!client || !liveTransferOn(client.features)) return { allowed: false, reason: TRANSFER_UNAVAILABLE };
+  const targets = await prisma.transferTarget.findMany({ where: { clientId }, orderBy: { createdAt: "asc" } });
+  const wanted = (args.target ?? "").trim().toLowerCase();
+  let index = wanted ? targets.findIndex((target) => target.label.trim().toLowerCase() === wanted) : -1;
+  if (index === -1 && args.number) {
+    const normalized = normalizeTransferNumber(args.number);
+    if (normalized) index = targets.findIndex((target) => target.e164 === normalized);
   }
-  return `Transfer is allowed to ${normalized}.`;
+  if (index === -1) return { allowed: false, reason: TRANSFER_UNKNOWN_TARGET };
+  if (!officeOpen(client.weeklyHours, client.timezone, now)) return { allowed: false, reason: TRANSFER_CLOSED };
+  const names = transferToolNames(targets.map((target) => target.label));
+  return { allowed: true, tool: names[index] ?? `transfer_${index + 1}` };
 }
 
-export async function inboundVariables(toNumber: string, now = new Date()): Promise<{ office_open: "yes" | "no"; allowed_numbers: string }> {
+export async function inboundVariables(toNumber: string, now = new Date()): Promise<{ office_open: "yes" | "no"; allowed_targets: string }> {
   const client = await prisma.client.findFirst({ where: { phoneE164: toNumber, archivedAt: null } });
-  if (!client) return { office_open: "no", allowed_numbers: "" };
-  const targets = await prisma.transferTarget.findMany({ where: { clientId: client.id } });
+  if (!client) return { office_open: "no", allowed_targets: "" };
+  const targets = await prisma.transferTarget.findMany({ where: { clientId: client.id }, orderBy: { createdAt: "asc" } });
   return {
     office_open: officeOpen(client.weeklyHours, client.timezone, now) ? "yes" : "no",
-    allowed_numbers: targets.map((target) => target.e164).join(", "),
+    allowed_targets: targets.map((target) => target.label.trim()).join("; "),
   };
 }
 

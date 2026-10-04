@@ -321,8 +321,16 @@ export function WizardForm({
             <Input value={business.contactEmail ?? ""} onChange={(event) => setPayload({ ...payload, business: { ...business, contactEmail: event.target.value } })} />
           </div>
           <div>
-            <FieldLabel label="Phone" hint="The contact's phone number. This is not necessarily the line the receptionist will answer." />
+            <FieldLabel label="Phone" hint="The contact's phone number. Private: the receptionist never gives it out. This is not necessarily the line the receptionist will answer." />
             <Input value={business.contactPhone ?? ""} onChange={(event) => setPayload({ ...payload, business: { ...business, contactPhone: event.target.value } })} />
+          </div>
+          <div>
+            <FieldLabel label="Public phone (optional)" hint="The only phone number the receptionist may give a caller, like the main office line. Leave it blank and the receptionist offers a callback instead. For client zero this is the Alinstra number." />
+            <Input value={business.publicPhone ?? ""} inputMode="tel" placeholder="+18883871525" onChange={(event) => setPayload({ ...payload, business: { ...business, publicPhone: event.target.value } })} />
+          </div>
+          <div>
+            <FieldLabel label="Public email (optional)" hint="The only email address the receptionist may give a caller. Staff and owner emails stay private." />
+            <Input value={business.publicEmail ?? ""} inputMode="email" onChange={(event) => setPayload({ ...payload, business: { ...business, publicEmail: event.target.value } })} />
           </div>
           <div>
             <FieldLabel label="Street address (optional)" hint="Where customers visit. Leave this blank if you do not have it yet." />

@@ -53,7 +53,7 @@ describe("provider HTTP clients", () => {
     const created = bodies.find((entry) => entry.url.endsWith("/create-retell-llm"));
     const updated = bodies.find((entry) => entry.url.includes("/update-retell-llm/"));
     for (const entry of [created, updated]) {
-      expect(entry?.json.default_dynamic_variables).toEqual({ office_open: "unknown", allowed_numbers: "" });
+      expect(entry?.json.default_dynamic_variables).toEqual({ office_open: "unknown", allowed_targets: "" });
       const tools = entry?.json.general_tools as Array<Record<string, unknown>>;
       expect(tools.find((tool) => tool.name === "take_message")?.parameters).toEqual(TAKE_MESSAGE_PARAMETERS);
       expect(tools.find((tool) => tool.name === "transfer")?.parameters).toEqual(TRANSFER_CHECK_PARAMETERS);

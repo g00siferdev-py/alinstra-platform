@@ -115,7 +115,20 @@ async function applyStep(tx: Prisma.TransactionClient, clientId: string, step: n
     const business = businessSchema.parse({ timezone: "America/New_York", ...payload.business });
     await tx.client.update({
       where: { id: clientId },
-      data: { ...business, namePronunciation: business.namePronunciation ?? null },
+      data: {
+        ...business,
+        contactPhone: business.contactPhone ?? null,
+        addressLine1: business.addressLine1 ?? null,
+        addressLine2: business.addressLine2 ?? null,
+        city: business.city ?? null,
+        region: business.region ?? null,
+        postalCode: business.postalCode ?? null,
+        country: business.country ?? null,
+        websiteUrl: business.websiteUrl ?? null,
+        namePronunciation: business.namePronunciation ?? null,
+        publicPhone: business.publicPhone ?? null,
+        publicEmail: business.publicEmail ?? null,
+      },
     });
   }
   if (step === 2) {

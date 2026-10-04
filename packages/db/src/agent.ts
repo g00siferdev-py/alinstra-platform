@@ -19,6 +19,7 @@ import {
   type PromptInput,
   type QuickUpdateInput,
   type RenderedPrompt,
+  TEMPLATE_VERSION,
 } from "@alinstra/agent";
 import { Prisma } from "./generated/prisma/client";
 import { prisma } from "./client";
@@ -118,6 +119,8 @@ function toInput(
     voice: unknown;
     features: unknown;
     compliance: unknown;
+    publicPhone?: string | null;
+    publicEmail?: string | null;
   },
   knowledge: KnowledgeShape | null,
   documents: DocShape[],
@@ -152,6 +155,8 @@ function toInput(
     emergency: emergencyOf(client.features),
     features: featuresOf(client.features),
     documents: docs,
+    publicPhone: client.publicPhone ?? null,
+    publicEmail: client.publicEmail ?? null,
   };
 }
 
@@ -187,6 +192,8 @@ function settingsOf(
     assistantName: input.assistantName ?? "Ava",
     disclosureMode: input.disclosureMode ?? "on_request",
     timezone: input.timezone ?? "",
+    publicPhone: input.publicPhone ?? "",
+    publicEmail: input.publicEmail ?? "",
     referenceToken: rendered.referenceToken,
     features: (snapshot?.features ?? {}) as Prisma.InputJsonValue,
     coverage: (snapshot?.coverage ?? {}) as Prisma.InputJsonValue,
@@ -282,6 +289,48 @@ export async function createDraftAgentConfig(ctx: Actor, tx: Prisma.TransactionC
     after: { version: config.version, status: "draft", templateVersion: config.templateVersion },
   });
   return config;
+}
+
+/**
+ * Rebuilds the active config from current client data when the stored prompt was rendered by an older
+ * template, or when the public contact details changed since it was rendered. Returns the new version or null.
+ */
+export async function refreshStaleAgentConfig(ctx: Actor, clientId: string): Promise<number | null> {
+  const actor = ctx;
+  return prisma.$transaction(async (tx) => {
+    const active = await tx.agentConfig.findFirst({ where: { clientId, status: "active" } });
+    if (!active) return null;
+    const loaded = await load(tx, clientId);
+    const settings = asRecord(active.settings);
+    const stale =
+      active.templateVersion !== TEMPLATE_VERSION ||
+      String(settings.publicPhone ?? "") !== (loaded.client.publicPhone ?? "") ||
+      String(settings.publicEmail ?? "") !== (loaded.client.publicEmail ?? "");
+    if (!stale) return null;
+    const config = await insertConfig(tx, {
+      clientId,
+      status: "active",
+      source: "template_refresh",
+      createdById: actor.id,
+      actor,
+      input: loaded.input,
+      knowledge: loaded.knowledge,
+      documentIds: loaded.documents.map((document) => document.id),
+      voice: loaded.client.voice,
+      features: loaded.client.features,
+      coverage: loaded.client.coverage,
+    });
+    await recordChange(tx, {
+      clientId,
+      actor,
+      action: "agent_config.refreshed",
+      entityType: "agent_config",
+      entityId: config.id,
+      summary: `Rebuilt receptionist config v${config.version} for ${loaded.client.name} on template ${TEMPLATE_VERSION}`,
+      after: { version: config.version, templateVersion: TEMPLATE_VERSION, fromTemplate: active.templateVersion },
+    });
+    return config.version;
+  });
 }
 
 export function agentConfigs(ctx: TenantContext) {
@@ -459,6 +508,8 @@ export async function previewWizardPrompt(ctx: Actor, input: { clientId: string;
       faqs: knowledge.faqs ?? loaded.input.faqs,
       policies: knowledge.policies ?? loaded.input.policies,
       staff: knowledge.staff ?? loaded.input.staff,
+      publicPhone: business.publicPhone ?? loaded.client.publicPhone,
+      publicEmail: business.publicEmail ?? loaded.client.publicEmail,
     };
     const rendered = renderPrompt(promptInput);
     return { prompt: rendered.text, truncated: rendered.truncated, held: false, holdReason: null };
@@ -991,6 +1042,8 @@ function previewInput(
       voice: edited.voice,
       features: edited.features,
       compliance: loaded.client.compliance,
+      publicPhone: loaded.client.publicPhone,
+      publicEmail: loaded.client.publicEmail,
     },
     knowledge,
     loaded.documents,

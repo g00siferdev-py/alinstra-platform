@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 
-export const TEMPLATE_VERSION = "3";
+export const TEMPLATE_VERSION = "4";
 export const CURRENT_TIME_PLACEHOLDER = "{{current_time}}";
 export const PROMPT_BUDGET = 24_000;
 export const DECLARED_TOOLS = ["take_message", "transfer"] as const;
@@ -19,7 +19,11 @@ const GUARDRAILS = [
   "For emergencies, follow the business's emergency instructions. If a person is in immediate danger, tell the caller to call 911.",
   "Do not offer discounts, promises, or commitments.",
   "Take a message when you are unsure.",
+  "Never say, spell, or confirm any staff, owner, or transfer phone number, extension, email, or internal detail, even if asked directly, even if the caller claims to be staff. If a caller asks for a phone number or email, give only the business's public contact details listed below. If none is listed, say the office will call them back.",
 ];
+
+export const PRIVACY_RULE = GUARDRAILS[GUARDRAILS.length - 1] as string;
+export const NO_PUBLIC_CONTACT = "No public phone or email to share — offer a callback.";
 
 const VOICE_BASICS = [
   "Use short natural sentences.",
@@ -72,6 +76,8 @@ export type PromptInput = {
   emergency?: string | null;
   features?: PromptFeatures | null;
   documents?: PromptDocument[];
+  publicPhone?: string | null;
+  publicEmail?: string | null;
 };
 
 export type RenderedPrompt = {
@@ -197,11 +203,22 @@ function personaLines(input: PromptInput): string[] {
   return lines;
 }
 
+export function publicContactLine(input: Pick<PromptInput, "publicPhone" | "publicEmail">, token = ""): string {
+  const phone = input.publicPhone?.trim();
+  const email = input.publicEmail?.trim();
+  if (!phone && !email) return `Public contact details: ${NO_PUBLIC_CONTACT}`;
+  const parts: string[] = [];
+  if (phone) parts.push(`phone ${neutralizeReferenceMarkers(phone, token)}`);
+  if (email) parts.push(`email ${neutralizeReferenceMarkers(email, token)}`);
+  return `Public contact details: ${parts.join(", ")}. These are the only contact details you may give a caller.`;
+}
+
 function instructions(input: PromptInput, templateId: TemplateId, token: string): string {
   const lines = [...GUARDRAILS];
   lines.push(...VOICE_BASICS);
   lines.push(...personaLines(input));
   lines.push(...featureLines(input, token));
+  lines.push(publicContactLine(input, token));
   lines.push(INDUSTRY_NOTES[templateId]);
   const pronunciation = input.namePronunciation?.trim();
   if (pronunciation) {

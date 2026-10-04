@@ -7,7 +7,7 @@ vi.mock("@alinstra/providers", () => ({ verifyRetell: () => true }));
 vi.mock("@alinstra/db", () => ({
   inboundVariables: vi.fn(async (to: string) => {
     if (to === "explode") throw new Error("database down");
-    return { office_open: "yes", allowed_numbers: "+14155550100" };
+    return { office_open: "yes", allowed_targets: "Front desk; Billing" };
   }),
 }));
 
@@ -28,7 +28,7 @@ describe("inbound webhook", () => {
     });
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({
-      call_inbound: { dynamic_variables: { office_open: "yes", allowed_numbers: "+14155550100" } },
+      call_inbound: { dynamic_variables: { office_open: "yes", allowed_targets: "Front desk; Billing" } },
     });
   });
 
@@ -36,7 +36,7 @@ describe("inbound webhook", () => {
     const response = await call({ event: "call_inbound", call_inbound: { to_number: "explode" } });
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({
-      call_inbound: { dynamic_variables: { office_open: "unknown", allowed_numbers: "" } },
+      call_inbound: { dynamic_variables: { office_open: "unknown", allowed_targets: "" } },
     });
   });
 });

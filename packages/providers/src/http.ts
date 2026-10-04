@@ -6,7 +6,7 @@ const RETELL = "https://api.retellai.com";
 
 const DEFAULT_DYNAMIC_VARIABLES = {
   office_open: "unknown",
-  allowed_numbers: "",
+  allowed_targets: "",
 };
 
 function toolsOf(tools: PublishedTool[]): unknown[] {

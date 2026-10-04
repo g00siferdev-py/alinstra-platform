@@ -41,6 +41,8 @@ export default async function WizardPage({ params }: { params: Promise<{ id: str
             contactPhone: parsed.business?.contactPhone ?? "",
             addressLine1: parsed.business?.addressLine1 ?? "",
             websiteUrl: parsed.business?.websiteUrl ?? "",
+            publicPhone: parsed.business?.publicPhone ?? "",
+            publicEmail: parsed.business?.publicEmail ?? "",
           },
           websiteNotes: parsed.websiteNotes ?? "",
           plan: {

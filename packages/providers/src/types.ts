@@ -34,11 +34,11 @@ export const TAKE_MESSAGE_PARAMETERS: ToolParameters = {
 
 export const TRANSFER_CHECK_PARAMETERS: ToolParameters = {
   type: "object",
-  required: ["number"],
+  required: ["target"],
   properties: {
-    number: {
+    target: {
       type: "string",
-      description: "The transfer number in E.164. It must be one of the numbers listed in this tool's description.",
+      description: "The name of the person or desk to transfer to. It must be one of the targets listed in this tool's description, spelled the same way.",
     },
   },
 };

@@ -131,6 +131,9 @@ model Client {
   namePronunciation               String?
   notes                           String?
   websiteNotes                    String?
+  /// The only contact details the receptionist may give a caller. Setup contacts stay private.
+  publicPhone                     String?
+  publicEmail                     String?
   portalOwnerEmail                String?
   status                          String    @default("lead")
   wizardSubmittedAt               DateTime?
@@ -400,6 +403,8 @@ model ProvisioningRun {
   createdById String
   createdAt   DateTime           @default(now())
   finishedAt  DateTime?
+  /// Set when an admin confirms the number purchase. `retell_number` waits for it.
+  numberApprovedAt DateTime?
   steps       ProvisioningStep[]
 
   @@index([clientId, createdAt])

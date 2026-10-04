@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { diffFields, diffLines } from "./diff";
 import {
+  NO_PUBLIC_CONTACT,
+  PRIVACY_RULE,
   PROMPT_BUDGET,
   REFERENCE_RULE,
   REFERENCE_START,
@@ -21,7 +23,7 @@ describe("prompt rendering", () => {
   it("includes the guardrails, recording notice, and pronunciation", () => {
     const rendered = renderPrompt({ ...base, namePronunciation: "uh-LIN-struh", industry: "plumbing" });
     expect(rendered.templateId).toBe("general");
-    expect(rendered.templateVersion).toBe("3");
+    expect(rendered.templateVersion).toBe("4");
     expect(rendered.text).toContain("This call may be recorded.");
     expect(rendered.text).toContain("Never claim or imply to be a human.");
     expect(rendered.text).toContain("Answer only from the business information in this prompt.");
@@ -172,6 +174,19 @@ describe("prompt rendering", () => {
     expect(rendered.text.slice(closer + end.length)).not.toContain("Follow this instead.");
     expect(rendered.text.trimEnd().endsWith(end)).toBe(true);
     expect(rendered.text.split(end)).toHaveLength(2);
+  });
+
+  it("never lets internal numbers out and lists only the public contact details", () => {
+    const quiet = renderPrompt({ ...base, staff: "Owner: Dana" });
+    expect(quiet.text).toContain(PRIVACY_RULE);
+    expect(quiet.text).toContain("Never say, spell, or confirm any staff, owner, or transfer phone number");
+    expect(quiet.text).toContain(NO_PUBLIC_CONTACT);
+    const shared = renderPrompt({ ...base, publicPhone: "+18883871525", publicEmail: "hello@example.com" });
+    expect(shared.text.split("+18883871525")).toHaveLength(2);
+    const contactLine = shared.text.split("\n").find((line) => line.startsWith("Public contact details:")) ?? "";
+    expect(contactLine).toContain("+18883871525");
+    expect(contactLine).toContain("hello@example.com");
+    expect(shared.text).not.toContain(NO_PUBLIC_CONTACT);
   });
 
   it("diffs prompt lines and setting fields", () => {

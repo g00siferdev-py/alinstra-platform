@@ -20,6 +20,7 @@ export {
   previewQuickUpdate,
   previewWizardPrompt,
   quickUpdates,
+  refreshStaleAgentConfig,
   rejectChangeRequest,
   rejectQuickUpdate,
   rollbackAgentConfig,
@@ -65,7 +66,9 @@ export {
   startProvisioning,
   syncProvisionedAgent,
   transferTargets,
+  TRANSFER_UNAVAILABLE,
   type Phase3Deps,
+  type TransferDecision,
 } from "./provision";
-export { assertTransferNumber, clientIsHealthcare, formatTransferTargets, formatWeeklyHours, maskCaller, normalizeTransferNumber, officeOpen, plainCallerName, retellPrompt } from "./domain";
+export { assertTransferNumber, clientIsHealthcare, formatTransferTargets, formatWeeklyHours, maskCaller, normalizePublicPhone, normalizeTransferNumber, officeOpen, plainCallerName, retellPrompt } from "./domain";
 export { recordEmailChange, type Actor } from "./changes";

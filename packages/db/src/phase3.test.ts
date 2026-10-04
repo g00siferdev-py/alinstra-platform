@@ -238,10 +238,10 @@ describe("phase 3 provisioning", () => {
     const client = await seedClient();
     expect(officeOpen({ fri: { start: "09:00", end: "17:00" } }, "America/New_York", openFriday)).toBe(true);
     expect(officeOpen({ fri: { start: "09:00", end: "17:00" } }, "America/New_York", closedSaturday)).toBe(false);
-    expect(await decideTransfer(client.id, "+14155550100", openFriday)).toMatch(/allowed/i);
-    expect(await decideTransfer(client.id, "4155550100", openFriday)).toMatch(/allowed/i);
-    expect(await decideTransfer(client.id, "+14155550999", openFriday)).toMatch(/message/i);
-    expect(await decideTransfer(client.id, "+14155550100", closedSaturday)).toMatch(/message/i);
+    expect(await decideTransfer(client.id, { target: "desk" }, openFriday)).toEqual({ allowed: true, tool: "transfer_desk" });
+    expect(await decideTransfer(client.id, { number: "4155550100" }, openFriday)).toEqual({ allowed: true, tool: "transfer_desk" });
+    expect(await decideTransfer(client.id, { number: "+14155550999" }, openFriday)).toMatchObject({ allowed: false, reason: expect.stringMatching(/message/i) });
+    expect(await decideTransfer(client.id, { target: "Desk" }, closedSaturday)).toMatchObject({ allowed: false, reason: expect.stringMatching(/message/i) });
   });
 
   it("flags a sync when an owner replaces transfer targets", async () => {

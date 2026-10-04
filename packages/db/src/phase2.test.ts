@@ -80,7 +80,7 @@ describe("phase 2 configs", () => {
     expect(draft.version).toBe(1);
     expect(draft.platformAgentId).toBeNull();
     expect(draft.templateId).toBe("hvac");
-    expect(draft.templateVersion).toBe("3");
+    expect(draft.templateVersion).toBe("4");
     expect(draft.promptText).toContain("uh-LIN-struh");
     expect(draft.promptText).toContain("reference material");
     expect(await prisma.agentConfig.count({ where: { clientId: client.id, status: "active" } })).toBe(0);

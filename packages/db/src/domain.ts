@@ -48,6 +48,25 @@ const emptyToUndefined = (value: unknown) => {
 const optionalText = z.preprocess(emptyToUndefined, z.string().max(500).optional());
 const longText = z.preprocess(emptyToUndefined, z.string().max(10_000).optional());
 
+export const E164 = /^\+[1-9]\d{7,14}$/;
+export const NANP_E164 = /^\+1[2-9]\d{2}[2-9]\d{6}$/;
+export const PUBLIC_PHONE_ERROR = "Enter the public phone as +1 followed by 10 digits, like +18883871525.";
+
+/** Accepts "(888) 387-1525", "888-387-1525", "18883871525", or E.164 and returns E.164. */
+export function normalizePublicPhone(value: string): string {
+  const digits = value.replace(/\D/g, "");
+  if (digits.length === 10) return `+1${digits}`;
+  return `+${digits}`;
+}
+
+const publicPhoneSchema = z.preprocess(
+  (value) => {
+    const text = emptyToUndefined(value);
+    return typeof text === "string" ? normalizePublicPhone(text) : text;
+  },
+  z.string().regex(E164, PUBLIC_PHONE_ERROR).optional(),
+);
+
 export const businessSchema = z.object({
   name: z.string().trim().min(1).max(200),
   industry: z.enum(INDUSTRIES),
@@ -69,6 +88,8 @@ export const businessSchema = z.object({
     .refine(isIanaTimezone, "Enter an IANA timezone, such as America/New_York."),
   websiteUrl: z.preprocess(emptyToUndefined, z.string().url().max(500).optional()),
   namePronunciation: optionalText,
+  publicPhone: publicPhoneSchema,
+  publicEmail: z.preprocess(emptyToUndefined, z.string().trim().email("Enter the public email address.").max(200).optional()),
 });
 
 export const coverageSchema = z.object({
@@ -162,8 +183,6 @@ export function emptyWizardPayload(): WizardPayload {
   return { version: 1, compliance: { aiDisclosure: true, recordingNotice: true } };
 }
 
-export const E164 = /^\+[1-9]\d{7,14}$/;
-export const NANP_E164 = /^\+1[2-9]\d{2}[2-9]\d{6}$/;
 export const TRANSFER_NUMBER_ERROR = "Transfer numbers must be US or Canada numbers, like +14235550142.";
 
 export function assertTransferNumber(e164: string): void {
