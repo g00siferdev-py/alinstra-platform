@@ -80,7 +80,7 @@ export async function continueWizardAction(input: {
 }
 
 export type EditStepResult =
-  | { ok: true; title: string; changedCount: number; configVersion: number | null; sync: boolean; stripeWarning: boolean }
+  | { ok: true; title: string; changedCount: number; configVersion: number | null; sync: boolean; stripeWarning: boolean; held?: boolean; holdReason?: string | null }
   | { ok: false; error: string };
 
 /**
@@ -104,6 +104,8 @@ export async function editClientStepAction(input: { clientId: string; step: numb
       configVersion: result.configVersion,
       sync: result.sync,
       stripeWarning: result.stripeWarning,
+      held: result.held,
+      holdReason: result.holdReason,
     };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : "Check this step and try again." };

@@ -81,6 +81,15 @@ export {
   type TransferDecision,
 } from "./provision";
 export { clientEditPayload, editClientStep, type ClientEditResult } from "./wizard";
+export {
+  BOOKING_HOLD_REASON,
+  OWNER_STEP_HOLD_KIND,
+  TRANSFER_HOLD_REASON,
+  VOICE_HOLD_REASON,
+  ownerEditHoldReason,
+  parseOwnerStepHold,
+  type OwnerStepHoldPayload,
+} from "./owner-edit-hold";
 export { diffSection, type FieldChange } from "./edit-diff";
 export {
   AGENT_AFFECTING_STEPS,

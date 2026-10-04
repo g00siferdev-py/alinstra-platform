@@ -4,11 +4,14 @@ import {
   AGENT_AFFECTING_STEPS,
   clients,
   faqItems,
+  formatLocalTime,
   formatTransferTargets,
   knowledgeBases,
   OWNER_BLOCKED_STEP_HINT,
   OWNER_BLOCKED_STEPS,
+  OWNER_STEP_HOLD_KIND,
   plans,
+  quickUpdates,
   transferTargets,
   WIZARD_STEP_TITLES,
 } from "@alinstra/db";
@@ -16,19 +19,36 @@ import { requireUser } from "@/lib/session";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+function submittedStepSummary(step: number | undefined, payload: Record<string, unknown> | undefined): string {
+  if (!step || !payload) return "";
+  const section =
+    step === 4 ? payload.coverage
+    : step === 5 ? payload.features
+    : step === 6 ? payload.voice
+    : step === 7 ? payload.knowledge
+    : null;
+  if (!section || typeof section !== "object") return "";
+  return Object.entries(section as Record<string, unknown>)
+    .filter(([, value]) => value !== undefined && value !== null && value !== "")
+    .map(([key, value]) => `${key}: ${typeof value === "string" ? value : JSON.stringify(value)}`)
+    .join("\n");
+}
+
 export default async function MyBusinessPage() {
   const session = await requireUser();
   if (session.user.role === "admin" || !session.user.clientId) notFound();
   const ctx = { role: session.user.role as "client_owner" | "client_staff", clientId: session.user.clientId };
   const client = await clients(ctx).getById(session.user.clientId);
   if (!client) notFound();
-  const [plan, knowledge, targets] = await Promise.all([
+  const [plan, knowledge, targets, updates] = await Promise.all([
     client.planId ? plans(ctx).getById(client.planId) : Promise.resolve(null),
     knowledgeBases(ctx).getCurrent(session.user.clientId),
     transferTargets(ctx).list(session.user.clientId),
+    quickUpdates(ctx).list(session.user.clientId),
   ]);
   const owner = session.user.role === "client_owner";
   const faqs = faqItems(knowledge?.faqs);
+  const reviewRows = updates.filter((row) => row.status === "held" || (row.status === "rejected" && row.kind === OWNER_STEP_HOLD_KIND)).slice(0, 10);
   return (
     <main className="mx-auto grid max-w-3xl gap-4 p-6">
       <Link className="text-sm text-[var(--muted)]" href="/home">Home</Link>
@@ -49,6 +69,31 @@ export default async function MyBusinessPage() {
         <p className="whitespace-pre-wrap">Notices: {knowledge?.notices ? String(knowledge.notices) : "—"}</p>
         <p className="whitespace-pre-wrap">Staff: {knowledge?.staff ? String(knowledge.staff) : "—"}</p>
       </section>
+
+      {owner && reviewRows.length > 0 ? (
+        <section className="rounded-xl border border-[var(--line)] p-4">
+          <h2 className="mb-2 font-medium">Waiting for review</h2>
+          <ul className="grid gap-2 text-sm">
+            {reviewRows.map((row) => {
+              const body = row.payload && typeof row.payload === "object" && !Array.isArray(row.payload)
+                ? (row.payload as { title?: string; step?: number; payload?: Record<string, unknown> })
+                : {};
+              const label = typeof body.title === "string" ? body.title : row.kind;
+              const submitted = submittedStepSummary(body.step, body.payload);
+              return (
+                <li key={row.id} className="rounded-md border border-[var(--line)] px-3 py-2">
+                  <div className="font-medium">
+                    {row.status === "held" ? "Waiting for review" : "Rejected"} · {label}
+                  </div>
+                  <p className="text-[var(--muted)]">{formatLocalTime(row.createdAt, client.timezone)}</p>
+                  {row.holdReason ? <p className="mt-1">{row.holdReason}</p> : null}
+                  {submitted ? <pre className="mt-2 whitespace-pre-wrap text-xs text-[var(--muted)]">{submitted}</pre> : null}
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      ) : null}
 
       {owner && client.wizardSubmittedAt ? (
         <section className="rounded-xl border border-[var(--line)] p-4">

@@ -266,6 +266,13 @@ export function WizardForm({
       toast.error("Save failed", result.error);
       return;
     }
+    if (result.held) {
+      const text = `${result.title} is waiting for admin review.${result.holdReason ? ` ${result.holdReason}` : ""}`;
+      setEditNote({ tone: "warn", text });
+      toast.success("Waiting for review", result.holdReason ?? result.title);
+      router.refresh();
+      return;
+    }
     const synced = result.sync
       ? " Ava updates within about a minute."
       : result.configVersion !== null && provisioned

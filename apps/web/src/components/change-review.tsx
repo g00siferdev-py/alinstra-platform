@@ -18,6 +18,7 @@ export function HeldUpdateReview({ id, kind, holdReason, payload }: { id: string
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
+  const [rejectReason, setRejectReason] = useState("");
   const [pending, setPending] = useState(false);
 
   return (
@@ -27,6 +28,15 @@ export function HeldUpdateReview({ id, kind, holdReason, payload }: { id: string
       <pre className="whitespace-pre-wrap text-xs">{payload}</pre>
       {error ? <ErrorText>{error}</ErrorText> : null}
       {preview ? <pre className="max-h-64 overflow-auto whitespace-pre-wrap rounded-md border border-[var(--line)] p-3 text-xs">{preview}</pre> : null}
+      <label className="grid gap-1 text-xs">
+        <span className="text-[var(--muted)]">Rejection reason (shown to the owner)</span>
+        <input
+          className="rounded-md border border-[var(--line)] px-2 py-1"
+          value={rejectReason}
+          onChange={(event) => setRejectReason(event.target.value)}
+          placeholder="Optional"
+        />
+      </label>
       <div className="flex flex-wrap gap-2">
         <Button disabled={pending} onClick={() => {
           setPending(true);
@@ -46,7 +56,7 @@ export function HeldUpdateReview({ id, kind, holdReason, payload }: { id: string
         }}>Approve</Button>
         <Button disabled={pending} onClick={() => {
           setPending(true);
-          void rejectQuickUpdateAction(id).then((result) => {
+          void rejectQuickUpdateAction(id, rejectReason).then((result) => {
             setPending(false);
             if (result.error) setError(result.error);
             else router.refresh();

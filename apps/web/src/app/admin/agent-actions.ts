@@ -63,17 +63,19 @@ export async function approveQuickUpdateAction(id: string) {
     const approved = await approveQuickUpdate(adminActor(session), id);
     await enqueueSyncAgent({ clientId: approved.clientId }).catch(() => undefined);
     revalidatePath("/home");
+    revalidatePath("/home/business");
     return { ok: true };
   } catch (error) {
     return { error: message(error, "Could not approve that update.") };
   }
 }
 
-export async function rejectQuickUpdateAction(id: string) {
+export async function rejectQuickUpdateAction(id: string, reason = "") {
   const session = await requireAdmin();
   try {
-    await rejectQuickUpdate(adminActor(session), id);
+    await rejectQuickUpdate(adminActor(session), id, reason);
     revalidatePath("/home");
+    revalidatePath("/home/business");
     return { ok: true };
   } catch (error) {
     return { error: message(error, "Could not reject that update.") };

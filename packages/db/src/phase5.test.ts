@@ -1,6 +1,8 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { approveQuickUpdate, rejectQuickUpdate } from "./agent";
 import { prisma } from "./client";
 import { OWNER_BLOCKED_STEP_HINT } from "./domain";
+import { OWNER_STEP_HOLD_KIND, VOICE_HOLD_REASON } from "./owner-edit-hold";
 import { resetTestDatabase } from "./reset-test-database";
 import { clientEditPayload, editClientStep } from "./wizard";
 
@@ -111,5 +113,51 @@ describe("phase 5 owner edit", () => {
       editClientStep({ id: owner.id, role: "client_owner", clientId: client.id }, { clientId: other.client.id, step: 1, payload: base }),
     ).rejects.toThrow(/owner or an admin|not available/i);
     await expect(clientEditPayload({ id: owner.id, role: "client_owner", clientId: client.id }, other.client.id)).rejects.toThrow(/owner or an admin/i);
+  });
+
+  it("holds a voice change for admin review and publishes a safe business edit directly", async () => {
+    const { client, owner } = await seedClient();
+    const actor = { id: owner.id, role: "client_owner" as const, clientId: client.id };
+    const base = await clientEditPayload(actor, client.id);
+
+    const held = await editClientStep(actor, {
+      clientId: client.id,
+      step: 6,
+      payload: { ...base, voice: { ...base.voice, voiceId: "voice_2", assistantName: "Riley" } },
+    });
+    expect(held.held).toBe(true);
+    expect(held.holdReason).toBe(VOICE_HOLD_REASON);
+    expect(held.sync).toBe(false);
+    expect((await prisma.client.findUniqueOrThrow({ where: { id: client.id } })).voice).toMatchObject({ voiceId: "voice_1" });
+    const row = await prisma.quickUpdate.findFirstOrThrow({ where: { clientId: client.id, status: "held" } });
+    expect(row.kind).toBe(OWNER_STEP_HOLD_KIND);
+
+    const direct = await editClientStep(actor, {
+      clientId: client.id,
+      step: 2,
+      payload: { ...base, websiteNotes: "Mention the parking lot behind the shop." },
+    });
+    expect(direct.held).toBe(false);
+    expect((await prisma.client.findUniqueOrThrow({ where: { id: client.id } })).websiteNotes).toContain("parking lot");
+
+    await approveQuickUpdate(admin, row.id);
+    expect((await prisma.client.findUniqueOrThrow({ where: { id: client.id } })).voice).toMatchObject({ voiceId: "voice_2", assistantName: "Riley" });
+    expect(await prisma.changeLog.count({ where: { clientId: client.id, action: "owner_edit" } })).toBeGreaterThan(0);
+  });
+
+  it("records a rejection reason the owner can read", async () => {
+    const { client, owner } = await seedClient();
+    const actor = { id: owner.id, role: "client_owner" as const, clientId: client.id };
+    const base = await clientEditPayload(actor, client.id);
+    await editClientStep(actor, {
+      clientId: client.id,
+      step: 6,
+      payload: { ...base, voice: { ...base.voice, assistantName: "Sam" } },
+    });
+    const row = await prisma.quickUpdate.findFirstOrThrow({ where: { clientId: client.id, status: "held" } });
+    await rejectQuickUpdate(admin, row.id, "Please keep the assistant name Ava for now.");
+    const rejected = await prisma.quickUpdate.findUniqueOrThrow({ where: { id: row.id } });
+    expect(rejected.status).toBe("rejected");
+    expect(rejected.holdReason).toBe("Please keep the assistant name Ava for now.");
   });
 });

@@ -29,6 +29,7 @@ import {
   type WizardPayload,
 } from "./domain";
 import { changeLogFields, diffSection, SECTION_BY_STEP, type FieldChange } from "./edit-diff";
+import { OWNER_STEP_HOLD_KIND, ownerEditHoldReason } from "./owner-edit-hold";
 import { assertTenantContext, type TenantContext } from "./tenant";
 
 function stripEmptyStrings(value: unknown): unknown {
@@ -520,12 +521,15 @@ export type ClientEditResult = {
   sync: boolean;
   /** True when the plan changed for a client with a Stripe subscription that was left untouched. */
   stripeWarning: boolean;
+  /** Owner-only: the edit was held for admin review instead of publishing. */
+  held?: boolean;
+  holdReason?: string | null;
 };
 
 /**
- * Saves one wizard step straight onto a submitted client. Validates with the same schemas as the wizard,
- * records an `admin_edit` change with a redacted diff, and rebuilds the receptionist config when the step
- * affects the agent. Nothing here talks to Stripe or Retell; the caller enqueues the sync job when `sync` is true.
+ * Saves one wizard step onto a submitted client. Admin edits always publish. Owner edits publish unless
+ * the hold rules fire (voice / transfer / booking change, or sensitive text), in which case a held
+ * `owner_step` QuickUpdate is created for the admin queue. Nothing here talks to Stripe or Retell.
  */
 export async function editClientStep(
   ctx: Actor,
@@ -542,9 +546,36 @@ export async function editClientStep(
   const section = SECTION_BY_STEP[step] ?? "business";
   const title = wizardStepTitle(step);
   const editKind = ctx.role === "client_owner" ? "owner_edit" : "admin_edit";
+  const changed = diffSection(section, before[section], payload[section]);
+  const holdReason = ctx.role === "client_owner" ? ownerEditHoldReason(before, payload, step) : null;
+
   return prisma.$transaction(async (tx) => {
     const client = await tx.client.findFirst({ where: { id: input.clientId, archivedAt: null } });
     if (!client?.wizardSubmittedAt) throw new Error("Finish the wizard before editing this client.");
+
+    if (holdReason) {
+      const held = await tx.quickUpdate.create({
+        data: {
+          clientId: input.clientId,
+          kind: OWNER_STEP_HOLD_KIND,
+          payload: { kind: OWNER_STEP_HOLD_KIND, step, title, payload } as unknown as Prisma.InputJsonValue,
+          status: "held",
+          holdReason,
+          createdById: ctx.id,
+        },
+      });
+      await recordChange(tx, {
+        clientId: input.clientId,
+        actor: ctx,
+        action: "owner_edit.held",
+        entityType: "quick_update",
+        entityId: held.id,
+        summary: `Held ${title} edit for ${client.name}`,
+        after: { kind: OWNER_STEP_HOLD_KIND, step, title, fields: changeLogFields(changed), holdReason },
+      });
+      return { step, title, changed, configVersion: null, sync: false, stripeWarning: false, held: true, holdReason };
+    }
+
     await applyStep(tx, input.clientId, step, payload, "edit");
     const stripeWarning = step === 3 && Boolean(client.stripeSubscriptionId);
     let configVersion: number | null = null;
@@ -554,7 +585,6 @@ export async function editClientStep(
       configVersion = config.version;
       sync = Boolean(config.sync);
     }
-    const changed = diffSection(section, before[section], payload[section]);
     await recordChange(tx, {
       clientId: input.clientId,
       actor: ctx,
@@ -571,7 +601,40 @@ export async function editClientStep(
         stripeWarning,
       },
     });
-    return { step, title, changed, configVersion, sync, stripeWarning };
+    return { step, title, changed, configVersion, sync, stripeWarning, held: false, holdReason: null };
   });
+}
+
+/** Applies a held owner step edit during admin approval. Writes `owner_edit` with the approving admin as actor. */
+export async function applyHeldOwnerStep(
+  ctx: Actor,
+  tx: Prisma.TransactionClient,
+  input: { clientId: string; step: number; payload: unknown; title: string },
+): Promise<{ configVersion: number | null; sync: boolean }> {
+  assertTenantContext(ctx);
+  if (ctx.role !== "admin") throw new Error("Only an admin can approve that.");
+  const step = Math.trunc(input.step);
+  const payload = asPayload(input.payload);
+  const before = await clientEditPayload(ctx, input.clientId);
+  const section = SECTION_BY_STEP[step] ?? "business";
+  await applyStep(tx, input.clientId, step, payload, "edit");
+  let configVersion: number | null = null;
+  let sync = false;
+  if (AGENT_AFFECTING_STEPS.has(step)) {
+    const config = await rebuildAgentConfig(ctx, tx, input.clientId, "owner_edit");
+    configVersion = config.version;
+    sync = Boolean(config.sync);
+  }
+  const changed = diffSection(section, before[section], payload[section]);
+  await recordChange(tx, {
+    clientId: input.clientId,
+    actor: ctx,
+    action: "owner_edit",
+    entityType: "client",
+    entityId: input.clientId,
+    summary: `Approved owner edit of ${input.title}`,
+    after: { kind: "owner_edit", step, title: input.title, fields: changeLogFields(changed), configVersion, approved: true },
+  });
+  return { configVersion, sync };
 }
 

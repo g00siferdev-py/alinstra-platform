@@ -26,6 +26,7 @@ import { Prisma } from "./generated/prisma/client";
 import { prisma } from "./client";
 import { recordChange, type Actor } from "./changes";
 import { EXTRA_CHANGE_FEE_CENTS, wizardPayloadSchema } from "./domain";
+import { OWNER_STEP_HOLD_KIND, parseOwnerStepHold } from "./owner-edit-hold";
 import { flagAgentSync, writeTransferTargets } from "./provision";
 import { assertTenantContext, type TenantContext } from "./tenant";
 
@@ -689,6 +690,15 @@ export async function previewHeldUpdate(ctx: Actor, id: string): Promise<PromptP
   assertAdmin(ctx);
   const row = await prisma.quickUpdate.findFirst({ where: { id, status: "held" } });
   if (!row) throw new Error("That update is not waiting for review.");
+  if (row.kind === OWNER_STEP_HOLD_KIND) {
+    const held = parseOwnerStepHold(row.payload);
+    return {
+      prompt: held ? `Owner edit of ${held.title} (step ${held.step}) is waiting for review.` : "Owner edit is waiting for review.",
+      truncated: false,
+      held: true,
+      holdReason: row.holdReason,
+    };
+  }
   const input = parseQuick(row.payload);
   return prisma.$transaction(async (tx) => {
     const loaded = await load(tx, row.clientId);
@@ -703,6 +713,27 @@ export async function approveQuickUpdate(ctx: Actor, id: string): Promise<{ prom
   return prisma.$transaction(async (tx) => {
     const row = await tx.quickUpdate.findFirst({ where: { id, status: "held" } });
     if (!row) throw new Error("That update is not waiting for review.");
+    if (row.kind === OWNER_STEP_HOLD_KIND) {
+      const held = parseOwnerStepHold(row.payload);
+      if (!held) throw new Error("That update cannot be applied.");
+      // Lazy import avoids a wizard ↔ agent cycle (wizard already calls rebuildAgentConfig).
+      const { applyHeldOwnerStep } = await import("./wizard");
+      const applied = await applyHeldOwnerStep(ctx, tx, { clientId: row.clientId, step: held.step, payload: held.payload, title: held.title });
+      await tx.quickUpdate.update({
+        where: { id: row.id },
+        data: { status: "approved", reviewedById: ctx.id, reviewedAt: new Date() },
+      });
+      await recordChange(tx, {
+        clientId: row.clientId,
+        actor: ctx,
+        action: "quick_update.approved",
+        entityType: "quick_update",
+        entityId: row.id,
+        summary: `Approved a held owner edit of ${held.title}`,
+        after: { step: held.step, configVersion: applied.configVersion },
+      });
+      return { prompt: `Owner edit of ${held.title} is live.`, truncated: false, clientId: row.clientId };
+    }
     const input = parseQuick(row.payload);
     const error = validateQuickUpdate(input);
     if (error) throw new Error(error);
@@ -755,14 +786,16 @@ export async function approveQuickUpdate(ctx: Actor, id: string): Promise<{ prom
   });
 }
 
-export async function rejectQuickUpdate(ctx: Actor, id: string): Promise<void> {
+export async function rejectQuickUpdate(ctx: Actor, id: string, reason = ""): Promise<void> {
   assertAdmin(ctx);
+  const note = reason.trim().slice(0, 500) || "Rejected by admin.";
   await prisma.$transaction(async (tx) => {
     const row = await tx.quickUpdate.findFirst({ where: { id, status: "held" } });
     if (!row) throw new Error("That update is not waiting for review.");
     await tx.quickUpdate.update({
       where: { id: row.id },
-      data: { status: "rejected", reviewedById: ctx.id, reviewedAt: new Date() },
+      // holdReason carries the rejection note so the owner can read it on My Business.
+      data: { status: "rejected", holdReason: note, reviewedById: ctx.id, reviewedAt: new Date() },
     });
     await recordChange(tx, {
       clientId: row.clientId,
@@ -771,6 +804,7 @@ export async function rejectQuickUpdate(ctx: Actor, id: string): Promise<void> {
       entityType: "quick_update",
       entityId: row.id,
       summary: `Rejected a held ${row.kind} update`,
+      after: { reason: note },
     });
   });
 }

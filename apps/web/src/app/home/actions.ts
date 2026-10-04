@@ -139,6 +139,8 @@ export async function ownerEditClientStepAction(input: { clientId: string; step:
       configVersion: result.configVersion,
       sync: result.sync,
       stripeWarning: result.stripeWarning,
+      held: result.held,
+      holdReason: result.holdReason,
     };
   } catch (error) {
     return { ok: false, error: message(error, "Check this step and try again.") };
