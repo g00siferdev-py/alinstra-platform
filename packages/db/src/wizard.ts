@@ -215,8 +215,8 @@ async function applyStep(
     await tx.client.update({ where: { id: clientId }, data: { phone: json(phoneSchema.parse(payload.phone ?? {})) } });
   }
   if (step === 9) {
-    const compliance = complianceSchema.parse({ aiDisclosure: true, ...payload.compliance });
-    await tx.client.update({ where: { id: clientId }, data: { compliance: json(compliance) } });
+    const { callRetentionDays, ...compliance } = complianceSchema.parse({ aiDisclosure: true, ...payload.compliance });
+    await tx.client.update({ where: { id: clientId }, data: { compliance: json(compliance), callRetentionDays } });
   }
   if (step === 10) {
     const email = zEmail(payload.portalOwnerEmail);
@@ -495,6 +495,7 @@ export async function clientEditPayload(ctx: Actor, clientId: string): Promise<W
       complianceReviewDone: bool(compliance.complianceReviewDone) ?? false,
       complianceReviewNote: text(compliance.complianceReviewNote) ?? "",
       recallConsent: bool(compliance.recallConsent) ?? false,
+      callRetentionDays: client.callRetentionDays,
     },
     portalOwnerEmail: client.portalOwnerEmail ?? undefined,
   };

@@ -4,6 +4,7 @@ import { continueWizardAction, discardWizardAction, editClientStepAction, previe
 import { useNavigationGuard } from "@/components/navigation-guard";
 import { useToast } from "@/components/toast";
 import { Button, ErrorText, FileDropzone, Input } from "@/components/ui";
+import { CALL_RETENTION_DEFAULT_DAYS, CALL_RETENTION_HEALTHCARE_HINT, CALL_RETENTION_HINT, CALL_RETENTION_MAX_DAYS, CALL_RETENTION_MIN_DAYS } from "@/lib/call-retention";
 import { DEFAULT_VOICE_KEY, VOICE_OPTIONS, voiceDisplayName } from "@alinstra/providers/voices";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -44,7 +45,7 @@ type Payload = {
   voice: Record<string, string>;
   knowledge: Record<string, string>;
   phone: Record<string, string | boolean>;
-  compliance: Record<string, string | boolean>;
+  compliance: Record<string, string | boolean | number>;
   portalOwnerEmail?: string;
 };
 
@@ -656,6 +657,22 @@ export function WizardForm({
             <input className="mt-0.5" type="checkbox" checked={Boolean(payload.compliance.recallConsent)} onChange={(event) => setPayload({ ...payload, compliance: { ...payload.compliance, recallConsent: event.target.checked, aiDisclosure: true } })} />
             <FieldLabel label="Recall consent confirmed" hint="The business confirmed it may send recall reminders to its customers." />
           </div>
+          <div>
+            <FieldLabel
+              label="Call retention (days)"
+              hint={`${CALL_RETENTION_HINT} ${CALL_RETENTION_MIN_DAYS}–${CALL_RETENTION_MAX_DAYS} days.${payload.compliance.healthcareSensitive ? ` ${CALL_RETENTION_HEALTHCARE_HINT}` : ""}`}
+            />
+            <input
+              className="w-32 rounded-md border border-[var(--line)] px-3 py-2 text-sm"
+              type="number"
+              inputMode="numeric"
+              min={CALL_RETENTION_MIN_DAYS}
+              max={CALL_RETENTION_MAX_DAYS}
+              step={1}
+              value={String(payload.compliance.callRetentionDays ?? CALL_RETENTION_DEFAULT_DAYS)}
+              onChange={(event) => setPayload({ ...payload, compliance: { ...payload.compliance, callRetentionDays: event.target.value, aiDisclosure: true } })}
+            />
+          </div>
         </div>
       ) : null}
 
@@ -740,7 +757,7 @@ function ReviewSummary({
     { step: 6, lines: [`Voice: ${voiceDisplayName(payload.voice.voiceId)} · Name: ${payload.voice.assistantName || "Ava"} · Disclosure: ${payload.voice.disclosureMode || "on_request"}`] },
     { step: 7, lines: [["hours", "services", "faqs", "policies", "staff"].map((field) => `${field}: ${payload.knowledge[field]?.trim() ? "set" : "empty"}`).join(" · ")] },
     { step: 8, lines: [`${summarize(payload.phone.mode)}${payload.phone.tollFree === true ? " · toll-free" : payload.phone.areaCode ? ` · area code ${payload.phone.areaCode}` : ""}`] },
-    { step: 9, lines: [`Healthcare: ${summarize(Boolean(payload.compliance.healthcareSensitive))} · Review done: ${summarize(Boolean(payload.compliance.complianceReviewDone))}`] },
+    { step: 9, lines: [`Healthcare: ${summarize(Boolean(payload.compliance.healthcareSensitive))} · Review done: ${summarize(Boolean(payload.compliance.complianceReviewDone))} · Call retention: ${payload.compliance.callRetentionDays ?? CALL_RETENTION_DEFAULT_DAYS} days`] },
     { step: 10, lines: [`Owner email: ${summarize(payload.portalOwnerEmail)}`] },
   ];
   return (

@@ -78,6 +78,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
       {!client.wizardSubmittedAt ? <Link href={`/admin/clients/${client.id}/wizard`}>Continue wizard</Link> : null}
       <div className="flex flex-wrap gap-3 text-sm">
         <Link href={`/admin/clients/${client.id}/agent`}>Agent config</Link>
+        <Link href={`/admin/clients/${client.id}/calls`}>Calls</Link>
         <Link href={`/admin/clients/${client.id}/changes`}>Change requests</Link>
       </div>
       <ProvisionPanel
@@ -131,13 +132,19 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
         </ul>
       </section>
       <section className="rounded-xl border border-[var(--line)] p-4">
-        <h2 className="mb-2 font-medium">Calls</h2>
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="font-medium">Calls</h2>
+          <Link className="text-sm underline" href={`/admin/clients/${client.id}/calls`}>All calls</Link>
+        </div>
         {calls.length === 0 ? <p className="text-sm text-[var(--muted)]">No calls yet.</p> : null}
         <ul className="grid gap-1 text-sm">
           {calls.map((call) => (
             <li key={call.id}>{call.callerMasked} · {call.durationSeconds ?? "—"}s · {call.endReason ?? "in progress"}</li>
           ))}
         </ul>
+        <p className="mt-3 text-sm text-[var(--muted)]">
+          Retention: {client.callRetentionDays} days · Last purge: {client.lastCallPurgeAt ? `${when(client.lastCallPurgeAt)}, ${client.lastCallPurgeCount ?? 0} call${client.lastCallPurgeCount === 1 ? "" : "s"}` : "not yet run"}
+        </p>
       </section>
       <section className="rounded-xl border border-[var(--line)] p-4">
         <h2 className="mb-2 font-medium">Overview</h2>

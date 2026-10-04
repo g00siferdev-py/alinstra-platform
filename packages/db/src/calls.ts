@@ -13,7 +13,7 @@ import {
 } from "./call-transcript";
 import { recordChange, type Actor } from "./changes";
 import { prisma } from "./client";
-import { maskCaller } from "./domain";
+import { CALL_RETENTION_DEFAULT_DAYS, CALL_RETENTION_MAX_DAYS, CALL_RETENTION_MIN_DAYS, maskCaller } from "./domain";
 import type { Prisma } from "./generated/prisma/client";
 import { assertTenantContext, type TenantContext } from "./tenant";
 
@@ -23,7 +23,7 @@ const PURGE_ACTOR: Actor = { id: "retention-purge", role: "admin" };
 export const RECORDING_STATUSES = ["none", "pending", "stored", "failed", "purged"] as const;
 export type RecordingStatus = (typeof RECORDING_STATUSES)[number];
 
-export const CALL_RETENTION_LIMITS = { min: 7, max: 365, default: 90 } as const;
+export const CALL_RETENTION_LIMITS = { min: CALL_RETENTION_MIN_DAYS, max: CALL_RETENTION_MAX_DAYS, default: CALL_RETENTION_DEFAULT_DAYS } as const;
 /** Archived clients lose everything this long after service ends, whatever their retention setting. */
 export const ARCHIVED_PURGE_GRACE_DAYS = 30;
 

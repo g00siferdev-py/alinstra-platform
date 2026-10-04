@@ -177,6 +177,11 @@ export const phoneSchema = z.object({
   tollFree: z.preprocess((value) => value === true || value === "true", z.boolean()).optional(),
 });
 
+/** Mirrored for client components in apps/web/src/lib/call-retention.ts. */
+export const CALL_RETENTION_MIN_DAYS = 7;
+export const CALL_RETENTION_MAX_DAYS = 365;
+export const CALL_RETENTION_DEFAULT_DAYS = 90;
+
 export const complianceSchema = z.object({
   aiDisclosure: z.literal(true).default(true),
   recordingNotice: z.boolean().default(true),
@@ -185,7 +190,15 @@ export const complianceSchema = z.object({
   complianceReviewDone: z.boolean().default(false),
   complianceReviewNote: z.string().trim().max(500).default(""),
   recallConsent: z.boolean().default(false),
+  /** Days transcripts, recordings, and caller numbers are kept before the nightly purge. Stored on Client. */
+  callRetentionDays: z.coerce
+    .number({ message: "Call retention must be a number of days." })
+    .int("Call retention must be whole days.")
+    .min(CALL_RETENTION_MIN_DAYS, `Call retention must be at least ${CALL_RETENTION_MIN_DAYS} days.`)
+    .max(CALL_RETENTION_MAX_DAYS, `Call retention cannot exceed ${CALL_RETENTION_MAX_DAYS} days.`)
+    .default(CALL_RETENTION_DEFAULT_DAYS),
 });
+
 
 export const planSelectionSchema = z.object({
   planId: z.string().min(1),

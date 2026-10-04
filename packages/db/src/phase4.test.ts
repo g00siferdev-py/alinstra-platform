@@ -234,6 +234,25 @@ describe("phase 4 privacy", () => {
     expect(prompt.split("+18883871525")).toHaveLength(2);
     expect(prompt).not.toContain("+14155550777");
 
+    // Phase 4b: call retention rides on the Compliance step, lands on the Client row, not in the compliance JSON.
+    expect(base.compliance?.callRetentionDays).toBe(90);
+    const retention = await editClientStep(admin, {
+      clientId: client.id,
+      step: 9,
+      payload: { ...base, compliance: { ...base.compliance, callRetentionDays: "30" } },
+    });
+    expect(retention.changed).toEqual([{ field: "callRetentionDays", before: "90", after: "30" }]);
+    const afterRetention = await prisma.client.findUniqueOrThrow({ where: { id: client.id } });
+    expect(afterRetention.callRetentionDays).toBe(30);
+    expect(afterRetention.compliance).not.toHaveProperty("callRetentionDays");
+    expect((await clientEditPayload(admin, client.id)).compliance?.callRetentionDays).toBe(30);
+    await expect(
+      editClientStep(admin, { clientId: client.id, step: 9, payload: { ...base, compliance: { ...base.compliance, callRetentionDays: 6 } } }),
+    ).rejects.toThrow(/at least 7/);
+    await expect(
+      editClientStep(admin, { clientId: client.id, step: 9, payload: { ...base, compliance: { ...base.compliance, callRetentionDays: 366 } } }),
+    ).rejects.toThrow(/cannot exceed 365/);
+
     const plan = await editClientStep(admin, { clientId: client.id, step: 3, payload: base });
     expect(plan.stripeWarning).toBe(false);
     await prisma.client.update({ where: { id: client.id }, data: { stripeSubscriptionId: "sub_test_1" } });
