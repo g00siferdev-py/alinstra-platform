@@ -33,6 +33,8 @@ const envSchema = z.object({
   DANIEL_TRANSFER_NUMBER: z.string().default(""),
   RETELL_DEFAULT_AREA_CODE: z.string().default(""),
   RETELL_DEFAULT_TOLL_FREE: z.string().default("false"),
+  /** Optional E.164 fallback for marketing "Call Ava" when client zero has no public phone yet. */
+  MARKETING_PHONE: z.string().default(""),
 });
 
 export type Env = z.infer<typeof envSchema>;

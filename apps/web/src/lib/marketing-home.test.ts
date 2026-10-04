@@ -1,0 +1,20 @@
+import { existsSync, readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { describe, expect, it } from "vitest";
+import { marketingPhoneDisplay, marketingTelHref } from "./marketing-phone";
+
+const root = fileURLToPath(new URL("..", import.meta.url));
+
+describe("marketing home route", () => {
+  it("serves / from the marketing page without a login redirect", () => {
+    expect(existsSync(`${root}/app/page.tsx`)).toBe(false);
+    const source = readFileSync(`${root}/app/(marketing)/page.tsx`, "utf8");
+    expect(source).toContain("The calls you miss are the ones that mattered.");
+    expect(source).not.toMatch(/\bredirect\s*\(/);
+  });
+
+  it("formats the Call Ava CTA phone for display and tel links", () => {
+    expect(marketingPhoneDisplay("+18883871525")).toBe("(888) 387-1525");
+    expect(marketingTelHref("+18883871525")).toBe("tel:+18883871525");
+  });
+});

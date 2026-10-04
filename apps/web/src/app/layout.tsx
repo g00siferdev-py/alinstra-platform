@@ -1,4 +1,3 @@
-import { AppHeader } from "@/components/app-header";
 import { NavigationGuard } from "@/components/navigation-guard";
 import { ToastProvider } from "@/components/toast";
 import type { Metadata } from "next";
@@ -6,7 +5,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Alinstra",
-  description: "Alinstra Technologies operations platform",
+  description: "Alinstra Technologies — practical AI for small businesses, starting with the phone.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -14,10 +13,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en">
       <body>
         <ToastProvider>
-          <NavigationGuard>
-            <AppHeader />
-            {children}
-          </NavigationGuard>
+          <NavigationGuard>{children}</NavigationGuard>
         </ToastProvider>
       </body>
     </html>
