@@ -239,7 +239,7 @@ Admin two-factor cannot be turned off. Replace the authenticator from the accoun
 
 ## 9. After staging is up
 
-- Header on a signed-in page: Alinstra (home), Home, Clients, Plans, and the account menu with Sign out.
+- Header on a signed-in page: Alinstra (home), Home, Clients, Plans, Services, and the account menu with Sign out.
 - Add a client, then **Save & exit**. The clients list shows **Continue setup** with the step number, and opening it returns to that step.
 - Upload a small `.txt` knowledge file on an unsubmitted client **in the browser** at `https://staging.alinstra.com` (not only from a server-side script). The browser PUT goes straight to R2. If the CORS policy is missing, the browser console shows a CORS error and the file never confirms. When the policy is right, the worker log shows extraction finish and the file downloads.
 - The local `prod-smoke` script uploads from inside the web container, so a green smoke run does not prove this browser step.
@@ -296,11 +296,51 @@ Leave these empty until you are ready for one real Retell number. Empty keys mak
 | `STRIPE_WEBHOOK_SECRET` | web | Stripe → Developers → Webhooks → endpoint `https://staging.alinstra.com/api/stripe/webhook` → signing secret. |
 | `DANIEL_TRANSFER_NUMBER` | both | Your cell as a US or Canada number, `+1` then 10 digits, for client zero. |
 
-Stripe webhook API version: `2026-09-30.endive`. Subscribe to `checkout.session.completed`, `checkout.session.expired`, `customer.subscription.deleted`, and `invoice.payment_failed`.
+Stripe webhook API version: the code pins `2026-09-30.endive` (`STRIPE_API_VERSION` in `packages/providers/src/types.ts`) on every request it makes. Subscribe to `checkout.session.completed`, `checkout.session.expired`, `customer.subscription.deleted`, and `invoice.payment_failed`.
+
+The webhook endpoint created on 4 October 2026 is on `2026-08-26.dahlia` because the dashboard did not yet offer `endive` for new endpoints. That mismatch is safe: the webhook handler reads `items.data[].current_period_end` (present in both versions) and never the removed top-level `current_period_end`. When the dashboard lets you select `2026-09-30.endive` for the endpoint, bump it so the event payloads match the version the code requests. No code change is needed for the bump.
 
 Retell webhook URL: `https://staging.alinstra.com/api/retell/webhook`. Inbound URL is set by the app when it buys the number. There is no Retell sandbox and no API spend cap. Before buying the first number, set cost and usage alerts in the Retell dashboard. Use one number. End service, or delete the number, to stop the monthly charge.
 
 Toll-free numbers need a toll-free verification before they can send texts. That is a Phase 5 step, not part of buying the number for voice.
+
+### Retell billing (learned on the first live call)
+
+Retell bills two ways at once:
+
+- **Usage is prepaid credits.** Calls, LLM, and voice minutes draw down a credit balance. Auto recharge may be off on a new account; when the balance hits zero, calls stop. Before the first real client, turn **auto recharge on** and set a **Budget Setting** (monthly cap) in the Retell dashboard under Billing so a runaway day cannot drain the card.
+- **Phone numbers are monthly subscriptions billed to the card on file**, not to credits. Toll-free is $5/month plus $0.06 per inbound minute; local is $2/month.
+- Retell requires **identity verification** on the account before it sells phone numbers. Finish that in the dashboard before the first **Confirm and buy**; otherwise `retell_number` fails with a verification error.
+- A **past-due card** or an overdue balance makes inbound calls fail at the carrier with **"user busy"**. The agent is fine; the account is not. Check Billing in the Retell dashboard first when a caller reports busy signals. The admin **Services** page repeats this note on the Retell card and its **Check** button confirms the API key still authenticates.
+
+### Call timing defaults
+
+Each client's agent carries three timing values, set on the wizard's Coverage step and stored in `client.coverage.callTiming`:
+
+| Setting | Default | Range | Retell field |
+| --- | --- | --- | --- |
+| Max call length | 15 minutes | 1–60 | `max_call_duration_ms` |
+| End after silence | 30 seconds | 10–300 | `end_call_after_silence_ms` |
+| Remind after silence | 8 seconds | 5–60 | `reminder_trigger_ms` |
+
+Defaults and ranges live in `CALL_TIMING_DEFAULTS` and `CALL_TIMING_LIMITS` in `packages/providers/src/types.ts`; the Retell mapping clamps to those ranges in `retellTiming()`. Ava also has the built-in `end_call` tool and a prompt rule to use it once the caller is done. The first sync after this deploy applies 15 min / 30 s / 8 s to client zero's existing agent.
+
+### Privacy model (Phase 4 part 1)
+
+Ava never sees a staff member's phone number. Transfer targets are published to Retell as `transfer_<slug>` tools named only by label; the number is attached by the server at publish time and never appears in the prompt or any dynamic variable. `/api/retell/tools/transfer` answers `{ allowed, tool }` or `{ allowed: false, reason }`, never a number. The only numbers Ava may read aloud are the client's **public phone** and **public email** from wizard step 1 (`publicPhone`, `publicEmail`); when they are blank she says the office will call back. Client zero's public phone is set to its Alinstra number when it is bought.
+
+### Client using their own number (Phase 5 copy, not yet surfaced)
+
+This section is written for the owner portal and is not shown anywhere yet. Nothing in the app sets up forwarding.
+
+A client who keeps their existing business number forwards it to their Alinstra number only when they do not answer, so Ava takes the calls they miss. Set **conditional call forwarding** (no answer and busy), not unconditional forwarding.
+
+- **AT&T (landline and wireless):** dial `*92` then the Alinstra number to forward on no answer; `*90` then the number for busy. Cancel with `*93` / `*91`.
+- **Verizon:** dial `*71` then the Alinstra number for no-answer and busy forwarding. Cancel with `*73`.
+- **T-Mobile:** dial `**61*1<alinstra number>#` for no answer and `**67*1<alinstra number>#` for busy. Cancel with `##61#` / `##67#`.
+- **Landline and VoIP providers (Comcast, Spectrum, RingCentral, Ooma, and others):** the codes vary; most expose "Forward when unanswered" and "Forward when busy" in the account portal. Set both to the Alinstra number and pick the ring count before forwarding (3–4 rings).
+
+Carrier codes change and some business lines have forwarding disabled by default. Tell the client to confirm the exact codes with their carrier, then test by calling their number from a cell and letting it ring out; Ava should answer with the client's greeting.
 
 ### Number purchase approval (Phase 4)
 
