@@ -16,6 +16,8 @@ const PRESIGN_SECONDS = 300;
 export type StoredObject = {
   put(key: string, body: Buffer, contentType: string): Promise<void>;
   get(key: string): Promise<Buffer>;
+  /** Inclusive byte range, like HTTP `Range: bytes=start-end`. */
+  getRange(key: string, start: number, end: number): Promise<Buffer>;
   delete(key: string): Promise<void>;
   byteSize(key: string): Promise<number | null>;
   presignPut(key: string, contentType: string, byteSize: number): Promise<string | null>;
@@ -60,6 +62,10 @@ function localDriver(root: string): StoredObject {
     async get(key) {
       return readFile(pathFor(key));
     },
+    async getRange(key, start, end) {
+      const whole = await readFile(pathFor(key));
+      return whole.subarray(start, end + 1);
+    },
     async delete(key) {
       await rm(pathFor(key), { force: true });
     },
@@ -99,6 +105,12 @@ function s3Driver(): StoredObject {
     },
     async get(key) {
       const result = await client.send(new GetObjectCommand({ Bucket: bucket, Key: safeKey(key) }));
+      const bytes = await result.Body?.transformToByteArray();
+      if (!bytes) throw new Error("Empty object");
+      return Buffer.from(bytes);
+    },
+    async getRange(key, start, end) {
+      const result = await client.send(new GetObjectCommand({ Bucket: bucket, Key: safeKey(key), Range: `bytes=${start}-${end}` }));
       const bytes = await result.Body?.transformToByteArray();
       if (!bytes) throw new Error("Empty object");
       return Buffer.from(bytes);

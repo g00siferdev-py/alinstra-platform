@@ -11,7 +11,6 @@ import {
   clientIsHealthcare,
   emptyWizardPayload,
   formatTransferTargets,
-  maskCaller,
   normalizeTransferNumber,
   officeOpen,
   parseRecipientEmails,
@@ -945,6 +944,7 @@ export async function recordTakenMessage(
   clientId: string,
   args: { callerName?: string; callbackNumber?: string; message?: string },
   danielEmail: string | null,
+  retellCallId: string | null = null,
 ): Promise<{ sentence: string; recipients: string[]; receivedAt: Date; timezone: string }> {
   const client = await prisma.client.findFirst({ where: { id: clientId, archivedAt: null } });
   if (!client) throw new Error("That client is not available.");
@@ -958,6 +958,7 @@ export async function recordTakenMessage(
         callerName: plainCallerName(args.callerName ?? "Caller"),
         callbackNumber: (args.callbackNumber ?? "").trim().slice(0, 40),
         body: body.slice(0, 4000),
+        retellCallId: retellCallId?.trim() ? retellCallId.trim().slice(0, 120) : null,
       },
     });
     await recordChange(tx, {
@@ -1011,74 +1012,6 @@ export async function inboundVariables(toNumber: string, now = new Date()): Prom
     office_open: officeOpen(client.weeklyHours, client.timezone, now) ? "yes" : "no",
     allowed_targets: targets.map((target) => target.label.trim()).join("; "),
   };
-}
-
-type CallPayload = {
-  event?: string;
-  call?: {
-    call_id?: string;
-    agent_id?: string;
-    from_number?: string;
-    to_number?: string;
-    start_timestamp?: number;
-    end_timestamp?: number;
-    disconnection_reason?: string;
-  };
-};
-
-export async function applyRetellCall(payload: CallPayload): Promise<void> {
-  const call = payload.call;
-  if (!call?.call_id) return;
-  if (payload.event !== "call_started" && payload.event !== "call_ended") return;
-  const client = await prisma.client.findFirst({
-    where: {
-      archivedAt: null,
-      OR: [
-        ...(call.agent_id ? [{ retellAgentId: call.agent_id }] : []),
-        ...(call.to_number ? [{ phoneE164: call.to_number }] : []),
-      ],
-    },
-  });
-  if (!client) return;
-  const startedAt = typeof call.start_timestamp === "number" ? new Date(call.start_timestamp) : null;
-  const endedAt = typeof call.end_timestamp === "number" ? new Date(call.end_timestamp) : null;
-  const durationSeconds = startedAt && endedAt ? Math.max(0, Math.round((endedAt.getTime() - startedAt.getTime()) / 1000)) : null;
-  await prisma.$transaction(async (tx) => {
-    const existing = await tx.callRecord.findUnique({ where: { retellCallId: call.call_id! } });
-    if (!existing) {
-      const created = await tx.callRecord.create({
-        data: {
-          clientId: client.id,
-          retellCallId: call.call_id!,
-          startedAt,
-          endedAt: payload.event === "call_ended" ? endedAt : null,
-          durationSeconds: payload.event === "call_ended" ? durationSeconds : null,
-          callerMasked: maskCaller(call.from_number ?? ""),
-          endReason: payload.event === "call_ended" ? call.disconnection_reason ?? null : null,
-        },
-      });
-      await recordChange(tx, {
-        clientId: client.id,
-        actor: WEBHOOK_ACTOR,
-        action: "call.recorded",
-        entityType: "call_record",
-        entityId: created.id,
-        summary: `Recorded a call for ${client.name}`,
-      });
-      return;
-    }
-    if (payload.event !== "call_ended") return;
-    await tx.callRecord.update({
-      where: { id: existing.id },
-      data: {
-        startedAt: existing.startedAt ?? startedAt,
-        endedAt,
-        durationSeconds,
-        endReason: call.disconnection_reason ?? existing.endReason,
-        callerMasked: existing.callerMasked || maskCaller(call.from_number ?? ""),
-      },
-    });
-  });
 }
 
 type StripeEvent = {

@@ -3,20 +3,24 @@ import { sendEmail } from "@alinstra/email";
 import { EXTRACT_TIMEOUT_MS } from "@alinstra/db";
 import {
   bullConnection,
+  CALLS_QUEUE,
   EMAIL_QUEUE,
   extractKnowledgeText,
   KNOWLEDGE_QUEUE,
   PROVISION_QUEUE,
   provisionClient,
+  schedulePurgeCalls,
   sendAccountEmail,
   sendAdminNotice,
   sendInviteEmail,
   sendMessageEmail,
   sendPasswordResetEmail,
+  storeRecording,
   syncAgent,
 } from "@alinstra/queue";
 import * as Sentry from "@sentry/node";
 import { UnrecoverableError, Worker } from "bullmq";
+import { runPurgeCalls, runStoreRecording } from "./jobs/calls";
 import { markExtractionFailed } from "./jobs/extract-knowledge-text";
 import { runIsolatedJob } from "./jobs/run-isolated";
 import { runChurnSweep, runMessageEmail, runProvision, runSync } from "./jobs/phase3";
@@ -112,6 +116,26 @@ const provision = new Worker(
   { connection, concurrency: 2 },
 );
 
+const calls = new Worker(
+  CALLS_QUEUE,
+  async (job) => {
+    if (job.name === "store-recording") {
+      await runStoreRecording(storeRecording.parse(job.data).retellCallId);
+      return;
+    }
+    if (job.name === "purge-calls") {
+      await runPurgeCalls();
+      return;
+    }
+    log("warn", "unknown job", { job: job.name });
+  },
+  { connection, concurrency: 2 },
+);
+
+void schedulePurgeCalls().catch((error: unknown) => {
+  log("error", "purge schedule failed", { error: error instanceof Error ? error.name : "unknown" });
+});
+
 void runChurnSweep().catch((error: unknown) => {
   log("error", "churn sweep failed", { error: error instanceof Error ? error.name : "unknown" });
 });
@@ -121,17 +145,17 @@ setInterval(() => {
   });
 }, 60 * 60 * 1000);
 
-for (const worker of [email, knowledge, provision]) {
+for (const worker of [email, knowledge, provision, calls]) {
   worker.on("failed", (job, error) => {
     log("error", "job failed", { job: job?.name ?? "unknown", error: error.name });
     Sentry.captureException(error);
   });
 }
 
-log("info", "worker listening", { queues: [EMAIL_QUEUE, KNOWLEDGE_QUEUE, PROVISION_QUEUE].join(",") });
+log("info", "worker listening", { queues: [EMAIL_QUEUE, KNOWLEDGE_QUEUE, PROVISION_QUEUE, CALLS_QUEUE].join(",") });
 
 async function shutdown(): Promise<void> {
-  await Promise.all([email.close(), knowledge.close(), provision.close()]);
+  await Promise.all([email.close(), knowledge.close(), provision.close(), calls.close()]);
   process.exit(0);
 }
 

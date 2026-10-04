@@ -1,4 +1,4 @@
-import { ProviderRequestError, retellTiming, STRIPE_API_VERSION, type AgentPublish, type BillingPlatform, type PriceKind, type PublishedTool, type VoicePlatform } from "./types";
+import { ProviderRequestError, RECORDING_MAX_BYTES, retellTiming, STRIPE_API_VERSION, type AgentPublish, type BillingPlatform, type PriceKind, type PublishedTool, type VoicePlatform } from "./types";
 
 type FetchLike = (url: string, init?: RequestInit) => Promise<Response>;
 
@@ -238,6 +238,21 @@ export function httpVoice(apiKey: string, fetchImpl: FetchLike = fetch): VoicePl
         if (error instanceof ProviderRequestError && error.status === 404) return "missing";
         throw error;
       }
+    },
+    async fetchRecording(retellCallId) {
+      // GET /v2/get-call/{call_id} returns `recording_url` (https://docs.retellai.com/api-references/get-call).
+      // The URL stays inside this function: it is fetched and the bytes are returned, nothing else.
+      const { body } = await send(`/v2/get-call/${encodeURIComponent(retellCallId)}`, { method: "GET" });
+      const url = typeof body.recording_url === "string" ? body.recording_url : "";
+      if (!url) return null;
+      const response = await fetchImpl(url, { method: "GET" });
+      if (!response.ok) throw new ProviderRequestError(`Recording download failed (${response.status})`, response.status);
+      const declared = Number(response.headers.get("content-length") ?? "0");
+      if (declared > RECORDING_MAX_BYTES) throw new Error(`Recording is too large (${declared} bytes)`);
+      const bytes = Buffer.from(await response.arrayBuffer());
+      if (bytes.length > RECORDING_MAX_BYTES) throw new Error(`Recording is too large (${bytes.length} bytes)`);
+      const contentType = (response.headers.get("content-type") ?? "").split(";")[0]?.trim() || "audio/wav";
+      return { bytes, contentType };
     },
   };
 }

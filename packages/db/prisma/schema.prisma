@@ -17,6 +17,8 @@ model User {
   role             String
   clientId         String?
   twoFactorEnabled Boolean?    @default(false)
+  /// Staff only: whether this user may open calls, transcripts, and recordings. Owners and admins always can.
+  canViewCalls     Boolean     @default(false)
   createdAt        DateTime    @default(now())
   updatedAt        DateTime    @updatedAt
   client           Client?     @relation(fields: [clientId], references: [id], onDelete: Restrict)
@@ -167,6 +169,10 @@ model Client {
   agentSyncError                  String?
   syncedConfigId                  String?
   liveAt                          DateTime?
+  /// Days a call's transcript, recording, and caller number are kept before the nightly purge. 7–365.
+  callRetentionDays               Int       @default(90)
+  lastCallPurgeAt                 DateTime?
+  lastCallPurgeCount              Int?
   createdAt                       DateTime  @default(now())
   updatedAt                       DateTime  @updatedAt
   users                           User[]
@@ -372,12 +378,18 @@ model ClientMessage {
   callerName     String
   callbackNumber String
   body           String   @db.Text
+  /// The Retell call the message was taken on, when the tool call carried one.
+  retellCallId   String?
   createdAt      DateTime @default(now())
 
   @@index([clientId, createdAt])
+  @@index([retellCallId])
   @@map("client_message")
 }
 
+/// One row per Retell call. Transcript, summary, caller number, and the raw webhook events are stored
+/// encrypted (AES-256-GCM via @alinstra/crypto) and nulled by the retention purge. Duration, outcome,
+/// sentiment, and cost survive the purge for reporting.
 model CallRecord {
   id              String    @id @default(cuid())
   clientId        String
@@ -389,8 +401,36 @@ model CallRecord {
   callerMasked    String
   endReason       String?
   createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @default(now()) @updatedAt
+  /// Encrypted JSON `{ version, text, turns[] }`; turns keep roles, timestamps, and tool invocations.
+  transcriptCipher     String?   @db.Text
+  /// Encrypted call_analysis.call_summary.
+  summaryCipher        String?   @db.Text
+  /// Encrypted JSON of every webhook event received for the call, for the admin raw view.
+  rawEventsCipher      String?   @db.Text
+  /// Encrypted full caller number. `callerMasked` stays for staff display.
+  callerE164Cipher     String?
+  /// call_analysis.user_sentiment: Positive | Neutral | Negative | Unknown.
+  sentiment            String?
+  successful           Boolean?
+  inVoicemail          Boolean?
+  /// call_cost.combined_cost, rounded to whole cents.
+  costCents            Int?
+  /// R2 object key under clients/<clientId>/calls/. Never a provider URL.
+  recordingKey         String?
+  /// none | pending | stored | failed | purged
+  recordingStatus      String    @default("none")
+  recordingError       String?
+  recordingContentType String?
+  recordingBytes       Int?
+  /// message_taken | transferred | booked | no_action | hung_up, derived from the tool calls in the turns.
+  outcome              String?
+  analyzedAt           DateTime?
+  purgedAt             DateTime?
 
   @@index([clientId, createdAt])
+  @@index([clientId, startedAt(sort: Desc)])
+  @@index([clientId, outcome])
   @@map("call_record")
 }
 

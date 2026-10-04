@@ -55,9 +55,18 @@ export type ProvisionClient = z.infer<typeof provisionClient>;
 export type SendAccountEmail = z.infer<typeof sendAccountEmail>;
 export type SendMessageEmail = z.infer<typeof sendMessageEmail>;
 
+/** Only the provider's call id travels through Redis; the worker resolves the recording itself. */
+export const storeRecording = z.object({
+  retellCallId: z.string().min(1).max(120),
+});
+export type StoreRecording = z.infer<typeof storeRecording>;
+
 export const EMAIL_QUEUE = "email";
 export const KNOWLEDGE_QUEUE = "knowledge";
 export const PROVISION_QUEUE = "provision";
+export const CALLS_QUEUE = "calls";
+export const PURGE_CALLS_JOB_ID = "purge-calls-daily";
+export const PURGE_CALLS_CRON = "15 3 * * *";
 
 let redis: Redis | undefined;
 
@@ -88,6 +97,14 @@ export function bullConnection(): ConnectionOptions {
 let emailQueue: Queue | undefined;
 let knowledgeQueue: Queue | undefined;
 let provisionQueue: Queue | undefined;
+let callsQueue: Queue | undefined;
+
+export function callsJobs(): Queue {
+  if (!callsQueue) {
+    callsQueue = new Queue(CALLS_QUEUE, { connection: bullConnection() });
+  }
+  return callsQueue;
+}
 
 function emailJobs(): Queue {
   if (!emailQueue) {
@@ -183,6 +200,31 @@ export async function enqueueProvisionClient(data: ProvisionClient): Promise<voi
   }
 }
 
+/** One copy job per call: the jobId dedupes retries from Retell's webhook. Three attempts with backoff. */
+export async function enqueueStoreRecording(data: StoreRecording): Promise<void> {
+  const payload = storeRecording.parse(data);
+  try {
+    await callsJobs().add("store-recording", payload, {
+      jobId: `recording-${payload.retellCallId}`,
+      attempts: 3,
+      backoff: { type: "exponential", delay: 30_000 },
+      removeOnComplete: true,
+      removeOnFail: 200,
+    });
+  } catch (error) {
+    if (!alreadyQueued(error)) throw error;
+  }
+}
+
+/** Daily retention purge, fixed jobId so restarts never double-schedule. */
+export async function schedulePurgeCalls(): Promise<void> {
+  await callsJobs().upsertJobScheduler(PURGE_CALLS_JOB_ID, { pattern: PURGE_CALLS_CRON }, {
+    name: "purge-calls",
+    data: {},
+    opts: { removeOnComplete: 30, removeOnFail: 30 },
+  });
+}
+
 export async function enqueueAccountEmail(data: SendAccountEmail): Promise<void> {
   const payload = sendAccountEmail.parse(data);
   await emailJobs().add("send-account-email", payload, {
@@ -207,6 +249,8 @@ export async function closeQueue(): Promise<void> {
   await emailQueue?.close();
   await knowledgeQueue?.close();
   await provisionQueue?.close();
+  await callsQueue?.close();
+  callsQueue = undefined;
   provisionQueue = undefined;
   emailQueue = undefined;
   knowledgeQueue = undefined;

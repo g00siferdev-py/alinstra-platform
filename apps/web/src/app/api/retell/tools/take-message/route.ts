@@ -21,7 +21,7 @@ export async function POST(request: Request): Promise<Response> {
     return new Response("Unauthorized", { status: 401 });
   }
   try {
-    const body = JSON.parse(raw) as { call?: { agent_id?: string }; args?: { caller_name?: string; callback_number?: string; message?: string } };
+    const body = JSON.parse(raw) as { call?: { agent_id?: string; call_id?: string }; args?: { caller_name?: string; callback_number?: string; message?: string } };
     const missing = missingMessageSentence(body.args ?? {});
     if (missing) return Response.json({ result: missing });
     const clientId = body.call?.agent_id ? await clientIdForRetellAgent(body.call.agent_id) : null;
@@ -31,7 +31,7 @@ export async function POST(request: Request): Promise<Response> {
       callerName,
       callbackNumber: body.args?.callback_number,
       message: body.args?.message,
-    }, env.ADMIN_EMAIL);
+    }, env.ADMIN_EMAIL, typeof body.call?.call_id === "string" ? body.call.call_id : null);
     if (saved.recipients.length > 0) {
       try {
         await enqueueMessageEmail({

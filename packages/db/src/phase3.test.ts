@@ -3,9 +3,9 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { applyQuickUpdate } from "./agent";
 import { prisma } from "./client";
 import { maskCaller, officeOpen, parseTransferTargets, plainCallerName } from "./domain";
+import { applyRetellCall, getCall, purgeExpiredCalls } from "./calls";
 import {
   advanceProvisioning,
-  applyRetellCall,
   applyStripeEvent,
   callRecords,
   clientMessages,
@@ -189,7 +189,9 @@ describe("phase 3 provisioning", () => {
     expect((await prisma.client.findUniqueOrThrow({ where: { id: other.id } })).status).toBe("churned");
   });
 
-  it("stores a message for the office and a masked call, isolated by client", async () => {
+  // Phase 3 kept metadata only. Phase 4b (deliberate reversal) stores the transcript encrypted at rest,
+  // readable only through the access-checked reader, and purges it on the client's retention schedule.
+  it("stores a message for the office and an encrypted, retention-limited call, isolated by client", async () => {
     const client = await seedClient();
     const other = await seedClient({ name: "Other" });
     const saved = await recordTakenMessage(client.id, { callerName: "Pat", callbackNumber: "+15551111", message: "The furnace is out." }, null);
@@ -226,7 +228,26 @@ describe("phase 3 provisioning", () => {
     expect(calls[0]?.callerMasked).toBe(maskCaller("+14155551212"));
     expect(calls[0]?.endReason).toBe("user_hangup");
     expect(calls[0]?.durationSeconds).toBe(30);
-    expect(JSON.stringify(calls[0])).not.toContain("do not store");
+    // Raw row: transcript and caller number are ciphertext, never plaintext.
+    const rawRow = JSON.stringify(calls[0]);
+    expect(rawRow).not.toContain("do not store");
+    expect(rawRow).not.toContain("+14155551212");
+    expect(calls[0]?.transcriptCipher).toMatch(/^v1\./);
+    // Access-checked reader decrypts for the client's owner.
+    const detail = await getCall({ role: "client_owner", clientId: client.id }, calls[0]!.id);
+    expect(detail?.transcript?.text).toBe("do not store");
+    expect(detail?.caller).toBe("+14155551212");
+    // Retention: after the window the transcript is gone but the metadata stays.
+    const retention = (await prisma.client.findUniqueOrThrow({ where: { id: client.id } })).callRetentionDays;
+    const deleted: string[] = [];
+    await purgeExpiredCalls({ deleteObject: async (key) => void deleted.push(key) }, new Date(openFriday.getTime() + (retention + 1) * 86_400_000));
+    const purged = await prisma.callRecord.findUniqueOrThrow({ where: { id: calls[0]!.id } });
+    expect(purged.transcriptCipher).toBeNull();
+    expect(purged.callerE164Cipher).toBeNull();
+    expect(purged.purgedAt).not.toBeNull();
+    expect(purged.durationSeconds).toBe(30);
+    expect(purged.callerMasked).toBe(maskCaller("+14155551212"));
+    expect(deleted).toEqual([]);
     const owner = { role: "client_owner" as const, clientId: other.id };
     expect(await clientMessages(owner).list(client.id)).toEqual([]);
     expect(await callRecords(owner).list(client.id)).toEqual([]);

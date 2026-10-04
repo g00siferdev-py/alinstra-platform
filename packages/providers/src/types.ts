@@ -128,7 +128,17 @@ export interface VoicePlatform {
   deleteNumber(e164: string): Promise<"deleted" | "missing">;
   deleteAgent(agentId: string): Promise<"deleted" | "missing">;
   deleteLlm(llmId: string): Promise<"deleted" | "missing">;
+  /**
+   * Downloads the call recording for a finished call. The provider URL is resolved inside the
+   * platform and never returned, so nothing outside this call sees it. `null` when the call has no recording.
+   */
+  fetchRecording(retellCallId: string): Promise<RecordingDownload | null>;
 }
+
+export type RecordingDownload = { bytes: Buffer; contentType: string };
+
+/** Recordings larger than this are refused rather than buffered. 15 minutes of 16-bit 8 kHz stereo wav is ~29 MB. */
+export const RECORDING_MAX_BYTES = 64 * 1024 * 1024;
 
 export type PriceKind = "recurring" | "setup" | "metered_overage";
 
