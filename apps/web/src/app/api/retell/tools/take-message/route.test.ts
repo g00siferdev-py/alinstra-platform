@@ -26,7 +26,7 @@ import { POST } from "./route";
 function call(args: Record<string, string>) {
   return POST(new Request("http://localhost/api/retell/tools/take-message", {
     method: "POST",
-    body: JSON.stringify({ call: { agent_id: "agent_1" }, args }),
+    body: JSON.stringify({ call: { agent_id: "agent_1", call_id: "call_abc" }, args }),
   }));
 }
 
@@ -52,6 +52,8 @@ describe("take message route", () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ result: "I've passed that message to the office." });
     expect(recordTakenMessage).toHaveBeenCalled();
+    // Phase 4b: the Retell call id rides along so the message links to its call.
+    expect(vi.mocked(recordTakenMessage).mock.calls[0]?.[3]).toBe("call_abc");
     const again = await call({ caller_name: "Pat", callback_number: "4155550100", message: "The heat is out" });
     expect(again.status).toBe(200);
     expect(enqueueMessageEmail).toHaveBeenLastCalledWith(expect.objectContaining({ receivedAt: "2026-10-04T15:34:00.000Z", timezone: "America/New_York" }));
