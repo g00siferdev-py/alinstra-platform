@@ -57,11 +57,14 @@ export type SaveEditStep = (input: { clientId: string; step: number; payload: un
 
 function greetingPreview(business: string, assistantName: string, mode: string, recordingNotice: boolean): string {
   const name = assistantName.trim() || "Ava";
-  const spoken =
+  const parts = [
     mode === "upfront"
       ? `Thank you for calling ${business}. This is ${name}, ${business}'s virtual assistant.`
-      : `Thank you for calling ${business}. This is ${name}.`;
-  return recordingNotice ? `${spoken} This call may be recorded.` : spoken;
+      : `Thank you for calling ${business}. This is ${name}.`,
+  ];
+  if (recordingNotice) parts.push("This call may be recorded.");
+  parts.push("How can I help?");
+  return parts.join(" ");
 }
 
 function contentTypeFor(filename: string): string {

@@ -1,5 +1,5 @@
 import { getEnv } from "@alinstra/config";
-import { inboundVariables } from "@alinstra/db";
+import { inboundCallPayload } from "@alinstra/db";
 import { verifyRetell } from "@alinstra/providers";
 
 export const dynamic = "force-dynamic";
@@ -16,8 +16,8 @@ export async function POST(request: Request): Promise<Response> {
     const body = JSON.parse(raw) as { call_inbound?: { to_number?: string } };
     const toNumber = body.call_inbound?.to_number ?? "";
     if (!toNumber) return Response.json(UNKNOWN);
-    const variables = await inboundVariables(toNumber);
-    return Response.json({ call_inbound: { dynamic_variables: variables } });
+    const payload = await inboundCallPayload(toNumber);
+    return Response.json({ call_inbound: payload });
   } catch {
     return Response.json(UNKNOWN);
   }

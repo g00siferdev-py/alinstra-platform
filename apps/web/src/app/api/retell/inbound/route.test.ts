@@ -5,9 +5,12 @@ vi.mock("@alinstra/config", () => ({
 }));
 vi.mock("@alinstra/providers", () => ({ verifyRetell: () => true }));
 vi.mock("@alinstra/db", () => ({
-  inboundVariables: vi.fn(async (to: string) => {
+  inboundCallPayload: vi.fn(async (to: string) => {
     if (to === "explode") throw new Error("database down");
-    return { office_open: "yes", allowed_targets: "Front desk; Billing" };
+    return {
+      dynamic_variables: { office_open: "yes", allowed_targets: "Front desk; Billing" },
+      agent_override: { retell_llm: { begin_message: "Thank you for calling. How can I help?" } },
+    };
   }),
 }));
 
@@ -21,14 +24,17 @@ function call(body: unknown) {
 }
 
 describe("inbound webhook", () => {
-  it("reads call_inbound and answers under call_inbound", async () => {
+  it("reads call_inbound and answers under call_inbound with begin_message override", async () => {
     const response = await call({
       event: "call_inbound",
       call_inbound: { to_number: "+18005550100", from_number: "+14155550199" },
     });
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({
-      call_inbound: { dynamic_variables: { office_open: "yes", allowed_targets: "Front desk; Billing" } },
+      call_inbound: {
+        dynamic_variables: { office_open: "yes", allowed_targets: "Front desk; Billing" },
+        agent_override: { retell_llm: { begin_message: "Thank you for calling. How can I help?" } },
+      },
     });
   });
 

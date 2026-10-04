@@ -11,6 +11,7 @@ import {
   AWAITING_NUMBER_APPROVAL,
   createClientZero,
   decideTransfer,
+  inboundCallPayload,
   inboundVariables,
   latestProvisionFailure,
   numberPurchaseFor,
@@ -152,6 +153,29 @@ describe("phase 4 privacy", () => {
     expect(variables).toEqual({ office_open: "yes", allowed_targets: "Front desk; Dr. Patel; Billing" });
     expect(JSON.stringify(variables)).not.toMatch(/\d{4,}/);
     expect(await inboundVariables("+18005550199", openFriday)).toEqual({ office_open: "no", allowed_targets: "" });
+  });
+
+  it("overrides begin_message with a continuous open or closed opening", async () => {
+    const client = await seedClient({ name: "North HVAC" });
+    await prisma.client.update({
+      where: { id: client.id },
+      data: {
+        phoneE164: "+18005550111",
+        voice: { voiceId: "voice_1", assistantName: "Ava", disclosureMode: "on_request" },
+        compliance: { healthcareSensitive: false, healthcareTouched: true, recordingNotice: true },
+      },
+    });
+    const open = await inboundCallPayload("+18005550111", openFriday);
+    expect(open.dynamic_variables.office_open).toBe("yes");
+    expect(open.agent_override?.retell_llm.begin_message).toBe(
+      "Thank you for calling North HVAC. This is Ava. This call may be recorded. How can I help?",
+    );
+    const closedSaturday = new Date("2026-10-03T19:00:00.000Z");
+    const closed = await inboundCallPayload("+18005550111", closedSaturday);
+    expect(closed.dynamic_variables.office_open).toBe("no");
+    expect(closed.agent_override?.retell_llm.begin_message).toContain("The office is closed right now.");
+    expect(closed.agent_override?.retell_llm.begin_message).toContain("How can I help?");
+    expect(closed.agent_override?.retell_llm.begin_message).not.toMatch(/\n/);
   });
 
   it("rebuilds an old-template config on sync and republishes the tools and the public phone", async () => {

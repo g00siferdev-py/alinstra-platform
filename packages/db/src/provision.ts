@@ -1,3 +1,4 @@
+import { buildGreeting, type PromptFeatures } from "@alinstra/agent";
 import type { BillingPlatform, PublishedTool, VoicePlatform } from "@alinstra/providers";
 import { END_CALL_TOOL, overageLookupKey, retellVoiceIdFor, TAKE_MESSAGE_PARAMETERS, TRANSFER_CHECK_PARAMETERS, transferToolNames } from "@alinstra/providers";
 import { Pool } from "pg";
@@ -1004,14 +1005,64 @@ export async function decideTransfer(
   return { allowed: true, tool: names[index] ?? `transfer_${index + 1}` };
 }
 
-export async function inboundVariables(toNumber: string, now = new Date()): Promise<{ office_open: "yes" | "no"; allowed_targets: string }> {
-  const client = await prisma.client.findFirst({ where: { phoneE164: toNumber, archivedAt: null } });
-  if (!client) return { office_open: "no", allowed_targets: "" };
-  const targets = await prisma.transferTarget.findMany({ where: { clientId: client.id }, orderBy: { createdAt: "asc" } });
+export type InboundDynamicVariables = { office_open: "yes" | "no"; allowed_targets: string };
+
+export type InboundCallPayload = {
+  dynamic_variables: InboundDynamicVariables;
+  /** Per-call begin_message so open and closed openings stay one continuous utterance. */
+  agent_override?: { retell_llm: { begin_message: string } };
+};
+
+function inboundPersona(voice: unknown): { assistantName: string; disclosureMode: "on_request" | "upfront" } {
+  const row = voice && typeof voice === "object" && !Array.isArray(voice) ? (voice as Record<string, unknown>) : {};
   return {
-    office_open: officeOpen(client.weeklyHours, client.timezone, now) ? "yes" : "no",
-    allowed_targets: targets.map((target) => target.label.trim()).join("; "),
+    assistantName: typeof row.assistantName === "string" && row.assistantName.trim() ? row.assistantName.trim() : "Ava",
+    disclosureMode: row.disclosureMode === "upfront" ? "upfront" : "on_request",
   };
+}
+
+function inboundRecordingOn(compliance: unknown): boolean {
+  const row = compliance && typeof compliance === "object" && !Array.isArray(compliance) ? (compliance as Record<string, unknown>) : {};
+  return row.recordingNotice !== false;
+}
+
+function inboundFeatures(features: unknown): PromptFeatures {
+  const row = features && typeof features === "object" && !Array.isArray(features) ? (features as Record<string, unknown>) : {};
+  const mode = row.bookingMode;
+  return {
+    bookingMode: mode === "request_only" || mode === "direct_calendar" ? mode : null,
+    liveTransfer: row.liveTransfer === true,
+    messages: typeof row.messages === "string" ? row.messages : typeof row.messageRecipients === "string" ? row.messageRecipients : null,
+  };
+}
+
+/** Dynamic variables plus a begin_message override for the continuous open/closed greeting. */
+export async function inboundCallPayload(toNumber: string, now = new Date()): Promise<InboundCallPayload> {
+  const client = await prisma.client.findFirst({ where: { phoneE164: toNumber, archivedAt: null } });
+  if (!client) return { dynamic_variables: { office_open: "no", allowed_targets: "" } };
+  const targets = await prisma.transferTarget.findMany({ where: { clientId: client.id }, orderBy: { createdAt: "asc" } });
+  const open = officeOpen(client.weeklyHours, client.timezone, now);
+  const persona = inboundPersona(client.voice);
+  const features = inboundFeatures(client.features);
+  const beginMessage = buildGreeting({
+    businessName: client.name,
+    assistantName: persona.assistantName,
+    disclosureMode: persona.disclosureMode,
+    recordingNotice: inboundRecordingOn(client.compliance),
+    hoursState: open ? "open" : "closed",
+    features,
+  });
+  return {
+    dynamic_variables: {
+      office_open: open ? "yes" : "no",
+      allowed_targets: targets.map((target) => target.label.trim()).join("; "),
+    },
+    agent_override: { retell_llm: { begin_message: beginMessage } },
+  };
+}
+
+export async function inboundVariables(toNumber: string, now = new Date()): Promise<InboundDynamicVariables> {
+  return (await inboundCallPayload(toNumber, now)).dynamic_variables;
 }
 
 type StripeEvent = {
