@@ -19,4 +19,13 @@ These preview files also responded `200` that day. They are the public samples w
 
 Platform voices are the ones tuned for phone audio, with fallback included. Prefer those over a raw provider voice when the card says platform. [Platform voices](https://docs.retellai.com/build/platform-voices).
 
-Daniel picks Ava's default and the alternates. After that, the wizard labels (`voice_1` through `voice_4`) get a map to those voice ids. Until then, provisioning reads `RETELL_DEFAULT_VOICE_ID` and does not guess.
+## Chosen voices (Phase 4)
+
+The wizard labels map to Retell voice ids in `packages/providers/src/voices.ts`. That file is the only place to change a voice; the wizard, the admin client page, change review, and the Retell payload all read it. `RETELL_DEFAULT_VOICE_ID` is gone.
+
+| Wizard label | Shown as | Retell `voice_id` |
+| --- | --- | --- |
+| `voice_1` (default for new clients) | Brynne (female) | `retell-Brynne` |
+| `voice_2` | Della (female) | `retell-Della` |
+| `voice_3` | Cimo (female) | `retell-Cimo` |
+| `voice_4` | Jason (male) | `minimax-Jason` |

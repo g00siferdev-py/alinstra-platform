@@ -1,5 +1,5 @@
 import type { BillingPlatform, PublishedTool, VoicePlatform } from "@alinstra/providers";
-import { END_CALL_TOOL, overageLookupKey, TAKE_MESSAGE_PARAMETERS, TRANSFER_CHECK_PARAMETERS, transferToolNames } from "@alinstra/providers";
+import { END_CALL_TOOL, overageLookupKey, retellVoiceIdFor, TAKE_MESSAGE_PARAMETERS, TRANSFER_CHECK_PARAMETERS, transferToolNames } from "@alinstra/providers";
 import { Pool } from "pg";
 import { Prisma } from "./generated/prisma/client";
 import { refreshStaleAgentConfig } from "./agent";
@@ -55,7 +55,6 @@ export type Phase3Deps = {
   voice: VoicePlatform;
   billing: BillingPlatform;
   appUrl: string;
-  voiceId: string;
   danielNumber: string | null;
   danielEmail: string | null;
   defaultAreaCode: string | null;
@@ -621,13 +620,15 @@ async function publishInput(clientId: string, deps: Phase3Deps) {
   await refreshStaleAgentConfig(WEBHOOK_ACTOR, clientId);
   const loaded = await loadReady(clientId);
   if (!loaded.config) throw new Error("Activate a receptionist config before provisioning.");
-  if (!deps.voiceId) throw new Error("Set RETELL_DEFAULT_VOICE_ID after a voice is chosen. See docs/voice-options.md.");
   if (loaded.client.internal) await ensureDanielTarget(clientId, deps.danielNumber);
   const targets = await prisma.transferTarget.findMany({ where: { clientId }, orderBy: { createdAt: "asc" } });
   const base = origin(deps.appUrl);
+  const voice = loaded.client.voice && typeof loaded.client.voice === "object" ? (loaded.client.voice as { voiceId?: unknown }) : {};
   return {
     loaded,
     targets,
+    // The client's wizard selection decides the Retell voice; unset falls back to the default voice.
+    voiceId: retellVoiceIdFor(voice.voiceId),
     prompt: retellPrompt(loaded.config.promptText, loaded.client.timezone),
     beginMessage: loaded.config.greeting?.trim() || "Thank you for calling.",
     tools: toolsFor(deps.appUrl, targets, loaded.client.features),
@@ -678,7 +679,7 @@ async function runProvisionStep(name: (typeof PROVISION_STEPS)[number], clientId
     const agentId = found ?? (await deps.voice.createAgent({
       clientId,
       llmId: client.retellLlmId,
-      voiceId: deps.voiceId,
+      voiceId: published.voiceId,
       webhookUrl: published.webhookUrl,
       timing: published.timing,
     })).agentId;
@@ -715,7 +716,7 @@ async function runProvisionStep(name: (typeof PROVISION_STEPS)[number], clientId
     agentId: client.retellAgentId,
     prompt: published.prompt,
     beginMessage: published.beginMessage,
-    voiceId: deps.voiceId,
+    voiceId: published.voiceId,
     tools: published.tools,
     timing: published.timing,
     webhookUrl: published.webhookUrl,
@@ -751,7 +752,7 @@ export async function syncProvisionedAgent(clientId: string, deps: Phase3Deps): 
       agentId: client.retellAgentId,
       prompt: published.prompt,
       beginMessage: published.beginMessage,
-      voiceId: deps.voiceId,
+      voiceId: published.voiceId,
       tools: published.tools,
       timing: published.timing,
       webhookUrl: published.webhookUrl,

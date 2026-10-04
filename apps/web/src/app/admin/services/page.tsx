@@ -22,7 +22,7 @@ const SERVICES: Service[] = [
     purpose: "Runs Ava: the voice agent, the LLM behind it, and the phone numbers callers dial.",
     dashboard: "https://dashboard.retellai.com",
     docs: "https://docs.retellai.com",
-    envVars: ["RETELL_API_KEY", "RETELL_DEFAULT_VOICE_ID", "RETELL_DEFAULT_AREA_CODE", "RETELL_DEFAULT_TOLL_FREE", "DANIEL_TRANSFER_NUMBER"],
+    envVars: ["RETELL_API_KEY", "RETELL_DEFAULT_AREA_CODE", "RETELL_DEFAULT_TOLL_FREE", "DANIEL_TRANSFER_NUMBER"],
     check: "retell",
     note:
       "Usage is prepaid credits (auto recharge may be off). Phone numbers are monthly subscriptions billed to the card on file. A past-due card makes inbound calls fail with 'user busy'.",

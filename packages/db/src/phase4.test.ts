@@ -90,7 +90,6 @@ function deps(voice: MemoryVoice, billing: MemoryBilling): Phase3Deps {
     voice,
     billing,
     appUrl: "https://staging.alinstra.com",
-    voiceId: "retell-Cimo",
     danielNumber: "+14155550199",
     danielEmail: "daniel@alinstra.com",
     defaultAreaCode: "423",
@@ -364,6 +363,26 @@ describe("phase 4 privacy", () => {
     expect((await prisma.client.findUniqueOrThrow({ where: { id: client.id } })).phoneE164).toMatch(/^\+1555/);
     expect(numberPurchaseFor({ tollFree: true }, { areaCode: null, tollFree: false })).toEqual({ tollFree: true, areaCode: null, monthlyCents: 500, inboundPerMinuteCents: 6 });
     expect(numberPurchaseFor({ areaCode: "423" }, { areaCode: null, tollFree: false })).toEqual({ tollFree: false, areaCode: "423", monthlyCents: 200, inboundPerMinuteCents: 0 });
+  });
+
+  it("publishes the Retell voice id for the client's wizard selection and defaults to Brynne", async () => {
+    const chosen = await seedClient({ name: "Chosen" });
+    await prisma.client.update({ where: { id: chosen.id }, data: { voice: { voiceId: "voice_4", assistantName: "Ava" } } });
+    const voice = new MemoryVoice();
+    const used = deps(voice, new MemoryBilling());
+    await startProvisioning(admin, chosen.id, { numberApproved: true });
+    expect(await advanceProvisioning(admin, chosen.id, used)).toEqual({ status: "succeeded" });
+    expect(voice.agents.get(`agent_${chosen.id}`)?.voiceId).toBe("minimax-Jason");
+
+    const unset = await seedClient({ name: "Unset" });
+    await startProvisioning(admin, unset.id, { numberApproved: true });
+    expect(await advanceProvisioning(admin, unset.id, used)).toEqual({ status: "succeeded" });
+    expect(voice.agents.get(`agent_${unset.id}`)?.voiceId).toBe("retell-Brynne");
+
+    // Changing the voice later flows through sync.
+    await prisma.client.update({ where: { id: chosen.id }, data: { voice: { voiceId: "voice_2" }, agentSyncStatus: "pending" } });
+    expect(await syncProvisionedAgent(chosen.id, used)).toBe("in_sync");
+    expect(voice.agents.get(`agent_${chosen.id}`)?.voiceId).toBe("retell-Della");
   });
 
   it("describes the latest failed run for the failure email", async () => {

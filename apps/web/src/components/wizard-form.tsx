@@ -4,6 +4,7 @@ import { continueWizardAction, discardWizardAction, editClientStepAction, previe
 import { useNavigationGuard } from "@/components/navigation-guard";
 import { useToast } from "@/components/toast";
 import { Button, ErrorText, FileDropzone, Input } from "@/components/ui";
+import { DEFAULT_VOICE_KEY, VOICE_OPTIONS, voiceDisplayName } from "@alinstra/providers/voices";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
@@ -531,13 +532,11 @@ export function WizardForm({
       {step === 6 ? (
         <div className="grid gap-3">
           <div>
-            <FieldLabel label="Voice" hint="A placeholder until voice previews exist. No audio plays from this list." />
-            <select className="w-full cursor-pointer rounded-md border border-[var(--line)] px-3 py-2 text-sm" value={payload.voice.voiceId ?? ""} onChange={(event) => setPayload({ ...payload, voice: { ...payload.voice, voiceId: event.target.value } })}>
-              <option value="">Choose</option>
-              <option value="voice_1">Voice 1</option>
-              <option value="voice_2">Voice 2</option>
-              <option value="voice_3">Voice 3</option>
-              <option value="voice_4">Voice 4</option>
+            <FieldLabel label="Voice" hint="The Retell voice callers hear. New clients start on Brynne." />
+            <select className="w-full cursor-pointer rounded-md border border-[var(--line)] px-3 py-2 text-sm" value={payload.voice.voiceId || DEFAULT_VOICE_KEY} onChange={(event) => setPayload({ ...payload, voice: { ...payload.voice, voiceId: event.target.value } })}>
+              {VOICE_OPTIONS.map((option) => (
+                <option key={option.key} value={option.key}>{voiceDisplayName(option.key)}</option>
+              ))}
             </select>
           </div>
           <div>
@@ -738,7 +737,7 @@ function ReviewSummary({
     { step: 3, lines: [`${plan ? `${plan.name} ($${(plan.monthlyPriceCents / 100).toFixed(0)}/mo)` : "—"}${payload.plan.setupFeeWaived ? " · setup fee waived" : ""}`] },
     { step: 4, lines: [`Rings before answering: ${summarize(payload.coverage.unansweredAfterRings)}`, `After hours: ${summarize(payload.coverage.afterHours)}`, `Call timing: ${timingSummary(payload.coverage.callTiming)}`] },
     { step: 5, lines: [`Booking: ${summarize(payload.features.bookingMode)} · Live transfer: ${summarize(Boolean(payload.features.liveTransfer))}`, `Transfer targets: ${String(payload.features.transferTargetsText ?? "").split("\n").filter(Boolean).length}`] },
-    { step: 6, lines: [`Voice: ${summarize(payload.voice.voiceId)} · Name: ${payload.voice.assistantName || "Ava"} · Disclosure: ${payload.voice.disclosureMode || "on_request"}`] },
+    { step: 6, lines: [`Voice: ${voiceDisplayName(payload.voice.voiceId)} · Name: ${payload.voice.assistantName || "Ava"} · Disclosure: ${payload.voice.disclosureMode || "on_request"}`] },
     { step: 7, lines: [["hours", "services", "faqs", "policies", "staff"].map((field) => `${field}: ${payload.knowledge[field]?.trim() ? "set" : "empty"}`).join(" · ")] },
     { step: 8, lines: [`${summarize(payload.phone.mode)}${payload.phone.tollFree === true ? " · toll-free" : payload.phone.areaCode ? ` · area code ${payload.phone.areaCode}` : ""}`] },
     { step: 9, lines: [`Healthcare: ${summarize(Boolean(payload.compliance.healthcareSensitive))} · Review done: ${summarize(Boolean(payload.compliance.complianceReviewDone))}`] },

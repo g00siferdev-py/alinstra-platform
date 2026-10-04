@@ -10,6 +10,7 @@ import {
 } from "@/app/admin/agent-actions";
 import { Button, ErrorText } from "@/components/ui";
 import type { ReceptionistFields } from "@alinstra/db";
+import { VOICE_OPTIONS, voiceDisplayName } from "@alinstra/providers/voices";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -121,11 +122,10 @@ export function ChangeRequestReview({
       <label className="grid gap-1">
         <span className="font-medium">Voice</span>
         <select className="rounded-md border border-[var(--line)] px-3 py-2" value={fields.voiceId} onChange={(event) => setText("voiceId", event.target.value)}>
-          <option value="">Current default</option>
-          <option value="voice_1">Voice 1</option>
-          <option value="voice_2">Voice 2</option>
-          <option value="voice_3">Voice 3</option>
-          <option value="voice_4">Voice 4</option>
+          <option value="">Current default ({voiceDisplayName(undefined)})</option>
+          {VOICE_OPTIONS.map((option) => (
+            <option key={option.key} value={option.key}>{voiceDisplayName(option.key)}</option>
+          ))}
         </select>
       </label>
       <TextField label="Tone" value={fields.tone} onChange={(value) => setText("tone", value)} />

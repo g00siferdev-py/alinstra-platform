@@ -5,6 +5,17 @@ export { MemoryBilling, MemoryVoice } from "./memory";
 export { signRetell, signStripe, verifyRetell, verifyStripe } from "./signature";
 export { transferSlug, transferToolNames } from "./transfer";
 export {
+  DEFAULT_VOICE_KEY,
+  isVoiceKey,
+  retellVoiceIdFor,
+  VOICE_KEYS,
+  VOICE_OPTIONS,
+  voiceDisplayName,
+  voiceOption,
+  type VoiceKey,
+  type VoiceOption,
+} from "./voices";
+export {
   CALL_TIMING_DEFAULTS,
   CALL_TIMING_LIMITS,
   END_CALL_TOOL,

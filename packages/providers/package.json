@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./voices": "./src/voices.ts"
   },
   "scripts": {
     "lint": "pnpm -w exec eslint packages/providers/src",

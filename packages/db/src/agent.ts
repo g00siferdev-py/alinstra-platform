@@ -21,6 +21,7 @@ import {
   type RenderedPrompt,
   TEMPLATE_VERSION,
 } from "@alinstra/agent";
+import { isVoiceKey } from "@alinstra/providers";
 import { Prisma } from "./generated/prisma/client";
 import { prisma } from "./client";
 import { recordChange, type Actor } from "./changes";
@@ -871,8 +872,6 @@ export async function cancelChangeRequest(ctx: Actor, id: string): Promise<void>
   });
 }
 
-const VOICE_IDS = ["voice_1", "voice_2", "voice_3", "voice_4"] as const;
-
 export type ReceptionistFields = {
   hours: string;
   services: string;
@@ -921,7 +920,7 @@ function fieldsOf(loaded: { client: { name: string; voice: unknown; coverage: un
   const voice = asRecord(loaded.client.voice);
   const coverage = asRecord(loaded.client.coverage);
   const features = asRecord(loaded.client.features);
-  const voiceId = typeof voice.voiceId === "string" && (VOICE_IDS as readonly string[]).includes(voice.voiceId) ? voice.voiceId : "";
+  const voiceId = isVoiceKey(voice.voiceId) ? voice.voiceId : "";
   const bookingMode = features.bookingMode === "request_only" || features.bookingMode === "direct_calendar" ? features.bookingMode : "";
   return {
     hours: fieldText(loaded.knowledge?.hours),
@@ -996,7 +995,7 @@ function parseReceptionistFields(value: unknown): ReceptionistFields {
   };
   if (fields.assistantName.trim().length > 40) throw new Error("The assistant name is too long.");
   if (fields.disclosureMode !== "on_request" && fields.disclosureMode !== "upfront") throw new Error("Choose a disclosure mode.");
-  if (fields.voiceId && !(VOICE_IDS as readonly string[]).includes(fields.voiceId)) throw new Error("Choose a voice.");
+  if (fields.voiceId && !isVoiceKey(fields.voiceId)) throw new Error("Choose a voice.");
   if (fields.bookingMode && fields.bookingMode !== "direct_calendar" && fields.bookingMode !== "request_only") {
     throw new Error("Choose a booking mode.");
   }

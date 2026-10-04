@@ -74,6 +74,7 @@ export function ProvisionPanel({
   runKind,
   numberApproved,
   numberPurchase,
+  voiceName,
 }: {
   clientId: string;
   status: string;
@@ -90,6 +91,7 @@ export function ProvisionPanel({
   runKind: string | null;
   numberApproved: boolean;
   numberPurchase: NumberPurchaseView;
+  voiceName: string;
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -141,7 +143,7 @@ export function ProvisionPanel({
             <CopyButton value={phone} label="E.164" />
           </div>
         ) : null}
-        <p>Retell: {syncLabel}</p>
+        <p>Retell: {syncLabel} · Voice: {voiceName}</p>
         <p>Billing: {internal ? "Client zero, not billed" : billingStatus}</p>
       </div>
       {syncError ? (

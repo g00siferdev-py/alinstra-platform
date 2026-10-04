@@ -28,7 +28,7 @@ Checked against the live docs on 2 October 2026:
 
 1. Payment is a Checkout session in subscription mode. The setup fee is a one-time line item unless it is waived. The link is shown on the admin client page. The card stays on file and the subscription bills monthly. Retell steps may finish before payment. The client status stays `awaiting_payment` until Checkout completes, then `live`. Client zero skips billing.
 2. Daniel creates the Retell account under Alinstra Technologies, LLC. One `RETELL_API_KEY` per environment does API calls and webhook verification. Staging and production use different keys.
-3. Voice ids wait for Daniel. `docs/voice-options.md` lists previews. Until he picks, provisioning uses `RETELL_DEFAULT_VOICE_ID`.
+3. Voice ids wait for Daniel. `docs/voice-options.md` lists previews. (Phase 4 fixed the map in `packages/providers/src/voices.ts`; the env var is gone.)
 4. Client zero transfers to `DANIEL_TRANSFER_NUMBER` during the hours on its wizard. After hours it takes a message and emails Daniel (`ADMIN_EMAIL`).
 5. Churn defaults to the end of the paid period. The number stays up until then. A worker sweep tears it down after `serviceEndsAt`. **End service now** cancels Stripe immediately and tears down.
 6. Prices are created from the plan catalog with lookup keys `plan_<code>_monthly` and `plan_<code>_setup`. A price change creates a new Price and moves the lookup key. Existing subscriptions are not moved. `plan_<code>_overage` is reserved for metered overage in Phase 6 and is not created yet.

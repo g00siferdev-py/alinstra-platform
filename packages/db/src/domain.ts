@@ -1,5 +1,5 @@
 import { isIanaTimezone } from "@alinstra/agent";
-import { CALL_TIMING_DEFAULTS, CALL_TIMING_LIMITS, type CallTiming } from "@alinstra/providers";
+import { CALL_TIMING_DEFAULTS, CALL_TIMING_LIMITS, DEFAULT_VOICE_KEY, type CallTiming } from "@alinstra/providers";
 import { z } from "zod";
 
 export const INDUSTRIES = [
@@ -236,7 +236,7 @@ export function wizardStepTitle(step: number): string {
 }
 
 export function emptyWizardPayload(): WizardPayload {
-  return { version: 1, compliance: { aiDisclosure: true, recordingNotice: true } };
+  return { version: 1, voice: { voiceId: DEFAULT_VOICE_KEY }, compliance: { aiDisclosure: true, recordingNotice: true } };
 }
 
 export const TRANSFER_NUMBER_ERROR = "Transfer numbers must be US or Canada numbers, like +14235550142.";

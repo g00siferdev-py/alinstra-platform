@@ -290,7 +290,6 @@ Leave these empty until you are ready for one real Retell number. Empty keys mak
 | Variable | Web and worker | How to get it |
 | --- | --- | --- |
 | `RETELL_API_KEY` | both | Retell dashboard → API keys. One key with the webhook badge. Staging and production are different keys. |
-| `RETELL_DEFAULT_VOICE_ID` | both | The id from the voice card after you pick in `docs/voice-options.md`. |
 | `RETELL_DEFAULT_AREA_CODE` | both | Optional 3-digit US area code for local numbers when the wizard leaves it blank. |
 | `RETELL_DEFAULT_TOLL_FREE` | both | `true` or `false`. Default `false`. Used only when the wizard has not chosen. Client zero's wizard starts with toll-free checked. |
 | `STRIPE_SECRET_KEY` | both | Stripe test mode secret key (`sk_test_...`) for staging. |

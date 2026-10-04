@@ -10,7 +10,6 @@ export function phase3Deps(): Phase3Deps {
   return {
     ...platforms,
     appUrl: env.APP_URL,
-    voiceId: env.RETELL_DEFAULT_VOICE_ID,
     danielNumber: env.DANIEL_TRANSFER_NUMBER || null,
     danielEmail: env.ADMIN_EMAIL,
     defaultAreaCode: env.RETELL_DEFAULT_AREA_CODE || null,

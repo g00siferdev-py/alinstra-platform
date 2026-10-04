@@ -83,7 +83,6 @@ function deps(voice: MemoryVoice, billing: MemoryBilling): Phase3Deps {
     voice,
     billing,
     appUrl: "https://staging.alinstra.com",
-    voiceId: "retell-Cimo",
     danielNumber: "+14155550199",
     danielEmail: "daniel@alinstra.com",
     defaultAreaCode: "423",

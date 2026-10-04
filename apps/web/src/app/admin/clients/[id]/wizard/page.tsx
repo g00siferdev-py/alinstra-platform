@@ -9,7 +9,7 @@ import {
   wizardPayloadSchema,
   type WizardPayload,
 } from "@alinstra/db";
-import { CALL_TIMING_DEFAULTS } from "@alinstra/providers";
+import { CALL_TIMING_DEFAULTS, DEFAULT_VOICE_KEY } from "@alinstra/providers";
 import { requireAdmin } from "@/lib/session";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -64,7 +64,7 @@ function formPayload(parsed: WizardPayload, internal: boolean): FormPayload {
       recallAddOn: Boolean(parsed.features?.recallAddOn),
     },
     voice: {
-      voiceId: parsed.voice?.voiceId ?? "",
+      voiceId: parsed.voice?.voiceId ?? DEFAULT_VOICE_KEY,
       greeting: parsed.voice?.greeting ?? "",
       assistantName: parsed.voice?.assistantName ?? "Ava",
       disclosureMode: parsed.voice?.disclosureMode ?? "on_request",

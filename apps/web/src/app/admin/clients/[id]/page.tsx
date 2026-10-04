@@ -23,6 +23,7 @@ import {
   users,
   WIZARD_STEP_TITLES,
 } from "@alinstra/db";
+import { voiceDisplayName } from "@alinstra/providers";
 import { requireAdmin } from "@/lib/session";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -52,6 +53,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
     provisioningRuns({ role: "admin" }).latest(id),
   ]);
   const when = (value: Date) => formatLocalTime(value, client.timezone);
+  const clientVoice = client.voice && typeof client.voice === "object" ? (client.voice as { voiceId?: unknown; assistantName?: unknown }) : {};
   const env = getEnv();
   const numberPurchase = numberPurchaseFor(client.phone, {
     areaCode: env.RETELL_DEFAULT_AREA_CODE || null,
@@ -94,6 +96,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
         steps={orderedSteps(run?.steps ?? [], run?.kind ?? null)}
         numberApproved={Boolean(run?.numberApprovedAt)}
         numberPurchase={numberPurchase}
+        voiceName={voiceDisplayName(clientVoice.voiceId)}
       />
       {client.wizardSubmittedAt ? (
         <section className="rounded-xl border border-[var(--line)] p-4">
@@ -141,6 +144,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
         <p className="text-sm">Industry: {client.industry ?? "—"}</p>
         <p className="text-sm">Contact: {client.contactName ?? "—"} · {client.contactEmail ?? "—"}</p>
         <p className="text-sm">Timezone: {client.timezone}</p>
+        <p className="text-sm">Voice: {voiceDisplayName(clientVoice.voiceId)} · Assistant name: {typeof clientVoice.assistantName === "string" && clientVoice.assistantName.trim() ? clientVoice.assistantName : "Ava"}</p>
         <p className="text-sm">Plan: {plan?.name ?? "—"}{client.setupFeeWaived ? " · setup fee waived" : ""}</p>
         <p className="text-sm">
           Minutes included: {client.overrideIncludedMinutes ?? plan?.includedMinutes ?? "—"}
