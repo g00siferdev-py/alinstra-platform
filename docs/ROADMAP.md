@@ -7,6 +7,7 @@ Written 4 October 2026 after Phase 4. Nothing below is implemented. Each phase g
 - Phases 0–3 shipped the platform, the admin wizard, the receptionist prompt, provisioning on Retell and Stripe, and the owner portal.
 - Phase 4 fixed what the first live call exposed: Ava only speaks public contact details, admins edit a submitted client step by step, call timing is per client, provisioning shows its state plainly and asks before buying a number, the admin has a Services page, and the voice map lives in one file.
 - Phase 4b stores call transcripts and recordings encrypted at rest with per-client retention, role-based access (owner grants staff), playback through our own route, and calls screens in the admin and the portal. The structured `transcriptTurns` (roles, offsets, tool invocations) are the input Phase 8 builds on.
+- Phase 4c hardens recording-job enqueue (rollback + stale-pending sweep) and strengthens Ava's `end_call` prompt so she hangs up after goodbye instead of waiting on the caller.
 
 ## Phase 5: owner self-service and the client's own number
 

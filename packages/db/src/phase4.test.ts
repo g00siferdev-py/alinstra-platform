@@ -310,7 +310,8 @@ describe("phase 4 privacy", () => {
       reminder_trigger_ms: 5_000,
       reminder_max_count: 1,
     });
-    expect(voice.llms.get(stored.retellLlmId ?? "")?.prompt).toContain("immediately use the end_call tool");
+    expect(voice.llms.get(stored.retellLlmId ?? "")?.prompt).toContain("call the `end_call` tool immediately");
+    expect(voice.llms.get(stored.retellLlmId ?? "")?.prompt).toContain("Do not wait for the caller to hang up");
 
     await prisma.client.update({ where: { id: client.id }, data: { features: { liveTransfer: false } } });
     await prisma.client.update({ where: { id: client.id }, data: { agentSyncStatus: "syncing", syncedConfigId: null } });

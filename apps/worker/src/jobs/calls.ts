@@ -1,11 +1,17 @@
 import { getEnv, log } from "@alinstra/config";
-import { markRecordingFailed, markRecordingMissing, markRecordingStored, purgeExpiredCalls, recordingKeyFor, recordingTarget, type PurgeReport } from "@alinstra/db";
+import { listStalePendingRecordings, markRecordingFailed, markRecordingMissing, markRecordingStored, purgeExpiredCalls, recordingKeyFor, recordingTarget, type PurgeReport } from "@alinstra/db";
 import { platformsFor, type RecordingDownload } from "@alinstra/providers";
+import { enqueueStoreRecording } from "@alinstra/queue";
 import { getStorage, type StoredObject } from "@alinstra/storage";
 
 export type CallsDeps = {
   fetchRecording: (retellCallId: string) => Promise<RecordingDownload | null>;
   storage: Pick<StoredObject, "put" | "delete">;
+};
+
+export type PurgeCallsDeps = Pick<CallsDeps, "storage"> & {
+  enqueueRecording?: (retellCallId: string) => Promise<void>;
+  listStale?: (now: Date) => Promise<string[]>;
 };
 
 export function callsDeps(): CallsDeps {
@@ -41,9 +47,28 @@ export async function runStoreRecording(retellCallId: string, deps: CallsDeps = 
   }
 }
 
-/** Daily retention sweep. Deletes each stored recording once, then blanks the row's sensitive fields. */
-export async function runPurgeCalls(deps: Pick<CallsDeps, "storage"> = callsDeps(), now = new Date()): Promise<PurgeReport> {
+/**
+ * Daily retention sweep, plus a re-enqueue of recordings stuck in `pending` for more than an hour
+ * (enqueue blip or a worker that never picked them up). Failed rows stay failed for admin visibility.
+ */
+export async function runPurgeCalls(deps: PurgeCallsDeps = callsDeps(), now = new Date()): Promise<PurgeReport> {
   const report = await purgeExpiredCalls({ deleteObject: (key) => deps.storage.delete(key) }, now);
   log("info", "call purge finished", { clients: report.clients, purged: report.purged, recordingsDeleted: report.recordingsDeleted, failures: report.failures.length });
+
+  const enqueue = deps.enqueueRecording ?? ((retellCallId: string) => enqueueStoreRecording({ retellCallId }));
+  const listStale = deps.listStale ?? listStalePendingRecordings;
+  const stale = await listStale(now);
+  let requeued = 0;
+  for (const retellCallId of stale) {
+    try {
+      await enqueue(retellCallId);
+      requeued += 1;
+    } catch (error) {
+      log("error", "stale recording requeue failed", { retellCallId, error: error instanceof Error ? error.name : "unknown" });
+    }
+  }
+  if (stale.length > 0 || requeued > 0) {
+    log("info", "stale pending recordings requeued", { found: stale.length, requeued });
+  }
   return report;
 }

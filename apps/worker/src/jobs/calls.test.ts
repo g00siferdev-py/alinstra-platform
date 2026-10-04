@@ -7,6 +7,7 @@ const { db, logged } = vi.hoisted(() => ({
     markRecordingFailed: vi.fn(async () => undefined),
     markRecordingMissing: vi.fn(async () => undefined),
     purgeExpiredCalls: vi.fn(),
+    listStalePendingRecordings: vi.fn(async () => [] as string[]),
     recordingKeyFor: (clientId: string, callId: string, contentType: string) => `clients/${clientId}/calls/${callId}.${/mpeg/.test(contentType) ? "mp3" : "wav"}`,
   },
   logged: [] as Array<{ level: string; message: string; fields: Record<string, unknown> }>,
@@ -18,6 +19,7 @@ vi.mock("@alinstra/config", () => ({
 }));
 vi.mock("@alinstra/db", () => db);
 vi.mock("@alinstra/providers", () => ({ platformsFor: () => ({ voice: {} }) }));
+vi.mock("@alinstra/queue", () => ({ enqueueStoreRecording: vi.fn(async () => undefined) }));
 vi.mock("@alinstra/storage", () => ({ getStorage: () => ({}) }));
 
 import { runPurgeCalls, runStoreRecording } from "./calls";
@@ -49,6 +51,8 @@ describe("store-recording job", () => {
     db.markRecordingFailed.mockClear();
     db.markRecordingMissing.mockClear();
     db.purgeExpiredCalls.mockReset();
+    db.listStalePendingRecordings.mockReset();
+    db.listStalePendingRecordings.mockResolvedValue([]);
   });
 
   it("downloads through the provider and stores under the client prefix without keeping the URL", async () => {
@@ -96,15 +100,23 @@ describe("store-recording job", () => {
     expect(db.markRecordingStored).not.toHaveBeenCalled();
   });
 
-  it("deletes recordings through storage during the purge", async () => {
+  it("deletes recordings through storage during the purge and requeues stale pending copies", async () => {
     const { storage, deletes } = fakeStorage();
     db.purgeExpiredCalls.mockImplementation(async (deps: { deleteObject: (key: string) => Promise<void> }) => {
       await deps.deleteObject("clients/client_1/calls/call_old.wav");
       return { clients: 1, purged: 1, recordingsDeleted: 1, failures: [] };
     });
-    const report = await runPurgeCalls({ storage });
+    const requeued: string[] = [];
+    const report = await runPurgeCalls({
+      storage,
+      listStale: async () => ["call_stale", "call_other"],
+      enqueueRecording: async (id) => {
+        requeued.push(id);
+      },
+    });
     expect(report.purged).toBe(1);
     expect(deletes).toEqual(["clients/client_1/calls/call_old.wav"]);
-    expect(logged.at(-1)).toMatchObject({ level: "info", message: "call purge finished", fields: { purged: 1 } });
+    expect(requeued).toEqual(["call_stale", "call_other"]);
+    expect(logged.some((row) => row.message === "stale pending recordings requeued" && row.fields.requeued === 2)).toBe(true);
   });
 });

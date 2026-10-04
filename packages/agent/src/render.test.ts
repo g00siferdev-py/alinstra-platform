@@ -25,7 +25,7 @@ describe("prompt rendering", () => {
   it("includes the guardrails, recording notice, and pronunciation", () => {
     const rendered = renderPrompt({ ...base, namePronunciation: "uh-LIN-struh", industry: "plumbing" });
     expect(rendered.templateId).toBe("general");
-    expect(rendered.templateVersion).toBe("5");
+    expect(rendered.templateVersion).toBe("6");
     expect(rendered.text).toContain("This call may be recorded.");
     expect(rendered.text).toContain("Never claim or imply to be a human.");
     expect(rendered.text).toContain("Answer only from the business information in this prompt.");
@@ -205,7 +205,8 @@ describe("prompt rendering", () => {
     expect(quiet.text).toContain("Never say, spell, or confirm any staff, owner, or transfer phone number");
     expect(quiet.text).toContain(NO_PUBLIC_CONTACT);
     expect(quiet.text).toContain(END_CALL_RULE);
-    expect(quiet.text).toContain("immediately use the end_call tool");
+    expect(quiet.text).toContain("call the `end_call` tool immediately");
+    expect(quiet.text).toContain("Do not wait for the caller to hang up");
     const shared = renderPrompt({ ...base, publicPhone: "+18883871525", publicEmail: "hello@example.com" });
     expect(shared.text.split("+18883871525")).toHaveLength(2);
     const contactLine = shared.text.split("\n").find((line) => line.startsWith("Public contact details:")) ?? "";

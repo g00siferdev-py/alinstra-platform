@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { applied, queued } = vi.hoisted(() => ({
+const { applied, queued, reset, enqueueImpl } = vi.hoisted(() => ({
   applied: [] as Array<{ event?: string; call?: { call_id?: string } }>,
   queued: [] as string[],
+  reset: [] as string[],
+  enqueueImpl: { fail: false },
 }));
 
 vi.mock("@alinstra/config", () => ({ getEnv: () => ({ RETELL_API_KEY: "key" }), log: vi.fn() }));
@@ -15,13 +17,19 @@ vi.mock("@alinstra/db", () => ({
     const first = Boolean(payload.call?.recording_url) && !applied.slice(0, -1).some((row) => row.call?.call_id === id && (row.call as { recording_url?: string }).recording_url);
     return { recordingQueued: first, callRecordId: id ? `rec_${id}` : null };
   }),
+  resetRecordingPending: vi.fn(async (retellCallId: string) => {
+    reset.push(retellCallId);
+    return { reset: true };
+  }),
 }));
 vi.mock("@alinstra/queue", () => ({
   enqueueStoreRecording: vi.fn(async (data: { retellCallId: string }) => {
+    if (enqueueImpl.fail) throw new Error("redis down");
     queued.push(data.retellCallId);
   }),
 }));
 
+import { resetRecordingPending } from "@alinstra/db";
 import { POST } from "./route";
 
 function post(body: unknown, signature = "good") {
@@ -32,6 +40,9 @@ describe("retell webhook route", () => {
   beforeEach(() => {
     applied.length = 0;
     queued.length = 0;
+    reset.length = 0;
+    enqueueImpl.fail = false;
+    vi.mocked(resetRecordingPending).mockClear();
   });
 
   it("rejects bad signatures before touching the database", async () => {
@@ -48,5 +59,15 @@ describe("retell webhook route", () => {
     expect((await post({ event: "call_started", call: { call_id: "c1", agent_id: "agent_1" } })).status).toBe(204);
     expect(applied.map((row) => row.event)).toEqual(["call_analyzed", "call_ended", "call_analyzed", "call_started"]);
     expect(queued).toEqual(["c1"]);
+    expect(reset).toEqual([]);
+  });
+
+  it("resets pending when enqueue fails so a later event can re-queue", async () => {
+    enqueueImpl.fail = true;
+    const call = { call_id: "c_stuck", agent_id: "agent_1", recording_url: "https://retell.example/private.wav" };
+    expect((await post({ event: "call_ended", call })).status).toBe(204);
+    expect(queued).toEqual([]);
+    expect(reset).toEqual(["c_stuck"]);
+    expect(resetRecordingPending).toHaveBeenCalledWith("c_stuck");
   });
 });

@@ -17,7 +17,7 @@ export type PublishedTool = {
 
 export const END_CALL_TOOL: PublishedTool = {
   name: "end_call",
-  description: "End the call after you have said goodbye and the caller has nothing else.",
+  description: "Ends the phone call immediately. Call this right after saying a one-sentence goodbye when the conversation is finished. Do not wait for the caller to hang up.",
   builtin: "end_call",
 };
 

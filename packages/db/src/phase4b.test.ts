@@ -5,14 +5,17 @@ import {
   canAccessCall,
   getCall,
   listCalls,
+  listStalePendingRecordings,
   markRecordingFailed,
   markRecordingStored,
   purgeExpiredCalls,
   recordingForPlayback,
   recordingKeyFor,
   recordingTarget,
+  resetRecordingPending,
   setCallAccess,
   setCallRetention,
+  STALE_RECORDING_PENDING_MS,
 } from "./calls";
 import { prisma } from "./client";
 import { maskCaller } from "./domain";
@@ -365,5 +368,33 @@ describe("phase 4b calls", () => {
     // Message → call: links only for viewers who may open the call.
     expect(await callLinksFor(ownerActor, client.id, [message.retellCallId, null, "call_unknown"])).toEqual(new Map([["call_link", callRecordId]]));
     expect((await callLinksFor({ id: staff.id, role: "client_staff", clientId: client.id, canViewCalls: false }, client.id, [message.retellCallId])).size).toBe(0);
+  });
+
+  it("resets a stuck pending recording and lists only stale pending rows for the sweep", async () => {
+    const { client } = await seedClient();
+    const agent = client.retellAgentId!;
+    await applyRetellCall(endedPayload(agent, "call_fresh"));
+    await applyRetellCall(endedPayload(agent, "call_stale"));
+    await applyRetellCall(endedPayload(agent, "call_failed"));
+    await markRecordingFailed("call_failed", "download failed");
+    await applyRetellCall(endedPayload(agent, "call_stored"));
+    await markRecordingStored("call_stored", { key: recordingKeyFor(client.id, "call_stored", "audio/wav"), contentType: "audio/wav", bytes: 10 });
+
+    // Enqueue blip: roll pending back to none so the next event can re-queue.
+    expect(await resetRecordingPending("call_fresh")).toEqual({ reset: true });
+    expect((await prisma.callRecord.findUniqueOrThrow({ where: { retellCallId: "call_fresh" } })).recordingStatus).toBe("none");
+    expect(await resetRecordingPending("call_fresh")).toEqual({ reset: false });
+    expect(await resetRecordingPending("call_stored")).toEqual({ reset: false });
+    expect(await resetRecordingPending("call_failed")).toEqual({ reset: false });
+
+    // Put call_fresh back to pending (as a fresh enqueue would) and age only call_stale.
+    await applyRetellCall(endedPayload(agent, "call_fresh"));
+    const now = new Date();
+    const staleAt = new Date(now.getTime() - STALE_RECORDING_PENDING_MS - 1_000);
+    await prisma.callRecord.update({ where: { retellCallId: "call_stale" }, data: { updatedAt: staleAt } });
+
+    expect(await listStalePendingRecordings(now)).toEqual(["call_stale"]);
+    // Failed and stored never appear; a fresh pending is younger than the cutoff.
+    expect(await listStalePendingRecordings(new Date(now.getTime() - STALE_RECORDING_PENDING_MS))).toEqual([]);
   });
 });

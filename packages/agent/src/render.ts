@@ -1,12 +1,12 @@
 import { randomBytes } from "node:crypto";
 
-export const TEMPLATE_VERSION = "5";
+export const TEMPLATE_VERSION = "6";
 export const CURRENT_TIME_PLACEHOLDER = "{{current_time}}";
 export const PROMPT_BUDGET = 24_000;
 export const DECLARED_TOOLS = ["take_message", "transfer", "end_call"] as const;
 
 export const END_CALL_RULE =
-  "When the caller indicates they are finished (says goodbye, thanks you and has nothing else, or you have delivered a callback promise and they agree), say a short goodbye and immediately use the end_call tool. Do not wait for the caller to hang up. Do not ask \"Is there anything else?\" more than once per call.";
+  "When the conversation is finished — you have taken the message, completed the transfer, or the caller says goodbye, thanks, that's all, or similar — say a one-sentence goodbye and then call the `end_call` tool immediately. Do not wait for the caller to hang up. Do not ask if there is anything else more than once.";
 
 export const REFERENCE_START = "REFERENCE START";
 export const REFERENCE_END = "REFERENCE END";

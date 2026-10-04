@@ -13,6 +13,13 @@ describe("call timing", () => {
     });
   });
 
+  it("never sets end_call_after_silence_ms below the configured silenceSeconds", () => {
+    // Within wizard limits, silence maps 1:1 onto Retell's field. The clamp floor is 10s, matching CALL_TIMING_LIMITS.silenceSeconds.min.
+    for (const silenceSeconds of [10, 30, 60, 300]) {
+      expect(retellTiming({ silenceSeconds }).end_call_after_silence_ms).toBe(silenceSeconds * 1_000);
+    }
+  });
+
   it("applies the defaults when no timing is configured", () => {
     const expected = retellTiming(CALL_TIMING_DEFAULTS);
     expect(retellTiming(undefined)).toEqual(expected);

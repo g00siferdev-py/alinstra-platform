@@ -189,6 +189,35 @@ export async function markRecordingMissing(retellCallId: string): Promise<void> 
   await prisma.callRecord.updateMany({ where: { retellCallId, recordingStatus: "pending" }, data: { recordingStatus: "none", recordingError: null } });
 }
 
+/**
+ * Rolls a stuck `pending` row back to `none` so the next webhook event can re-queue the copy.
+ * Only touches rows that never got a storage key (enqueue failed before the worker ran).
+ */
+export async function resetRecordingPending(retellCallId: string): Promise<{ reset: boolean }> {
+  const result = await prisma.callRecord.updateMany({
+    where: { retellCallId, recordingStatus: "pending", recordingKey: null },
+    data: { recordingStatus: "none", recordingError: null },
+  });
+  return { reset: result.count > 0 };
+}
+
+/** Pending longer than this with no storage key means the enqueue (or the worker) never got traction. */
+export const STALE_RECORDING_PENDING_MS = 60 * 60 * 1000;
+
+/**
+ * Retell call ids whose recording copy has been `pending` for more than an hour and was never stored.
+ * Failed rows are left alone (admin-visible). The daily purge job re-enqueues these; jobId dedupe is safe.
+ */
+export async function listStalePendingRecordings(now = new Date()): Promise<string[]> {
+  const cutoff = new Date(now.getTime() - STALE_RECORDING_PENDING_MS);
+  const rows = await prisma.callRecord.findMany({
+    where: { recordingStatus: "pending", purgedAt: null, recordingKey: null, updatedAt: { lt: cutoff } },
+    select: { retellCallId: true },
+    orderBy: { updatedAt: "asc" },
+  });
+  return rows.map((row) => row.retellCallId);
+}
+
 // ---------------------------------------------------------------------------
 // Access
 // ---------------------------------------------------------------------------
