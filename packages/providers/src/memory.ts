@@ -1,7 +1,8 @@
-import type { AgentPublish, BillingPlatform, PriceKind, PublishedTool, VoicePlatform } from "./types";
+import { retellTiming, type AgentPublish, type BillingPlatform, type CallTiming, type PriceKind, type PublishedTool, type RetellTiming, type VoicePlatform } from "./types";
 
 type StoredLlm = { clientId: string; prompt: string; tools: PublishedTool[]; beginMessage: string };
-type StoredAgent = { clientId: string; llmId: string; voiceId: string };
+/** Mirrors what httpVoice sends: the agent carries the clamped Retell timing fields. */
+type StoredAgent = { clientId: string; llmId: string; voiceId: string; timing: RetellTiming };
 type StoredNumber = { clientId: string; agentId: string; e164: string };
 
 export class MemoryVoice implements VoicePlatform {
@@ -25,10 +26,10 @@ export class MemoryVoice implements VoicePlatform {
     return null;
   }
 
-  async createAgent(input: { clientId: string; llmId: string; voiceId: string; webhookUrl: string }): Promise<{ agentId: string }> {
+  async createAgent(input: { clientId: string; llmId: string; voiceId: string; webhookUrl: string; timing?: CallTiming | null }): Promise<{ agentId: string }> {
     this.creates.agent += 1;
     const agentId = `agent_${input.clientId}`;
-    this.agents.set(agentId, input);
+    this.agents.set(agentId, { clientId: input.clientId, llmId: input.llmId, voiceId: input.voiceId, timing: retellTiming(input.timing) });
     return { agentId };
   }
 
@@ -53,7 +54,10 @@ export class MemoryVoice implements VoicePlatform {
     llm.tools = input.tools;
     llm.beginMessage = input.beginMessage;
     const agent = this.agents.get(input.agentId);
-    if (agent) agent.voiceId = input.voiceId;
+    if (agent) {
+      agent.voiceId = input.voiceId;
+      agent.timing = retellTiming(input.timing);
+    }
     this.version += 1;
     return { version: this.version };
   }

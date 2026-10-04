@@ -1,5 +1,5 @@
 import type { BillingPlatform, PublishedTool, VoicePlatform } from "@alinstra/providers";
-import { overageLookupKey, TAKE_MESSAGE_PARAMETERS, TRANSFER_CHECK_PARAMETERS, transferToolNames } from "@alinstra/providers";
+import { END_CALL_TOOL, overageLookupKey, TAKE_MESSAGE_PARAMETERS, TRANSFER_CHECK_PARAMETERS, transferToolNames } from "@alinstra/providers";
 import { Pool } from "pg";
 import { Prisma } from "./generated/prisma/client";
 import { refreshStaleAgentConfig } from "./agent";
@@ -7,6 +7,7 @@ import { recordChange, type Actor } from "./changes";
 import { prisma } from "./client";
 import {
   assertTransferNumber,
+  callTimingOf,
   clientIsHealthcare,
   formatTransferTargets,
   maskCaller,
@@ -175,7 +176,7 @@ function toolsFor(appUrl: string, targets: Array<{ label: string; e164: string }
       parameters: TAKE_MESSAGE_PARAMETERS,
     },
   ];
-  if (!liveTransferOn(features) || targets.length === 0) return tools;
+  if (!liveTransferOn(features) || targets.length === 0) return [...tools, END_CALL_TOOL];
   const names = transferToolNames(targets.map((target) => target.label));
   const labels = targets.map((target) => target.label.trim()).join("; ");
   tools.push({
@@ -192,6 +193,7 @@ function toolsFor(appUrl: string, targets: Array<{ label: string; e164: string }
       transferTo: target.e164,
     });
   });
+  tools.push(END_CALL_TOOL);
   return tools;
 }
 
@@ -475,6 +477,7 @@ async function publishInput(clientId: string, deps: Phase3Deps) {
     prompt: retellPrompt(loaded.config.promptText, loaded.client.timezone),
     beginMessage: loaded.config.greeting?.trim() || "Thank you for calling.",
     tools: toolsFor(deps.appUrl, targets, loaded.client.features),
+    timing: callTimingOf(loaded.client.coverage),
     webhookUrl: `${base}/api/retell/webhook`,
     inboundWebhookUrl: `${base}/api/retell/inbound`,
   };
@@ -523,6 +526,7 @@ async function runProvisionStep(name: (typeof PROVISION_STEPS)[number], clientId
       llmId: client.retellLlmId,
       voiceId: deps.voiceId,
       webhookUrl: published.webhookUrl,
+      timing: published.timing,
     })).agentId;
     await prisma.$transaction(async (tx) => {
       await tx.client.update({ where: { id: clientId }, data: { retellAgentId: agentId } });
@@ -559,6 +563,7 @@ async function runProvisionStep(name: (typeof PROVISION_STEPS)[number], clientId
     beginMessage: published.beginMessage,
     voiceId: deps.voiceId,
     tools: published.tools,
+    timing: published.timing,
     webhookUrl: published.webhookUrl,
     inboundWebhookUrl: published.inboundWebhookUrl,
   });
@@ -594,6 +599,7 @@ export async function syncProvisionedAgent(clientId: string, deps: Phase3Deps): 
       beginMessage: published.beginMessage,
       voiceId: deps.voiceId,
       tools: published.tools,
+      timing: published.timing,
       webhookUrl: published.webhookUrl,
       inboundWebhookUrl: published.inboundWebhookUrl,
     });

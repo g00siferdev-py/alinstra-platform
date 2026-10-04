@@ -29,7 +29,15 @@ type Payload = {
   business: Record<string, string>;
   websiteNotes?: string;
   plan: Record<string, string | boolean | null>;
-  coverage: Record<string, string>;
+  coverage: {
+    unansweredAfterRings?: string;
+    lunchHours?: string;
+    afterHours?: string;
+    weekends?: string;
+    holidays?: string;
+    holdOverflow?: string;
+    callTiming?: Record<string, string>;
+  };
   features: Record<string, string | boolean>;
   voice: Record<string, string>;
   knowledge: Record<string, string>;
@@ -72,6 +80,19 @@ const STEPS = [
 ] as const;
 
 const KNOWLEDGE_LIMIT = 10_000;
+
+const DEFAULT_TIMING: Record<string, string> = { maxCallMinutes: "15", silenceSeconds: "30", reminderSeconds: "8" };
+
+const CALL_TIMING_FIELDS = [
+  ["maxCallMinutes", "Max call length (minutes)", "Ava will wrap up and end the call at this limit. Lower it to cap cost per call.", 1, 60],
+  ["silenceSeconds", "Silence before ending (seconds)", "If the caller says nothing for this long, Ava checks in once, then ends the call.", 10, 300],
+  ["reminderSeconds", "Check-in delay (seconds)", "How long Ava waits before asking 'Are you still there?'", 5, 60],
+] as const;
+
+function timingSummary(timing: Record<string, string> | undefined): string {
+  const value = { ...DEFAULT_TIMING, ...timing };
+  return `${value.maxCallMinutes} min max · ends after ${value.silenceSeconds} s of silence · check-in at ${value.reminderSeconds} s`;
+}
 
 function FieldLabel({ label, hint }: { label: string; hint: string }) {
   const [open, setOpen] = useState(false);
@@ -435,6 +456,26 @@ export function WizardForm({
               <Input value={payload.coverage[field] ?? ""} onChange={(event) => setPayload({ ...payload, coverage: { ...payload.coverage, [field]: event.target.value } })} />
             </div>
           ))}
+          <fieldset className="grid gap-3 rounded-md border border-[var(--line)] p-3">
+            <legend className="px-1 text-sm font-medium">Call timing</legend>
+            <p className="text-xs text-[var(--muted)]">Caps how long Ava stays on a call. Defaults are 15 minutes, 30 seconds of silence, and an 8 second check-in.</p>
+            {CALL_TIMING_FIELDS.map(([field, label, hint, min, max]) => (
+              <div key={field}>
+                <FieldLabel label={label} hint={`${hint} Allowed range: ${min} to ${max}.`} />
+                <Input
+                  value={payload.coverage.callTiming?.[field] ?? ""}
+                  inputMode="numeric"
+                  min={min}
+                  max={max}
+                  type="number"
+                  onChange={(event) => setPayload({
+                    ...payload,
+                    coverage: { ...payload.coverage, callTiming: { ...DEFAULT_TIMING, ...payload.coverage.callTiming, [field]: event.target.value } },
+                  })}
+                />
+              </div>
+            ))}
+          </fieldset>
         </div>
       ) : null}
 
@@ -691,7 +732,7 @@ function ReviewSummary({
     { step: 1, lines: [`${payload.business.name || "—"} (${payload.business.industry || "no industry"})`, `Contact: ${summarize(payload.business.contactName)}`, `Public phone: ${summarize(payload.business.publicPhone)} · Public email: ${summarize(payload.business.publicEmail)}`] },
     { step: 2, lines: [payload.websiteNotes?.trim() ? `${payload.websiteNotes.trim().slice(0, 120)}${payload.websiteNotes.trim().length > 120 ? "…" : ""}` : "—"] },
     { step: 3, lines: [`${plan ? `${plan.name} ($${(plan.monthlyPriceCents / 100).toFixed(0)}/mo)` : "—"}${payload.plan.setupFeeWaived ? " · setup fee waived" : ""}`] },
-    { step: 4, lines: [`Rings before answering: ${summarize(payload.coverage.unansweredAfterRings)}`, `After hours: ${summarize(payload.coverage.afterHours)}`] },
+    { step: 4, lines: [`Rings before answering: ${summarize(payload.coverage.unansweredAfterRings)}`, `After hours: ${summarize(payload.coverage.afterHours)}`, `Call timing: ${timingSummary(payload.coverage.callTiming)}`] },
     { step: 5, lines: [`Booking: ${summarize(payload.features.bookingMode)} · Live transfer: ${summarize(Boolean(payload.features.liveTransfer))}`, `Transfer targets: ${String(payload.features.transferTargetsText ?? "").split("\n").filter(Boolean).length}`] },
     { step: 6, lines: [`Voice: ${summarize(payload.voice.voiceId)} · Name: ${payload.voice.assistantName || "Ava"} · Disclosure: ${payload.voice.disclosureMode || "on_request"}`] },
     { step: 7, lines: [["hours", "services", "faqs", "policies", "staff"].map((field) => `${field}: ${payload.knowledge[field]?.trim() ? "set" : "empty"}`).join(" · ")] },

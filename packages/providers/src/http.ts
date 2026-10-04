@@ -1,4 +1,4 @@
-import { ProviderRequestError, STRIPE_API_VERSION, type AgentPublish, type BillingPlatform, type PriceKind, type PublishedTool, type VoicePlatform } from "./types";
+import { ProviderRequestError, retellTiming, STRIPE_API_VERSION, type AgentPublish, type BillingPlatform, type PriceKind, type PublishedTool, type VoicePlatform } from "./types";
 
 type FetchLike = (url: string, init?: RequestInit) => Promise<Response>;
 
@@ -11,6 +11,9 @@ const DEFAULT_DYNAMIC_VARIABLES = {
 
 function toolsOf(tools: PublishedTool[]): unknown[] {
   return tools.map((tool) => {
+    if (tool.builtin === "end_call") {
+      return { type: "end_call", name: tool.name, description: tool.description };
+    }
     if (tool.transferTo) {
       return {
         type: "transfer_call",
@@ -141,6 +144,7 @@ export function httpVoice(apiKey: string, fetchImpl: FetchLike = fetch): VoicePl
           response_engine: { type: "retell-llm", llm_id: input.llmId },
           voice_id: input.voiceId,
           webhook_url: input.webhookUrl,
+          ...retellTiming(input.timing),
         }),
       });
       const agentId = String(body.agent_id ?? "");
@@ -199,6 +203,7 @@ export function httpVoice(apiKey: string, fetchImpl: FetchLike = fetch): VoicePl
           voice_id: input.voiceId,
           webhook_url: input.webhookUrl,
           response_engine: { type: "retell-llm", llm_id: input.llmId, version },
+          ...retellTiming(input.timing),
         }),
       });
       await send(`/publish-agent-version/${input.agentId}`, {

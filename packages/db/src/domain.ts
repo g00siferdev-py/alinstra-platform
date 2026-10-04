@@ -1,4 +1,5 @@
 import { isIanaTimezone } from "@alinstra/agent";
+import { CALL_TIMING_DEFAULTS, CALL_TIMING_LIMITS, type CallTiming } from "@alinstra/providers";
 import { z } from "zod";
 
 export const INDUSTRIES = [
@@ -92,17 +93,50 @@ export const businessSchema = z.object({
   publicEmail: z.preprocess(emptyToUndefined, z.string().trim().email("Enter the public email address.").max(200).optional()),
 });
 
+const blankToUndefined = (value: unknown) => (value === "" || value === undefined || value === null ? undefined : value);
+
+function timingField(key: keyof CallTiming, label: string) {
+  const range = CALL_TIMING_LIMITS[key];
+  return z.preprocess(
+    blankToUndefined,
+    z.coerce
+      .number({ message: `${label} must be a whole number from ${range.min} to ${range.max}.` })
+      .int(`${label} must be a whole number from ${range.min} to ${range.max}.`)
+      .min(range.min, `${label} must be at least ${range.min}.`)
+      .max(range.max, `${label} can be at most ${range.max}.`)
+      .default(CALL_TIMING_DEFAULTS[key]),
+  );
+}
+
+/** Call timing from the Coverage step. Missing fields fall back to the platform defaults (15 min / 30 s / 8 s). */
+export const callTimingSchema = z.object({
+  maxCallMinutes: timingField("maxCallMinutes", "Max call length"),
+  silenceSeconds: timingField("silenceSeconds", "Silence before ending"),
+  reminderSeconds: timingField("reminderSeconds", "Check-in delay"),
+});
+
+export const CALL_TIMING_HINTS: Record<keyof CallTiming, string> = {
+  maxCallMinutes: "Ava will wrap up and end the call at this limit. Lower it to cap cost per call.",
+  silenceSeconds: "If the caller says nothing for this long, Ava checks in once, then ends the call.",
+  reminderSeconds: "How long Ava waits before asking 'Are you still there?'",
+};
+
 export const coverageSchema = z.object({
-  unansweredAfterRings: z.preprocess(
-    (value) => (value === "" || value === undefined || value === null ? undefined : value),
-    z.coerce.number().int().min(1).max(20).optional(),
-  ),
+  unansweredAfterRings: z.preprocess(blankToUndefined, z.coerce.number().int().min(1).max(20).optional()),
   lunchHours: optionalText,
   afterHours: optionalText,
   weekends: optionalText,
   holidays: optionalText,
   holdOverflow: optionalText,
+  callTiming: z.preprocess((value) => (value === null ? undefined : value), callTimingSchema.default(CALL_TIMING_DEFAULTS)),
 });
+
+/** Reads call timing off a stored coverage JSON blob, tolerating older rows without it. */
+export function callTimingOf(coverage: unknown): CallTiming {
+  const raw = coverage && typeof coverage === "object" ? (coverage as { callTiming?: unknown }).callTiming : undefined;
+  const parsed = callTimingSchema.safeParse(raw ?? {});
+  return parsed.success ? parsed.data : { ...CALL_TIMING_DEFAULTS };
+}
 
 export const featuresSchema = z.object({
   messages: optionalText,

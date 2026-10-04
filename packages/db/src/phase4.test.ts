@@ -1,8 +1,8 @@
 import { PRIVACY_RULE, TEMPLATE_VERSION } from "@alinstra/agent";
-import { MemoryBilling, MemoryVoice } from "@alinstra/providers";
+import { CALL_TIMING_DEFAULTS, END_CALL_TOOL, MemoryBilling, MemoryVoice } from "@alinstra/providers";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { prisma } from "./client";
-import { businessSchema } from "./domain";
+import { businessSchema, callTimingOf, coverageSchema } from "./domain";
 import { diffSection } from "./edit-diff";
 import { clientEditPayload, editClientStep } from "./wizard";
 import {
@@ -119,7 +119,7 @@ describe("phase 4 privacy", () => {
       expect(text).not.toContain(target.e164);
       expect(text).not.toContain(target.e164.slice(1));
     }
-    expect(tools.map((tool) => tool.name)).toEqual(["take_message", "transfer", "transfer_front_desk", "transfer_dr_patel", "transfer_billing"]);
+    expect(tools.map((tool) => tool.name)).toEqual(["take_message", "transfer", "transfer_front_desk", "transfer_dr_patel", "transfer_billing", "end_call"]);
     expect(tools.find((tool) => tool.name === "transfer")?.description).toContain("Front desk; Dr. Patel; Billing");
     expect(tools.find((tool) => tool.name === "transfer")?.parameters?.required).toEqual(["target"]);
     expect(tools.find((tool) => tool.name === "transfer_dr_patel")?.transferTo).toBe("+14155550123");
@@ -169,7 +169,7 @@ describe("phase 4 privacy", () => {
     await replaceTransferTargets(admin, { clientId: client.id, text: "Owner line, +14155550188" });
     expect(await syncProvisionedAgent(client.id, used)).toBe("in_sync");
     const names = (voice.llms.get(stored.retellLlmId ?? "")?.tools ?? []).map((tool) => tool.name);
-    expect(names).toEqual(["take_message", "transfer", "transfer_owner_line"]);
+    expect(names).toEqual(["take_message", "transfer", "transfer_owner_line", "end_call"]);
     expect(textOf(voice.llms.get(stored.retellLlmId ?? "")?.tools ?? [])).not.toContain("0188");
 
     await prisma.client.update({ where: { id: client.id }, data: { publicPhone: "+18883871525", agentSyncStatus: "syncing", syncedConfigId: null } });
@@ -266,6 +266,46 @@ describe("phase 4 privacy", () => {
     ]);
     expect(diffSection("websiteNotes", "old", "old")).toEqual([]);
     expect(diffSection("portalOwnerEmail", "a@x.com", "b@x.com")).toEqual([{ field: "portalOwnerEmail", redacted: true }]);
+  });
+
+  it("publishes end_call on every tool list and the client's call timing on the agent", async () => {
+    const client = await seedClient();
+    await prisma.client.update({
+      where: { id: client.id },
+      data: { coverage: { callTiming: { maxCallMinutes: 10, silenceSeconds: 20, reminderSeconds: 5 } } },
+    });
+    const voice = new MemoryVoice();
+    const used = deps(voice, new MemoryBilling());
+    await startProvisioning(admin, client.id);
+    await advanceProvisioning(admin, client.id, used);
+    const stored = await prisma.client.findUniqueOrThrow({ where: { id: client.id } });
+    const tools = voice.llms.get(stored.retellLlmId ?? "")?.tools ?? [];
+    expect(tools.at(-1)).toEqual(END_CALL_TOOL);
+    expect(voice.agents.get(stored.retellAgentId ?? "")?.timing).toEqual({
+      max_call_duration_ms: 600_000,
+      end_call_after_silence_ms: 20_000,
+      reminder_trigger_ms: 5_000,
+      reminder_max_count: 1,
+    });
+    expect(voice.llms.get(stored.retellLlmId ?? "")?.prompt).toContain("immediately use the end_call tool");
+
+    await prisma.client.update({ where: { id: client.id }, data: { features: { liveTransfer: false } } });
+    await prisma.client.update({ where: { id: client.id }, data: { agentSyncStatus: "syncing", syncedConfigId: null } });
+    expect(await syncProvisionedAgent(client.id, used)).toBe("in_sync");
+    expect((voice.llms.get(stored.retellLlmId ?? "")?.tools ?? []).map((tool) => tool.name)).toEqual(["take_message", "end_call"]);
+
+    const base = await clientEditPayload(admin, client.id);
+    const edited = await editClientStep(admin, {
+      clientId: client.id,
+      step: 4,
+      payload: { ...base, coverage: { ...base.coverage, callTiming: { maxCallMinutes: "25", silenceSeconds: "60", reminderSeconds: "12" } } },
+    });
+    expect(edited.sync).toBe(true);
+    expect(await syncProvisionedAgent(client.id, used)).toBe("in_sync");
+    expect(voice.agents.get(stored.retellAgentId ?? "")?.timing).toMatchObject({ max_call_duration_ms: 1_500_000, end_call_after_silence_ms: 60_000, reminder_trigger_ms: 12_000 });
+    expect(callTimingOf({})).toEqual(CALL_TIMING_DEFAULTS);
+    expect(() => coverageSchema.parse({ callTiming: { maxCallMinutes: "90" } })).toThrow(/at most 60/);
+    expect(coverageSchema.parse({}).callTiming).toEqual(CALL_TIMING_DEFAULTS);
   });
 
   it("normalizes and validates the public phone and email", () => {

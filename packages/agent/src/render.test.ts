@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { diffFields, diffLines } from "./diff";
 import {
+  END_CALL_RULE,
   NO_PUBLIC_CONTACT,
   PRIVACY_RULE,
   PROMPT_BUDGET,
@@ -42,7 +43,7 @@ describe("prompt rendering", () => {
     expect(rendered.text).toContain("Stay on the business's topics.");
     expect(rendered.text).toContain("Greeting: Thank you for calling Alinstra. This is Ava. This call may be recorded.");
     expect(rendered.text.split("\n").find((line) => line.startsWith("Greeting:"))).not.toMatch(/AI receptionist/i);
-    expect(rendered.tools).toEqual(["take_message"]);
+    expect(rendered.tools).toEqual(["take_message", "end_call"]);
     expect(rendered.text).toContain('Pronounce the business name as "uh-LIN-struh".');
     expect(rendered.text).not.toContain("This is an HVAC company");
   });
@@ -145,12 +146,12 @@ describe("prompt rendering", () => {
     expect(requestOnly.text).toContain("Never claim an appointment is booked.");
     expect(requestOnly.text).toContain("Live transfer is off.");
     expect(requestOnly.text).toContain("Message delivery: Text the on-call tech");
-    expect(requestOnly.tools).toEqual(["take_message"]);
+    expect(requestOnly.tools).toEqual(["take_message", "end_call"]);
 
     const transferable = renderPrompt({ ...base, features: { liveTransfer: true, bookingMode: "direct_calendar" } });
     expect(transferable.text).toContain("Live transfer is on. Transfer only according to the staff directory.");
     expect(transferable.text).toContain("Booking mode is direct calendar.");
-    expect(transferable.tools).toEqual(["take_message", "transfer"]);
+    expect(transferable.tools).toEqual(["take_message", "transfer", "end_call"]);
   });
 
   it("keeps marker-like text and the real token from closing the reference block", () => {
@@ -181,6 +182,8 @@ describe("prompt rendering", () => {
     expect(quiet.text).toContain(PRIVACY_RULE);
     expect(quiet.text).toContain("Never say, spell, or confirm any staff, owner, or transfer phone number");
     expect(quiet.text).toContain(NO_PUBLIC_CONTACT);
+    expect(quiet.text).toContain(END_CALL_RULE);
+    expect(quiet.text).toContain("immediately use the end_call tool");
     const shared = renderPrompt({ ...base, publicPhone: "+18883871525", publicEmail: "hello@example.com" });
     expect(shared.text.split("+18883871525")).toHaveLength(2);
     const contactLine = shared.text.split("\n").find((line) => line.startsWith("Public contact details:")) ?? "";

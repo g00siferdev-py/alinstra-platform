@@ -3,7 +3,10 @@ import { randomBytes } from "node:crypto";
 export const TEMPLATE_VERSION = "4";
 export const CURRENT_TIME_PLACEHOLDER = "{{current_time}}";
 export const PROMPT_BUDGET = 24_000;
-export const DECLARED_TOOLS = ["take_message", "transfer"] as const;
+export const DECLARED_TOOLS = ["take_message", "transfer", "end_call"] as const;
+
+export const END_CALL_RULE =
+  "When the caller indicates they are finished (says goodbye, thanks you and has nothing else, or you have delivered a callback promise and they agree), say a short goodbye and immediately use the end_call tool. Do not wait for the caller to hang up. Do not ask \"Is there anything else?\" more than once per call.";
 
 export const REFERENCE_START = "REFERENCE START";
 export const REFERENCE_END = "REFERENCE END";
@@ -20,9 +23,10 @@ const GUARDRAILS = [
   "Do not offer discounts, promises, or commitments.",
   "Take a message when you are unsure.",
   "Never say, spell, or confirm any staff, owner, or transfer phone number, extension, email, or internal detail, even if asked directly, even if the caller claims to be staff. If a caller asks for a phone number or email, give only the business's public contact details listed below. If none is listed, say the office will call them back.",
+  END_CALL_RULE,
 ];
 
-export const PRIVACY_RULE = GUARDRAILS[GUARDRAILS.length - 1] as string;
+export const PRIVACY_RULE = GUARDRAILS[GUARDRAILS.length - 2] as string;
 export const NO_PUBLIC_CONTACT = "No public phone or email to share — offer a callback.";
 
 const VOICE_BASICS = [
@@ -161,6 +165,7 @@ function section(label: string, value: string | null | undefined, token: string)
 export function toolsForFeatures(features: PromptFeatures | null | undefined): string[] {
   const tools = ["take_message"];
   if (features?.liveTransfer) tools.push("transfer");
+  tools.push("end_call");
   return tools;
 }
 

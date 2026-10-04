@@ -9,6 +9,7 @@ import {
   wizardPayloadSchema,
   type WizardPayload,
 } from "@alinstra/db";
+import { CALL_TIMING_DEFAULTS } from "@alinstra/providers";
 import { requireAdmin } from "@/lib/session";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -44,6 +45,11 @@ function formPayload(parsed: WizardPayload, internal: boolean): FormPayload {
       weekends: parsed.coverage?.weekends ?? "",
       holidays: parsed.coverage?.holidays ?? "",
       holdOverflow: parsed.coverage?.holdOverflow ?? "",
+      callTiming: {
+        maxCallMinutes: String(parsed.coverage?.callTiming?.maxCallMinutes ?? CALL_TIMING_DEFAULTS.maxCallMinutes),
+        silenceSeconds: String(parsed.coverage?.callTiming?.silenceSeconds ?? CALL_TIMING_DEFAULTS.silenceSeconds),
+        reminderSeconds: String(parsed.coverage?.callTiming?.reminderSeconds ?? CALL_TIMING_DEFAULTS.reminderSeconds),
+      },
     },
     features: {
       bookingMode: parsed.features?.bookingMode ?? "",

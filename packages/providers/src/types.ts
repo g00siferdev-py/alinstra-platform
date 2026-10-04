@@ -11,7 +11,59 @@ export type PublishedTool = {
   timeoutMs?: number;
   transferTo?: string;
   parameters?: ToolParameters;
+  /** Retell built-in tool type. Only `end_call` is used; custom and transfer tools leave this unset. */
+  builtin?: "end_call";
 };
+
+export const END_CALL_TOOL: PublishedTool = {
+  name: "end_call",
+  description: "End the call after you have said goodbye and the caller has nothing else.",
+  builtin: "end_call",
+};
+
+/** Per-client call timing chosen on the Coverage step. */
+export type CallTiming = { maxCallMinutes: number; silenceSeconds: number; reminderSeconds: number };
+
+export const CALL_TIMING_DEFAULTS: CallTiming = { maxCallMinutes: 15, silenceSeconds: 30, reminderSeconds: 8 };
+
+/** What the wizard lets an admin pick. Narrower than Retell's own limits. */
+export const CALL_TIMING_LIMITS = {
+  maxCallMinutes: { min: 1, max: 60 },
+  silenceSeconds: { min: 10, max: 300 },
+  reminderSeconds: { min: 5, max: 60 },
+} as const;
+
+/** Retell hard limits, enforced again right before the payload leaves. */
+const RETELL_LIMITS = {
+  max_call_duration_ms: { min: 60_000, max: 7_200_000 },
+  end_call_after_silence_ms: { min: 10_000, max: 3_600_000 },
+  reminder_trigger_ms: { min: 1_000, max: 600_000 },
+} as const;
+
+export type RetellTiming = {
+  max_call_duration_ms: number;
+  end_call_after_silence_ms: number;
+  reminder_trigger_ms: number;
+  reminder_max_count: 1;
+};
+
+function clamp(value: number, range: { min: number; max: number }): number {
+  if (!Number.isFinite(value)) return range.min;
+  return Math.min(range.max, Math.max(range.min, Math.round(value)));
+}
+
+/** Maps call timing onto Retell agent fields, falling back to defaults and clamping to Retell's limits. */
+export function retellTiming(timing?: Partial<CallTiming> | null): RetellTiming {
+  const minutes = timing?.maxCallMinutes ?? CALL_TIMING_DEFAULTS.maxCallMinutes;
+  const silence = timing?.silenceSeconds ?? CALL_TIMING_DEFAULTS.silenceSeconds;
+  const reminder = timing?.reminderSeconds ?? CALL_TIMING_DEFAULTS.reminderSeconds;
+  return {
+    max_call_duration_ms: clamp(minutes * 60_000, RETELL_LIMITS.max_call_duration_ms),
+    end_call_after_silence_ms: clamp(silence * 1_000, RETELL_LIMITS.end_call_after_silence_ms),
+    reminder_trigger_ms: clamp(reminder * 1_000, RETELL_LIMITS.reminder_trigger_ms),
+    reminder_max_count: 1,
+  };
+}
 
 export const TAKE_MESSAGE_PARAMETERS: ToolParameters = {
   type: "object",
@@ -55,6 +107,7 @@ export type AgentPublish = {
   tools: PublishedTool[];
   webhookUrl: string;
   inboundWebhookUrl: string;
+  timing?: CallTiming | null;
 };
 
 export type NumberRequest = {
@@ -68,7 +121,7 @@ export type NumberRequest = {
 export interface VoicePlatform {
   createLlm(input: { clientId: string; prompt: string; beginMessage: string; tools: PublishedTool[] }): Promise<{ llmId: string }>;
   findAgentId(clientId: string): Promise<string | null>;
-  createAgent(input: { clientId: string; llmId: string; voiceId: string; webhookUrl: string }): Promise<{ agentId: string }>;
+  createAgent(input: { clientId: string; llmId: string; voiceId: string; webhookUrl: string; timing?: CallTiming | null }): Promise<{ agentId: string }>;
   findNumber(clientId: string): Promise<string | null>;
   createNumber(input: NumberRequest): Promise<{ e164: string }>;
   syncAgent(input: AgentPublish): Promise<{ version: number }>;
