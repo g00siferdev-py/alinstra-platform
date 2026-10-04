@@ -1,6 +1,6 @@
 # Staging checklist
 
-This is the click-by-click list for the first staging deploy. Production (`app.alinstra.com`) comes later and is only sketched at the end. Do the account steps yourself. Do not change apex `alinstra.com` records for the marketing site.
+This is the click-by-click list for the first staging deploy. Production (`app.alinstra.com`) comes later and is only sketched at the end. Do the account steps yourself. Apex `alinstra.com` cutover for the marketing site is documented under **Shipped in Phase M** — leave the apex alone until you run that checklist.
 
 Checked against Railway's docs on 2 October 2026. Config-as-code (`railway.toml`) still works for services that already have a config file path, and stops being read on 1 December 2026. New services cannot opt into it. The files `railway.web.toml` and `railway.worker.toml` are the settings to copy into the dashboard. If a service still shows **Config file path**, set it as well.
 
@@ -162,6 +162,7 @@ In Railway, web and worker do not share a variable group with production later. 
 | `NEXT_PUBLIC_SENTRY_DSN` | same web DSN, or empty. Must be set before the image builds. |
 | `NEXT_PUBLIC_SENTRY_ENVIRONMENT` | `staging` |
 | `TRUSTED_PROXY_HOPS` | `1` (the default). Railway's client IP is `X-Real-IP`, which the app prefers when it is present. |
+| `MARKETING_PHONE` | optional E.164 fallback for marketing "Call Ava" when client zero has no public phone yet (e.g. `+18883871525`). Leave empty when client zero is live. |
 
 `UPLOAD_DIR` and `LOCKOUT_STORE` stay unset. Production storage is the bucket, and lockout uses Redis.
 
@@ -389,6 +390,30 @@ When any provisioning step fails, the worker emails `ADMIN_EMAIL` (or the admin 
 - Client zero skips Checkout, gets a number, and shows In sync after a config change.
 - A browser upload still works. The health check is still `"db": "up"` and `"redis": "up"`.
 
+### Shipped in Phase M
+
+Public marketing site at `/` (route group `apps/web/src/app/(marketing)/`). Copy source: `docs/marketing-copy.md`. `[Product]` renders from `PRODUCT_NAME` in `apps/web/src/lib/brand.ts` (currently `"Ava"`). `ASSISTANT_NAME` is `"Ava"` and does not change with the product rename.
+
+**Routes.** `/`, `/pricing`, `/industries`, `/about`, `/start`, `/legal`. Portal routes (`/home`, `/admin`, `/account`) keep their own layouts with `AppHeader`. Signed-in visitors see "Go to dashboard" in the marketing header via a client island that hits `/api/session-status` — Home/Pricing/Industries/About stay ISR (`revalidate = 3600`). `/start` is dynamic (lead form).
+
+**`publicSiteConfig()`.** Tenant-free helper in `packages/db` that returns `{ phone, email }` from the internal client (client zero), cached in-process for one hour. Phone falls back to optional env `MARKETING_PHONE`; email falls back to `hello@alinstra.com`. Never hard-code the Call Ava number in components.
+
+**`publicPlans()`.** Tenant-free active plans ordered by `sortOrder` for the pricing table. Cents formatted server-side; `includedChangesPerMonth === null` shows as Unlimited.
+
+**Leads.** Prisma model `Lead` (migration `20261005010000_phase_m_leads`). `/start` saves a row, rate-limits 5/hour/IP via `@alinstra/auth` counters, rejects a honeypot silently, and enqueues `sendAdminNotice` ("New lead: \<business\>"). No auto-reply to the lead. Admin list at `/admin/leads` (newest first, mark contacted, Create client prefilled).
+
+**SEO.** Per-page metadata with canonical `https://alinstra.com`. `/sitemap.xml` and `/robots.txt` (disallow `/admin`, `/home`, `/api`).
+
+**Apex DNS cutover (when ready to put marketing on alinstra.com).** Staging stays on `staging.alinstra.com` unchanged.
+
+1. Railway → web service → Settings → Networking → Custom Domain → add `alinstra.com` and `www.alinstra.com` (or the Railway hostname you will CNAME to).
+2. Cloudflare → DNS → replace the apex **A** record `162.0.212.4` with a **CNAME-flattened** record for `@` pointing at the Railway web hostname. Proxy status **DNS only** (grey cloud).
+3. Cloudflare → DNS → set `www` **CNAME** to the same Railway hostname. Proxy status **DNS only**.
+4. Leave the `staging` CNAME as it is (still DNS only).
+5. Wait for Railway certificates on both apex and `www`. Confirm `https://alinstra.com` serves marketing and `https://staging.alinstra.com` still serves staging.
+
+Do not orange-cloud (proxy) the apex or `www` until you have a reason; grey cloud matches the staging setup.
+
 ## Production later
 
-Repeat this checklist in a separate Railway project. Hostname `app.alinstra.com`. Own Postgres, Redis, R2 bucket, Resend key, and Sentry environment `production`. Grey-cloud CNAME for `app` only. Do not share staging's database, Redis, bucket token, or `ENCRYPTION_KEY`. Enroll a new admin and delete that environment's `ADMIN_INITIAL_PASSWORD` the same way.
+Repeat this checklist in a separate Railway project. Hostname `app.alinstra.com` for the portal if you split hosts later; with Phase M the marketing site can live on the apex while staging stays on `staging`. Own Postgres, Redis, R2 bucket, Resend key, and Sentry environment `production`. Grey-cloud CNAMEs. Do not share staging's database, Redis, bucket token, or `ENCRYPTION_KEY`. Enroll a new admin and delete that environment's `ADMIN_INITIAL_PASSWORD` the same way.

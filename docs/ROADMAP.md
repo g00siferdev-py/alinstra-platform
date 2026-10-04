@@ -1,6 +1,6 @@
 # Roadmap
 
-Updated 4 October 2026 after Phase 5. Phases below Phase 6 are not yet implemented. Each phase gets its own plan document before work starts, following the pattern of `docs/phase-3-plan.md`.
+Updated 4 October 2026 after Phase M. Phases below Phase 6 are not yet implemented. Each phase gets its own plan document before work starts, following the pattern of `docs/phase-3-plan.md`.
 
 ## Where things stand
 
@@ -9,6 +9,16 @@ Updated 4 October 2026 after Phase 5. Phases below Phase 6 are not yet implement
 - Phase 4b stores call transcripts and recordings encrypted at rest with per-client retention, role-based access (owner grants staff), playback through our own route, and calls screens in the admin and the portal. The structured `transcriptTurns` (roles, offsets, tool invocations) are the input Phase 8 builds on.
 - Phase 4c hardens recording-job enqueue (rollback + stale-pending sweep) and strengthens Ava's `end_call` prompt so she hangs up after goodbye instead of waiting on the caller.
 - **Phase 5 shipped** (branch `phase-5`, plan `docs/phase-5-plan.md`): owner edit flow on My Business with `owner_edit` ChangeLog; held `owner_step` QuickUpdates for voice / transfer / booking / sensitive text; own-number forwarding page (`phone.mode = "forward"`); continuous greeting opening (template v7) with inbound `begin_message` override; recent calls card on My Business. **Toll-free SMS verification is deferred** to a later phase (no SMS in Phase 5).
+- **Phase M shipped** (branch `phase-m`, plan `docs/phase-m-plan.md`): public marketing site at `/` from `docs/marketing-copy.md`, live pricing from `publicPlans()`, lead form + `Lead` model + `/admin/leads`, `publicSiteConfig` / optional `MARKETING_PHONE`, SEO sitemap/robots, apex DNS cutover notes.
+
+## Phase M: marketing site (shipped)
+
+Shipped. Details in `docs/phase-m-plan.md` and `docs/DEPLOYMENT.md` ("Shipped in Phase M"). Summary:
+
+- Marketing route group with Home, Pricing, Industries, About, Start, Legal; portal layouts keep `AppHeader`.
+- Pricing table from the Plan catalog; founding-offer and add-on copy verbatim.
+- `/start` lead capture (honeypot + rate limit); admin notice only; no auto-reply.
+- Quiet modern design, Waveform A mark, ISR for static pages, canonical `https://alinstra.com`.
 
 ## Phase 5: owner self-service and the client's own number (shipped)
 

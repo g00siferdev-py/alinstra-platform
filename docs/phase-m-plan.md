@@ -1,6 +1,6 @@
 # Phase M — Marketing site
 
-Status: on branch `phase-m`, not yet on `main`. Public marketing site at `/` with pricing from the Plan table, a lead form, and admin lead list. Copy source: `docs/marketing-copy.md` (verbatim). No Stripe checkout yet.
+Status: shipped on branch `phase-m` (not yet merged to `main`). Public marketing site at `/` with pricing from the Plan table, a lead form, and admin lead list. Copy source: `docs/marketing-copy.md` (verbatim). No Stripe checkout yet.
 
 ## Spec source
 
