@@ -82,11 +82,11 @@ export function QuickUpdateForms({ hours, staff, faqs, targets }: { hours: strin
 
       <form className="grid gap-2 rounded-xl border border-[var(--line)] p-4" onSubmit={(event) => event.preventDefault()}>
         <h2 className="font-medium">Staff directory</h2>
+        <p className="text-sm text-[var(--muted)]">Names, roles, and availability. Phone numbers are removed before the receptionist sees this; add numbers under Transfer targets.</p>
         <textarea name="staff" className="min-h-24 w-full rounded-md border border-[var(--line)] px-3 py-2 text-sm" defaultValue={staff} />
-        <input name="transfer" className="w-full rounded-md border border-[var(--line)] px-3 py-2 text-sm" placeholder="Transfer number, optional" />
         <div className="flex gap-2">
-          <Button disabled={pending} onClick={(event) => void previewUpdate({ kind: "staff", text: field(event, "staff"), transferNumber: field(event, "transfer") })}>Preview</Button>
-          <Button disabled={pending} onClick={(event) => void applyUpdate({ kind: "staff", text: field(event, "staff"), transferNumber: field(event, "transfer") })}>Apply</Button>
+          <Button disabled={pending} onClick={(event) => void previewUpdate({ kind: "staff", text: field(event, "staff") })}>Preview</Button>
+          <Button disabled={pending} onClick={(event) => void applyUpdate({ kind: "staff", text: field(event, "staff") })}>Apply</Button>
         </div>
       </form>
 

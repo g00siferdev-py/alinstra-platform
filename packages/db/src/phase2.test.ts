@@ -80,7 +80,7 @@ describe("phase 2 configs", () => {
     expect(draft.version).toBe(1);
     expect(draft.platformAgentId).toBeNull();
     expect(draft.templateId).toBe("hvac");
-    expect(draft.templateVersion).toBe("4");
+    expect(draft.templateVersion).toBe("5");
     expect(draft.promptText).toContain("uh-LIN-struh");
     expect(draft.promptText).toContain("reference material");
     expect(await prisma.agentConfig.count({ where: { clientId: client.id, status: "active" } })).toBe(0);
@@ -107,6 +107,16 @@ describe("phase 2 configs", () => {
     expect(followUp.prompt).toContain("Closed Tuesday for inventory");
     expect(followUp.prompt).toContain("Mon-Fri 9:00-17:00");
     expect(followUp.prompt).not.toContain("ROLLED-AWAY");
+  });
+
+  it("keeps a staff transfer number out of the published prompt", async () => {
+    const client = await submittedClient("Alpha HVAC");
+    const owner: Actor = { id: "owner_a", role: "client_owner", clientId: client.id };
+    await activateAgentConfig(admin, { clientId: client.id, version: 1 });
+    const result = await applyQuickUpdate(owner, { kind: "staff", text: "Dana Lee, owner, weekdays\nDirect: 415-555-0199", transferNumber: "+14155550142" });
+    expect(result.prompt).toContain("Dana Lee, owner, weekdays");
+    expect(result.prompt).not.toContain("Transfer number");
+    expect(result.prompt.slice(result.prompt.indexOf("Staff directory"))).not.toMatch(/(?:\d\D{0,2}){7,}/);
   });
 
   it("stops client A from reading client B and stops staff from submitting", async () => {

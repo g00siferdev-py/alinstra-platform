@@ -9,6 +9,7 @@ import {
   REFERENCE_START,
   TRUNCATION_NOTE,
   renderPrompt,
+  stripPhoneNumbers,
 } from "./render";
 import { HOLD_REASON, sensitiveHoldReason, validateQuickUpdate } from "./validate";
 
@@ -24,7 +25,7 @@ describe("prompt rendering", () => {
   it("includes the guardrails, recording notice, and pronunciation", () => {
     const rendered = renderPrompt({ ...base, namePronunciation: "uh-LIN-struh", industry: "plumbing" });
     expect(rendered.templateId).toBe("general");
-    expect(rendered.templateVersion).toBe("4");
+    expect(rendered.templateVersion).toBe("5");
     expect(rendered.text).toContain("This call may be recorded.");
     expect(rendered.text).toContain("Never claim or imply to be a human.");
     expect(rendered.text).toContain("Answer only from the business information in this prompt.");
@@ -104,6 +105,27 @@ describe("prompt rendering", () => {
     expect(validateQuickUpdate({ kind: "hours", text: "Open 25:00" })).toMatch(/clock/);
     expect(validateQuickUpdate({ kind: "staff", text: "Sam", transferNumber: "123" })).toMatch(/phone/);
     expect(validateQuickUpdate({ kind: "faq_add", question: "Parking?", answer: "Behind the shop." })).toBeNull();
+  });
+
+  it("keeps phone numbers out of the staff directory in the prompt", () => {
+    const rendered = renderPrompt(
+      {
+        ...base,
+        staff: "Sam Lee, front desk, Mon-Fri\nDr. Patel, dentist, cell +1 (415) 555-0123, Tue/Thu\nTransfer number: 4155550199\nBilling: 415.555.0177 ext 12",
+      },
+      "abcdefab",
+    );
+    const start = rendered.text.indexOf("Staff directory");
+    const end = rendered.text.indexOf("REFERENCE END", start);
+    const directory = rendered.text.slice(start, end === -1 ? undefined : end);
+    expect(directory).toContain("Sam Lee, front desk, Mon-Fri");
+    expect(directory).toContain("Dr. Patel, dentist, Tue/Thu");
+    expect(directory).toContain("Billing:");
+    expect(directory).not.toMatch(/(?:\d\D{0,2}){7,}/);
+    expect(directory).not.toMatch(/\d{3}/);
+    expect(directory).not.toContain("Transfer number");
+    expect(stripPhoneNumbers("Open until 5, suite 1200")).toBe("Open until 5, suite 1200");
+    expect(stripPhoneNumbers(null)).toBeNull();
   });
 
   it("builds the greeting for both disclosure modes and always includes the honesty rule", () => {

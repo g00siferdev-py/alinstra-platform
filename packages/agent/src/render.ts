@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 
-export const TEMPLATE_VERSION = "4";
+export const TEMPLATE_VERSION = "5";
 export const CURRENT_TIME_PLACEHOLDER = "{{current_time}}";
 export const PROMPT_BUDGET = 24_000;
 export const DECLARED_TOOLS = ["take_message", "transfer", "end_call"] as const;
@@ -234,13 +234,39 @@ function instructions(input: PromptInput, templateId: TemplateId, token: string)
   return lines.join("\n");
 }
 
+const PHONE_LIKE = /(?:\+?\d[\d\s().-]{5,}\d)/g;
+
+/**
+ * The staff directory names people, roles, and availability. Phone numbers never belong in the prompt:
+ * transfers route by label, and Ava must not be able to read a number aloud. Any run of 7+ digits
+ * (with the usual separators) is removed before rendering.
+ */
+export function stripPhoneNumbers(text: string | null | undefined): string | null {
+  if (!text) return text ?? null;
+  return text
+    .split("\n")
+    .map((line) =>
+      line
+        .replace(PHONE_LIKE, (match) => (match.replace(/\D/g, "").length >= 7 ? "" : match))
+        .replace(/\bext\.?\s*\d+/gi, "")
+        .replace(/\b(?:transfer number|direct line|direct|cell|mobile|phone|tel)\b\s*:?\s*(?=[,;]|$)/gi, "")
+        .replace(/\s*,\s*(?=,|$)/g, "")
+        .replace(/\s{2,}/g, " ")
+        .trim(),
+    )
+    .filter((line, index, lines) => line !== "" || (index > 0 && lines[index - 1] !== ""))
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 function structuredBlock(input: PromptInput, token: string): string {
   return [
     section("Hours", input.hours, token),
     section("Services", input.services, token),
     section("FAQs", input.faqs, token),
     section("Policies", input.policies, token),
-    section("Staff directory", input.staff, token),
+    section("Staff directory", stripPhoneNumbers(input.staff), token),
     section("Closures and notices", input.notices, token),
     section("Emergency instructions", input.emergency, token),
   ]

@@ -445,10 +445,9 @@ function appendNotice(current: unknown, text: string): string {
   return base ? `${base}\n${text.trim()}` : text.trim();
 }
 
+/** Staff entries carry names, roles, and availability only. Transfer numbers live in TransferTarget and route by label. */
 function staffText(input: { text: string; transferNumber?: string }): string {
-  const number = input.transferNumber?.trim();
-  if (!number || input.text.includes(number)) return input.text;
-  return `${input.text.trim()}\nTransfer number: ${number}`;
+  return input.text.trim();
 }
 
 function patchFor(knowledge: KnowledgeShape | null, input: QuickUpdateInput): Record<string, unknown> {
