@@ -1,6 +1,13 @@
 import { LeadForm } from "@/components/marketing/lead-form";
+import { marketingMetadata } from "@/lib/marketing-seo";
 
 export const dynamic = "force-dynamic";
+
+export const metadata = marketingMetadata({
+  title: "Get started",
+  description: "Let's get you set up. Tell us about your business and we'll call within one business day.",
+  path: "/start",
+});
 
 export default function StartPage() {
   return (

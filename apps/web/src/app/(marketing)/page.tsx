@@ -1,10 +1,17 @@
 import { HeroPhone } from "@/components/marketing/hero-phone";
 import { ASSISTANT_NAME, PRODUCT_NAME } from "@/lib/brand";
 import { marketingPhoneDisplay, marketingTelHref } from "@/lib/marketing-phone";
+import { HOME_DESCRIPTION, marketingMetadata } from "@/lib/marketing-seo";
 import { publicSiteConfig } from "@alinstra/db";
 import Link from "next/link";
 
 export const revalidate = 3600;
+
+export const metadata = marketingMetadata({
+  title: "Alinstra",
+  description: HOME_DESCRIPTION,
+  path: "/",
+});
 
 export default async function MarketingHomePage() {
   const site = await publicSiteConfig();

@@ -85,4 +85,22 @@ describe("production secret guard", () => {
     });
     expect(() => getEnv()).not.toThrow();
   });
+
+  it("accepts optional MARKETING_PHONE", () => {
+    useEnv({
+      NODE_ENV: "development",
+      BETTER_AUTH_SECRET: realSecret,
+      ENCRYPTION_KEY: realKey,
+      MARKETING_PHONE: "+18883871525",
+    });
+    expect(getEnv().MARKETING_PHONE).toBe("+18883871525");
+
+    useEnv({
+      NODE_ENV: "development",
+      BETTER_AUTH_SECRET: realSecret,
+      ENCRYPTION_KEY: realKey,
+      MARKETING_PHONE: undefined,
+    });
+    expect(getEnv().MARKETING_PHONE).toBe("");
+  });
 });

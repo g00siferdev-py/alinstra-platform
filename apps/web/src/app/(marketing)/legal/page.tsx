@@ -1,6 +1,13 @@
 import { PRODUCT_NAME } from "@/lib/brand";
+import { marketingMetadata } from "@/lib/marketing-seo";
 
 export const revalidate = 3600;
+
+export const metadata = marketingMetadata({
+  title: "Legal",
+  description: "AI disclosure, recording notice, and follow-up consent for Alinstra.",
+  path: "/legal",
+});
 
 export default function LegalPage() {
   return (

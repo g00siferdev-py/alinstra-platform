@@ -1,8 +1,15 @@
 import { ASSISTANT_NAME, MARKETING_EMAIL, PRODUCT_NAME } from "@/lib/brand";
 import { marketingPhoneDisplay, marketingTelHref } from "@/lib/marketing-phone";
+import { marketingMetadata } from "@/lib/marketing-seo";
 import { publicSiteConfig } from "@alinstra/db";
 
 export const revalidate = 3600;
+
+export const metadata = marketingMetadata({
+  title: "About",
+  description: "Alinstra Technologies builds practical AI for small businesses, starting with the phone. Based in Morristown, Tennessee.",
+  path: "/about",
+});
 
 export default async function AboutPage() {
   const site = await publicSiteConfig();

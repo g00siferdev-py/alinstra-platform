@@ -1,7 +1,14 @@
 import { ASSISTANT_NAME } from "@/lib/brand";
+import { marketingMetadata } from "@/lib/marketing-seo";
 import Link from "next/link";
 
 export const revalidate = 3600;
+
+export const metadata = marketingMetadata({
+  title: "Industries",
+  description: "AI phone coverage for HVAC, home services, veterinary clinics, and more industries on the way.",
+  path: "/industries",
+});
 
 export default function IndustriesPage() {
   return (

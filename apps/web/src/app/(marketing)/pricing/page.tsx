@@ -1,3 +1,4 @@
+import { marketingMetadata } from "@/lib/marketing-seo";
 import {
   formatIncludedChanges,
   formatOveragePerMinute,
@@ -7,6 +8,12 @@ import {
 import Link from "next/link";
 
 export const revalidate = 3600;
+
+export const metadata = marketingMetadata({
+  title: "Pricing",
+  description: "Simple plans. No per-call surprises. Setup, a dedicated number, messages, transcripts, and the owner portal.",
+  path: "/pricing",
+});
 
 export default async function PricingPage() {
   const plans = await publicPlans();
