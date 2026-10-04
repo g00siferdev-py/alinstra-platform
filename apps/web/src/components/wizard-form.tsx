@@ -663,6 +663,23 @@ export function WizardForm({
       {step === 9 ? (
         <div className="grid gap-3">
           <div className="flex items-start gap-2 text-sm">
+            <input
+              className="mt-0.5"
+              type="checkbox"
+              checked={payload.compliance.recordingNotice !== false}
+              onChange={(event) =>
+                setPayload({
+                  ...payload,
+                  compliance: { ...payload.compliance, recordingNotice: event.target.checked, aiDisclosure: true },
+                })
+              }
+            />
+            <FieldLabel
+              label="Say that the call may be recorded"
+              hint="Recommended on. Call-recording consent rules follow each caller's state, and several states require all parties to be told. Turning this off is at your own risk."
+            />
+          </div>
+          <div className="flex items-start gap-2 text-sm">
             <input className="mt-0.5" type="checkbox" checked={Boolean(payload.compliance.healthcareSensitive)} onChange={(event) => setPayload({ ...payload, compliance: { ...payload.compliance, healthcareSensitive: event.target.checked, healthcareTouched: true, aiDisclosure: true } })} />
             <FieldLabel label="Healthcare or privacy-sensitive" hint="Checked automatically for dental and medical office. You can change it. When it is on, submit requires a completed review and a note." />
           </div>
