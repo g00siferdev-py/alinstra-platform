@@ -1,12 +1,20 @@
 import { CallRetentionForm } from "@/components/call-retention-form";
+import { OutcomeBadge } from "@/components/calls-list";
 import { QuickUpdateForms } from "@/components/quick-update-forms";
+import { formatDuration } from "@/lib/call-view";
+import { callViewerFor } from "@/lib/call-viewer";
+import { requireUser } from "@/lib/session";
 import {
   AGENT_AFFECTING_STEPS,
+  canSeeCallerNumber,
+  canViewClientCalls,
   clients,
   faqItems,
   formatLocalTime,
+  formatPhone,
   formatTransferTargets,
   knowledgeBases,
+  listCalls,
   needsOwnNumberForwarding,
   OWNER_BLOCKED_STEP_HINT,
   OWNER_BLOCKED_STEPS,
@@ -17,7 +25,6 @@ import {
   transferTargets,
   WIZARD_STEP_TITLES,
 } from "@alinstra/db";
-import { requireUser } from "@/lib/session";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
@@ -42,15 +49,19 @@ export default async function MyBusinessPage() {
   const ctx = { role: session.user.role as "client_owner" | "client_staff", clientId: session.user.clientId };
   const client = await clients(ctx).getById(session.user.clientId);
   if (!client) notFound();
-  const [plan, knowledge, targets, updates] = await Promise.all([
+  const viewer = callViewerFor(session.user);
+  const showCalls = Boolean(viewer && canViewClientCalls(viewer, client.id));
+  const [plan, knowledge, targets, updates, calls] = await Promise.all([
     client.planId ? plans(ctx).getById(client.planId) : Promise.resolve(null),
     knowledgeBases(ctx).getCurrent(session.user.clientId),
     transferTargets(ctx).list(session.user.clientId),
     quickUpdates(ctx).list(session.user.clientId),
+    showCalls && viewer ? listCalls(viewer, client.id, { limit: 5 }) : Promise.resolve({ rows: [], nextCursor: null }),
   ]);
   const owner = session.user.role === "client_owner";
   const faqs = faqItems(knowledge?.faqs);
   const reviewRows = updates.filter((row) => row.status === "held" || (row.status === "rejected" && row.kind === OWNER_STEP_HOLD_KIND)).slice(0, 10);
+  const fullNumbers = viewer ? canSeeCallerNumber(viewer) : false;
   return (
     <main className="mx-auto grid max-w-3xl gap-4 p-6">
       <Link className="text-sm text-[var(--muted)]" href="/home">Home</Link>
@@ -82,6 +93,29 @@ export default async function MyBusinessPage() {
           </p>
         ) : null}
       </section>
+
+      {showCalls ? (
+        <section className="rounded-xl border border-[var(--line)] p-4">
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <h2 className="font-medium">Recent calls</h2>
+            <Link className="text-sm underline" href="/home/calls">All calls</Link>
+          </div>
+          {calls.rows.length === 0 ? <p className="text-sm text-[var(--muted)]">No calls yet.</p> : null}
+          <ul className="grid gap-1 text-sm">
+            {calls.rows.map((call) => (
+              <li key={call.id} className="flex flex-wrap items-center gap-2">
+                <Link href={`/home/calls/${call.id}`}>
+                  {call.startedAt ? formatLocalTime(call.startedAt, client.timezone) : "—"}
+                </Link>
+                <span>
+                  · {fullNumbers ? formatPhone(call.caller) || call.caller : call.caller} · {formatDuration(call.durationSeconds)}
+                </span>
+                <OutcomeBadge outcome={call.outcome} />
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
 
       {owner && reviewRows.length > 0 ? (
         <section className="rounded-xl border border-[var(--line)] p-4">
