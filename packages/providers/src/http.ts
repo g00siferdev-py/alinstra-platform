@@ -46,11 +46,47 @@ export function subscriptionPeriodEnd(body: Record<string, unknown>, now = Date.
   return endsAt;
 }
 
-async function readJson(response: Response): Promise<Record<string, unknown>> {
-  if (response.status === 204) return {};
+function redactSecrets(value: string, secrets: string[]): string {
+  let out = value
+    .replace(/Bearer\s+\S+/gi, "Bearer [redacted]")
+    .replace(/\b(?:sk|rk)_(?:live|test)_[A-Za-z0-9]+/g, "[redacted]")
+    .replace(/\bwhsec_[A-Za-z0-9]+/g, "[redacted]");
+  for (const secret of secrets) {
+    if (secret.length >= 8) out = out.split(secret).join("[redacted]");
+  }
+  return out;
+}
+
+function stringField(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function providerDetail(json: Record<string, unknown> | null, text: string, secrets: string[]): string {
+  const error = json?.error;
+  const nested = error && typeof error === "object" ? (error as Record<string, unknown>) : null;
+  const detail = stringField(json?.message)
+    ?? stringField(error)
+    ?? stringField(json?.error_message)
+    ?? stringField(nested?.message)
+    ?? stringField(nested?.error_message)
+    ?? text.trim();
+  const clipped = redactSecrets(detail, secrets).slice(0, 500);
+  return clipped || "empty response";
+}
+
+async function readBody(response: Response): Promise<{ json: Record<string, unknown> | null; text: string }> {
+  if (response.status === 204) return { json: {}, text: "" };
   const text = await response.text();
-  if (!text) return {};
-  return JSON.parse(text) as Record<string, unknown>;
+  if (!text) return { json: {}, text: "" };
+  try {
+    const parsed = JSON.parse(text) as unknown;
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return { json: parsed as Record<string, unknown>, text };
+    }
+  } catch {
+    return { json: null, text };
+  }
+  return { json: null, text };
 }
 
 export function httpVoice(apiKey: string, fetchImpl: FetchLike = fetch): VoicePlatform {
@@ -63,10 +99,12 @@ export function httpVoice(apiKey: string, fetchImpl: FetchLike = fetch): VoicePl
         ...(init.headers ?? {}),
       },
     });
-    const body = await readJson(response);
+    const { json, text } = await readBody(response);
     if (response.status === 404) throw new ProviderRequestError("Retell object was not found", 404);
-    if (!response.ok) throw new ProviderRequestError(`Retell request failed (${response.status})`, response.status);
-    return { status: response.status, body };
+    if (!response.ok) {
+      throw new ProviderRequestError(`Retell request failed (${response.status}): ${providerDetail(json, text, [apiKey])}`, response.status);
+    }
+    return { status: response.status, body: json ?? {} };
   }
 
   return {
@@ -123,11 +161,13 @@ export function httpVoice(apiKey: string, fetchImpl: FetchLike = fetch): VoicePl
       const { body } = await send("/create-phone-number", {
         method: "POST",
         body: JSON.stringify({
-          inbound_agents: [{ agent_id: input.agentId, agent_version: "latest_published", weight: 1 }],
+          inbound_agents: [{ agent_id: input.agentId, weight: 1 }],
           inbound_webhook_url: input.inboundWebhookUrl,
           nickname: `alinstra-${input.clientId}`,
           allowed_outbound_country_list: ["US", "CA"],
-          ...(input.tollFree ? { toll_free: true } : input.areaCode ? { area_code: input.areaCode } : {}),
+          ...(input.tollFree
+            ? { toll_free: true, number_provider: "twilio", country_code: "US" }
+            : input.areaCode ? { area_code: input.areaCode } : {}),
         }),
       });
       const e164 = String(body.phone_number ?? "");
@@ -214,10 +254,12 @@ export function httpBilling(secretKey: string, fetchImpl: FetchLike = fetch): Bi
     };
     if (init.idempotencyKey) headers["Idempotency-Key"] = init.idempotencyKey;
     const response = await fetchImpl(`https://api.stripe.com${path}`, { ...init, headers });
-    const body = await readJson(response);
+    const { json, text } = await readBody(response);
     if (response.status === 404) throw new ProviderRequestError("Stripe object was not found", 404);
-    if (!response.ok) throw new ProviderRequestError(`Stripe request failed (${response.status})`, response.status);
-    return { status: response.status, body };
+    if (!response.ok) {
+      throw new ProviderRequestError(`Stripe request failed (${response.status}): ${providerDetail(json, text, [secretKey])}`, response.status);
+    }
+    return { status: response.status, body: json ?? {} };
   }
 
   return {

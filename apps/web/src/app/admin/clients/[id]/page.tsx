@@ -1,16 +1,25 @@
 import { ClientActions } from "@/components/client-actions";
 import { ProvisionPanel } from "@/components/provision-panel";
-import { callRecords, changeLogs, clientCanBeRemoved, clientMessages, clients, formatTransferTargets, knowledgeBases, knowledgeDocuments, plans, transferTargets, users } from "@alinstra/db";
+import { callRecords, changeLogs, clientCanBeRemoved, clientMessages, clients, formatTransferTargets, knowledgeBases, knowledgeDocuments, plans, provisioningRuns, transferTargets, users } from "@alinstra/db";
 import { requireAdmin } from "@/lib/session";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+
+function formatClientTime(value: Date, timezone: string): string {
+  const options: Intl.DateTimeFormatOptions = { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" };
+  try {
+    return new Intl.DateTimeFormat("en-US", { ...options, timeZone: timezone }).format(value);
+  } catch {
+    return new Intl.DateTimeFormat("en-US", { ...options, timeZone: "America/New_York" }).format(value);
+  }
+}
 
 export default async function ClientDetailPage({ params }: { params: Promise<{ id: string }> }) {
   await requireAdmin();
   const { id } = await params;
   const client = await clients({ role: "admin" }).getById(id);
   if (!client) notFound();
-  const [plan, knowledge, documents, logs, people, targets, messages, calls] = await Promise.all([
+  const [plan, knowledge, documents, logs, people, targets, messages, calls, run] = await Promise.all([
     client.planId ? plans({ role: "admin" }).getById(client.planId) : Promise.resolve(null),
     knowledgeBases({ role: "admin" }).getCurrent(id),
     knowledgeDocuments({ role: "admin" }).list(id),
@@ -19,7 +28,9 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
     transferTargets({ role: "admin" }).list(id),
     clientMessages({ role: "admin" }).list(id),
     callRecords({ role: "admin" }).list(id),
+    provisioningRuns({ role: "admin" }).latest(id),
   ]);
+  const when = (value: Date) => formatClientTime(value, client.timezone);
   return (
     <main className="mx-auto grid max-w-3xl gap-6 p-6">
       <Link className="text-sm text-[var(--muted)]" href="/admin/clients">Clients</Link>
@@ -51,13 +62,16 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
         phone={client.phoneE164}
         targets={formatTransferTargets(targets)}
         internal={client.internal}
+        runStatus={run?.status ?? null}
+        runKind={run?.kind ?? null}
+        steps={(run?.steps ?? []).map((step) => ({ name: step.name, status: step.status, error: step.error }))}
       />
       <section className="rounded-xl border border-[var(--line)] p-4">
         <h2 className="mb-2 font-medium">Messages</h2>
         {messages.length === 0 ? <p className="text-sm text-[var(--muted)]">No messages yet.</p> : null}
         <ul className="grid gap-2 text-sm">
           {messages.map((message) => (
-            <li key={message.id}>{message.createdAt.toISOString()} · {message.callerName} · {message.callbackNumber} · {message.body}</li>
+            <li key={message.id}>{when(message.createdAt)} · {message.callerName} · {message.callbackNumber} · {message.body}</li>
           ))}
         </ul>
       </section>
@@ -107,7 +121,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
         <h2 className="mb-2 font-medium">Change log</h2>
         <ul className="grid gap-1 text-sm">
           {logs.map((entry) => (
-            <li key={entry.id}>{entry.createdAt.toISOString()} · {entry.actorRole} · {entry.summary}</li>
+            <li key={entry.id}>{when(entry.createdAt)} · {entry.actorRole} · {entry.summary}</li>
           ))}
         </ul>
       </section>

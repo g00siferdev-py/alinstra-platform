@@ -81,19 +81,32 @@ describe("provider HTTP clients", () => {
       areaCode: null,
     });
     expect(bodies[0]).toEqual({
-      inbound_agents: [{ agent_id: "agent_test", agent_version: "latest_published", weight: 1 }],
+      inbound_agents: [{ agent_id: "agent_test", weight: 1 }],
       inbound_webhook_url: "https://staging.alinstra.com/api/retell/inbound",
       nickname: "alinstra-c1",
       allowed_outbound_country_list: ["US", "CA"],
       area_code: 423,
     });
     expect(bodies[1]).toEqual({
-      inbound_agents: [{ agent_id: "agent_zero", agent_version: "latest_published", weight: 1 }],
+      inbound_agents: [{ agent_id: "agent_zero", weight: 1 }],
       inbound_webhook_url: "https://staging.alinstra.com/api/retell/inbound",
       nickname: "alinstra-c0",
       allowed_outbound_country_list: ["US", "CA"],
       toll_free: true,
+      number_provider: "twilio",
+      country_code: "US",
     });
+  });
+
+  it("puts the provider error body on the failure and redacts our key", async () => {
+    const voice = httpVoice("retell-secret-key", async () => new Response(JSON.stringify({ message: "bad area code retell-secret-key" }), { status: 400 }));
+    await expect(voice.createLlm({ clientId: "c1", prompt: "Hello", beginMessage: "Hi", tools: [] })).rejects.toThrow(
+      "Retell request failed (400): bad area code [redacted]",
+    );
+    const billing = httpBilling("sk_test_secret", async () => new Response("not json at all", { status: 402 }));
+    await expect(billing.cancelAtPeriodEnd("sub_test")).rejects.toThrow("Stripe request failed (402): not json at all");
+    const nested = httpBilling("sk_test_secret", async () => new Response(JSON.stringify({ error: { message: "No such customer" } }), { status: 400 }));
+    await expect(nested.cancelAtPeriodEnd("sub_test")).rejects.toThrow("Stripe request failed (400): No such customer");
   });
 
   it("publishes a new agent version when the current one is already published", async () => {
