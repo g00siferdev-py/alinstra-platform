@@ -1,7 +1,16 @@
 export { prisma, createPrismaClient } from "./client";
 export { resetTestDatabase } from "./reset-test-database";
 export { clients, createClient, users } from "./repositories";
-export { plans, seedPlans, updatePlan } from "./plans";
+export {
+  formatIncludedChanges,
+  formatOveragePerMinute,
+  formatPlanCents,
+  plans,
+  publicPlans,
+  seedPlans,
+  updatePlan,
+  type PublicPlan,
+} from "./plans";
 export { publicSiteConfig, resetPublicSiteConfigCache, type PublicSiteConfig } from "./public-site";
 export { confirmDocument, knowledgeBases, knowledgeDocuments, reserveDocument } from "./knowledge";
 export { changeLogs, continueWizard, discardWizard, removeClient, saveWizardDraft, startWizard, submitWizard, wizardDrafts } from "./wizard";

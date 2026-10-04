@@ -67,6 +67,56 @@ const planSelect = {
   sortOrder: true,
 } as const;
 
+export type PublicPlan = {
+  id: string;
+  code: string;
+  name: string;
+  monthlyPriceCents: number;
+  includedMinutes: number;
+  overagePerMinuteCents: number;
+  setupFeeCents: number;
+  includedChangesPerMonth: number | null;
+  recallMonthlyCents: number;
+  recallPerBookingCents: number;
+  sortOrder: number;
+};
+
+/** Tenant-free active plans for the marketing pricing table, ordered by sortOrder. */
+export async function publicPlans(): Promise<PublicPlan[]> {
+  return prisma.plan.findMany({
+    where: { active: true },
+    select: {
+      id: true,
+      code: true,
+      name: true,
+      monthlyPriceCents: true,
+      includedMinutes: true,
+      overagePerMinuteCents: true,
+      setupFeeCents: true,
+      includedChangesPerMonth: true,
+      recallMonthlyCents: true,
+      recallPerBookingCents: true,
+      sortOrder: true,
+    },
+    orderBy: { sortOrder: "asc" },
+  });
+}
+
+/** "$199" from 19900; whole dollars drop the cents. */
+export function formatPlanCents(cents: number): string {
+  const dollars = cents / 100;
+  if (Number.isInteger(dollars)) return `$${dollars}`;
+  return `$${dollars.toFixed(2)}`;
+}
+
+export function formatOveragePerMinute(cents: number): string {
+  return `${formatPlanCents(cents)}/min`;
+}
+
+export function formatIncludedChanges(value: number | null): string {
+  return value === null ? "Unlimited" : String(value);
+}
+
 export function plans(ctx: TenantContext) {
   assertTenantContext(ctx);
   return {
