@@ -10,6 +10,7 @@ import {
   removeClient,
   saveWizardDraft,
   previewWizardPrompt,
+  linkLeadToClient,
   startWizard,
   submitWizard,
   updatePlan,
@@ -41,7 +42,17 @@ function adminActor(session: { user: { id: string } }): Actor {
 export async function startWizardAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
   const session = await requireAdmin();
   try {
-    const client = await startWizard(adminActor(session), String(formData.get("name") ?? ""));
+    const actor = adminActor(session);
+    const client = await startWizard(actor, String(formData.get("name") ?? ""), {
+      contactName: String(formData.get("contactName") ?? "") || null,
+      contactPhone: String(formData.get("contactPhone") ?? "") || null,
+      contactEmail: String(formData.get("contactEmail") ?? "") || null,
+      industry: String(formData.get("industry") ?? "") || null,
+    });
+    const leadId = String(formData.get("leadId") ?? "").trim();
+    if (leadId) {
+      await linkLeadToClient(actor, leadId, client.id).catch(() => undefined);
+    }
     redirect(`/admin/clients/${client.id}/wizard`);
   } catch (error) {
     rethrowRedirect(error);

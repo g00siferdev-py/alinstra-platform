@@ -63,16 +63,47 @@ export function wizardDrafts(ctx: TenantContext) {
   };
 }
 
-export async function startWizard(ctx: Actor, name: string) {
+export async function startWizard(
+  ctx: Actor,
+  name: string,
+  extras: {
+    contactName?: string | null;
+    contactPhone?: string | null;
+    contactEmail?: string | null;
+    industry?: string | null;
+  } = {},
+) {
   assertTenantContext(ctx);
   if (ctx.role !== "admin") throw new Error("Only admin can start a wizard");
   const trimmed = name.trim();
   if (!trimmed) throw new Error("Enter a business name.");
+  const contactName = extras.contactName?.trim() || null;
+  const contactPhone = extras.contactPhone?.trim() || null;
+  const contactEmail = extras.contactEmail?.trim() || null;
+  const industry = extras.industry?.trim() || null;
   return prisma.$transaction(async (tx) => {
     const client = await tx.client.create({
-      data: { name: trimmed, status: "lead", timezone: "America/New_York" },
+      data: {
+        name: trimmed,
+        status: "lead",
+        timezone: "America/New_York",
+        contactName,
+        contactPhone,
+        contactEmail,
+        industry,
+      },
     });
-    const payload = { ...emptyWizardPayload(), business: { name: trimmed, timezone: "America/New_York" } };
+    const payload = {
+      ...emptyWizardPayload(),
+      business: {
+        name: trimmed,
+        timezone: "America/New_York",
+        ...(contactName ? { contactName } : {}),
+        ...(contactPhone ? { contactPhone } : {}),
+        ...(contactEmail ? { contactEmail } : {}),
+        ...(industry ? { industry } : {}),
+      },
+    };
     await tx.wizardDraft.create({
       data: {
         clientId: client.id,

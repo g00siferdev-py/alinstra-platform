@@ -12,6 +12,19 @@ export {
   type PublicPlan,
 } from "./plans";
 export { publicSiteConfig, resetPublicSiteConfigCache, type PublicSiteConfig } from "./public-site";
+export {
+  createLead,
+  leadAdminNotice,
+  leadIndustryLabel,
+  leadMissedCallsLabel,
+  LEAD_INDUSTRIES,
+  LEAD_MISSED_CALLS,
+  linkLeadToClient,
+  listLeads,
+  markLeadContacted,
+  parseLeadInput,
+  type CreateLeadInput,
+} from "./leads";
 export { confirmDocument, knowledgeBases, knowledgeDocuments, reserveDocument } from "./knowledge";
 export { changeLogs, continueWizard, discardWizard, removeClient, saveWizardDraft, startWizard, submitWizard, wizardDrafts } from "./wizard";
 export {

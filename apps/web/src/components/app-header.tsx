@@ -11,6 +11,7 @@ export async function AppHeader() {
       ? [
           ["/home", "Home"],
           ["/admin/clients", "Clients"],
+          ["/admin/leads", "Leads"],
           ["/admin/plans", "Plans"],
           ["/admin/services", "Services"],
         ]

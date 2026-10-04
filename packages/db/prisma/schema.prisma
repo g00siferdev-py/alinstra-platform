@@ -188,6 +188,7 @@ model Client {
   messages                        ClientMessage[]
   callRecords                     CallRecord[]
   provisioningRuns                ProvisioningRun[]
+  leads                           Lead[]
 
   @@index([status])
   @@index([archivedAt])
@@ -489,4 +490,24 @@ model StripePrice {
 
   @@index([planCode, kind])
   @@map("stripe_price")
+}
+
+/// Marketing /start submissions. No auto-reply to the lead; admin is notified by email.
+model Lead {
+  id                String    @id @default(cuid())
+  business          String
+  name              String
+  phone             String
+  email             String
+  industry          String
+  missedCalls       String
+  notes             String?   @db.Text
+  source            String    @default("marketing")
+  createdAt         DateTime  @default(now())
+  contactedAt       DateTime?
+  convertedClientId String?
+  convertedClient   Client?   @relation(fields: [convertedClientId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@map("lead")
 }

@@ -1,6 +1,7 @@
-export const revalidate = 3600;
+import { LeadForm } from "@/components/marketing/lead-form";
 
-/** Part 3 replaces this shell with the lead form. */
+export const dynamic = "force-dynamic";
+
 export default function StartPage() {
   return (
     <main className="mx-auto grid max-w-xl gap-6 px-6 py-16">
@@ -8,7 +9,7 @@ export default function StartPage() {
       <p className="text-[var(--muted)]">
         Tell us about your business and we&apos;ll call you within one business day to walk through setup.
       </p>
-      <p className="text-sm text-[var(--muted)]">The lead form lands in the next step of this release.</p>
+      <LeadForm />
     </main>
   );
 }
