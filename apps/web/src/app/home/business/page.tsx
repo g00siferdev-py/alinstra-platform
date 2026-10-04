@@ -7,9 +7,11 @@ import {
   formatLocalTime,
   formatTransferTargets,
   knowledgeBases,
+  needsOwnNumberForwarding,
   OWNER_BLOCKED_STEP_HINT,
   OWNER_BLOCKED_STEPS,
   OWNER_STEP_HOLD_KIND,
+  phoneModeOf,
   plans,
   quickUpdates,
   transferTargets,
@@ -68,6 +70,17 @@ export default async function MyBusinessPage() {
         <p className="whitespace-pre-wrap">Policies: {knowledge?.policies ? String(knowledge.policies) : "—"}</p>
         <p className="whitespace-pre-wrap">Notices: {knowledge?.notices ? String(knowledge.notices) : "—"}</p>
         <p className="whitespace-pre-wrap">Staff: {knowledge?.staff ? String(knowledge.staff) : "—"}</p>
+        {needsOwnNumberForwarding(client.phone) ? (
+          <p className="mt-3">
+            <Link className="underline" href="/home/business/forwarding">Forward your number</Link>
+            {" "}— set conditional forwarding to your Alinstra number.
+          </p>
+        ) : phoneModeOf(client.phone) === "new_number" ? (
+          <p className="mt-3 text-[var(--muted)]">
+            You use an Alinstra number, so carrier forwarding is not needed.{" "}
+            <span className="opacity-70">Forwarding setup is only for clients who keep their own number.</span>
+          </p>
+        ) : null}
       </section>
 
       {owner && reviewRows.length > 0 ? (

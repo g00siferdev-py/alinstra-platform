@@ -1,7 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { approveQuickUpdate, rejectQuickUpdate } from "./agent";
 import { prisma } from "./client";
-import { OWNER_BLOCKED_STEP_HINT } from "./domain";
+import { needsOwnNumberForwarding, OWNER_BLOCKED_STEP_HINT, phoneModeOf } from "./domain";
 import { OWNER_STEP_HOLD_KIND, VOICE_HOLD_REASON } from "./owner-edit-hold";
 import { resetTestDatabase } from "./reset-test-database";
 import { clientEditPayload, editClientStep } from "./wizard";
@@ -143,6 +143,15 @@ describe("phase 5 owner edit", () => {
     await approveQuickUpdate(admin, row.id);
     expect((await prisma.client.findUniqueOrThrow({ where: { id: client.id } })).voice).toMatchObject({ voiceId: "voice_2", assistantName: "Riley" });
     expect(await prisma.changeLog.count({ where: { clientId: client.id, action: "owner_edit" } })).toBeGreaterThan(0);
+  });
+
+  it("gates the own-number forwarding page by phone.mode", () => {
+    expect(phoneModeOf({ mode: "forward" })).toBe("forward");
+    expect(phoneModeOf({ mode: "new_number" })).toBe("new_number");
+    expect(phoneModeOf({ mode: "own_number" })).toBeNull();
+    expect(phoneModeOf(null)).toBeNull();
+    expect(needsOwnNumberForwarding({ mode: "forward" })).toBe(true);
+    expect(needsOwnNumberForwarding({ mode: "new_number" })).toBe(false);
   });
 
   it("records a rejection reason the owner can read", async () => {

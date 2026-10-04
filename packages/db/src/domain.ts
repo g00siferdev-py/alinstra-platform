@@ -249,6 +249,20 @@ export const OWNER_BLOCKED_STEPS: ReadonlySet<number> = new Set([3, 9]);
 export const OWNER_SUPPORT_EMAIL = "support@alinstra.com";
 export const OWNER_BLOCKED_STEP_HINT = `Email ${OWNER_SUPPORT_EMAIL} to change this.`;
 
+/** Wizard step 8 phone mode. ROADMAP calls this `own_number`; the schema value is `forward`. */
+export type PhoneMode = "forward" | "new_number";
+
+export function phoneModeOf(phone: unknown): PhoneMode | null {
+  if (!phone || typeof phone !== "object" || Array.isArray(phone)) return null;
+  const mode = (phone as { mode?: unknown }).mode;
+  return mode === "forward" || mode === "new_number" ? mode : null;
+}
+
+/** Own-number clients need the carrier forwarding page; Alinstra-number clients do not. */
+export function needsOwnNumberForwarding(phone: unknown): boolean {
+  return phoneModeOf(phone) === "forward";
+}
+
 export function wizardStepTitle(step: number): string {
   return WIZARD_STEP_TITLES[step - 1] ?? `Step ${step}`;
 }

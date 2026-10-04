@@ -102,7 +102,21 @@ export {
   WIZARD_STEP_TITLES,
   wizardStepTitle,
 } from "./domain";
-export { assertTransferNumber, clientIsHealthcare, formatTransferTargets, formatWeeklyHours, maskCaller, normalizePublicPhone, normalizeTransferNumber, officeOpen, plainCallerName, retellPrompt } from "./domain";
+export {
+  assertTransferNumber,
+  clientIsHealthcare,
+  formatTransferTargets,
+  formatWeeklyHours,
+  maskCaller,
+  needsOwnNumberForwarding,
+  normalizePublicPhone,
+  normalizeTransferNumber,
+  officeOpen,
+  phoneModeOf,
+  plainCallerName,
+  retellPrompt,
+  type PhoneMode,
+} from "./domain";
 export { recordEmailChange, type Actor } from "./changes";
 export {
   applyRetellCall,
