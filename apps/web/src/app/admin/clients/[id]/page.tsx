@@ -1,17 +1,38 @@
 import { ClientActions } from "@/components/client-actions";
 import { ProvisionPanel } from "@/components/provision-panel";
-import { AGENT_AFFECTING_STEPS, callRecords, changeLogs, clientCanBeRemoved, clientMessages, clients, formatTransferTargets, knowledgeBases, knowledgeDocuments, plans, provisioningRuns, transferTargets, users, WIZARD_STEP_TITLES } from "@alinstra/db";
+import { getEnv } from "@alinstra/config";
+import {
+  AGENT_AFFECTING_STEPS,
+  callRecords,
+  changeLogs,
+  clientCanBeRemoved,
+  clientMessages,
+  clients,
+  formatLocalTime,
+  formatPhone,
+  formatTransferTargets,
+  knowledgeBases,
+  knowledgeDocuments,
+  numberPurchaseFor,
+  plans,
+  PROVISION_STEPS,
+  provisioningRuns,
+  provisionStepLabel,
+  TEARDOWN_STEPS,
+  transferTargets,
+  users,
+  WIZARD_STEP_TITLES,
+} from "@alinstra/db";
 import { requireAdmin } from "@/lib/session";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-function formatClientTime(value: Date, timezone: string): string {
-  const options: Intl.DateTimeFormatOptions = { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" };
-  try {
-    return new Intl.DateTimeFormat("en-US", { ...options, timeZone: timezone }).format(value);
-  } catch {
-    return new Intl.DateTimeFormat("en-US", { ...options, timeZone: "America/New_York" }).format(value);
-  }
+function orderedSteps(steps: Array<{ name: string; status: string; error: string | null }>, kind: string | null) {
+  const order: readonly string[] = kind === "teardown" ? TEARDOWN_STEPS : PROVISION_STEPS;
+  return order
+    .map((name) => steps.find((step) => step.name === name))
+    .filter((step): step is { name: string; status: string; error: string | null } => step !== undefined)
+    .map((step) => ({ name: step.name, label: provisionStepLabel(step.name), status: step.status, error: step.error }));
 }
 
 export default async function ClientDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -30,7 +51,12 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
     callRecords({ role: "admin" }).list(id),
     provisioningRuns({ role: "admin" }).latest(id),
   ]);
-  const when = (value: Date) => formatClientTime(value, client.timezone);
+  const when = (value: Date) => formatLocalTime(value, client.timezone);
+  const env = getEnv();
+  const numberPurchase = numberPurchaseFor(client.phone, {
+    areaCode: env.RETELL_DEFAULT_AREA_CODE || null,
+    tollFree: env.RETELL_DEFAULT_TOLL_FREE === "true",
+  });
   return (
     <main className="mx-auto grid max-w-3xl gap-6 p-6">
       <Link className="text-sm text-[var(--muted)]" href="/admin/clients">Clients</Link>
@@ -60,11 +86,14 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
         checkoutUrl={client.stripeCheckoutUrl}
         billingStatus={client.billingStatus}
         phone={client.phoneE164}
+        phoneDisplay={client.phoneE164 ? formatPhone(client.phoneE164) : null}
         targets={formatTransferTargets(targets)}
         internal={client.internal}
         runStatus={run?.status ?? null}
         runKind={run?.kind ?? null}
-        steps={(run?.steps ?? []).map((step) => ({ name: step.name, status: step.status, error: step.error }))}
+        steps={orderedSteps(run?.steps ?? [], run?.kind ?? null)}
+        numberApproved={Boolean(run?.numberApprovedAt)}
+        numberPurchase={numberPurchase}
       />
       {client.wizardSubmittedAt ? (
         <section className="rounded-xl border border-[var(--line)] p-4">

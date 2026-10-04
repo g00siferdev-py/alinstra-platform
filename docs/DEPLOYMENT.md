@@ -303,6 +303,12 @@ Retell webhook URL: `https://staging.alinstra.com/api/retell/webhook`. Inbound U
 
 Toll-free numbers need a toll-free verification before they can send texts. That is a Phase 5 step, not part of buying the number for voice.
 
+### Number purchase approval (Phase 4)
+
+Retell's API has no "list available numbers" endpoint; `POST /create-phone-number` buys whatever matches the area code or toll-free flag. Because the admin cannot pick a specific number, the admin page uses a confirmation modal instead of a picker. **Start provisioning** opens the modal, which names the kind of number (toll-free, or local in the wizard's area code or `RETELL_DEFAULT_AREA_CODE`) and its monthly cost (toll-free $5/month plus $0.06 per inbound minute; local $2/month). Nothing is bought until the admin clicks **Confirm and buy**; that stamps `numberApprovedAt` on the provisioning run. A run that reaches `retell_number` without that stamp stops with the step marked `awaiting_approval` and the page shows an **Approve and buy number** button. The worker never buys a number for a run without `numberApprovedAt`.
+
+When any provisioning step fails, the worker emails `ADMIN_EMAIL` (or the admin who started the run when that variable is empty) with the client, the step label, the provider error text, and a link to the client page. The same error text appears on the client page in a copyable block.
+
 ### How to verify this step
 
 - A client with two-factor admin can start provisioning and the page shows a Checkout link before the client is live. The link opens `/billing/thanks` after payment, which does not require an admin login.

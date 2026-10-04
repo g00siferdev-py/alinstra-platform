@@ -7,6 +7,26 @@ export type EmailMessage = {
   text: string;
 };
 
+/** Plain-text email sent to the admin when a provisioning run stops on a failed step. */
+export function provisionFailedEmail(input: {
+  clientName: string;
+  stepLabel: string;
+  error: string;
+  clientUrl: string;
+}): Pick<EmailMessage, "subject" | "text"> {
+  return {
+    subject: `Provisioning failed for ${input.clientName} at "${input.stepLabel}"`,
+    text: [
+      `Provisioning for ${input.clientName} stopped at the step "${input.stepLabel}".`,
+      "",
+      "Provider error:",
+      input.error.trim() || "No error detail was recorded.",
+      "",
+      `Open the client to retry: ${input.clientUrl}`,
+    ].join("\n"),
+  };
+}
+
 export async function sendEmail(message: EmailMessage): Promise<void> {
   const env = getEnv();
   if (env.EMAIL_TRANSPORT === "console") {

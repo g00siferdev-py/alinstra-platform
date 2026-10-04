@@ -1,5 +1,6 @@
 import { AppHeader } from "@/components/app-header";
 import { NavigationGuard } from "@/components/navigation-guard";
+import { ToastProvider } from "@/components/toast";
 import type { Metadata } from "next";
 import "./globals.css";
 
@@ -12,10 +13,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body>
-        <NavigationGuard>
-          <AppHeader />
-          {children}
-        </NavigationGuard>
+        <ToastProvider>
+          <NavigationGuard>
+            <AppHeader />
+            {children}
+          </NavigationGuard>
+        </ToastProvider>
       </body>
     </html>
   );

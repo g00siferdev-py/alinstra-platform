@@ -8,7 +8,12 @@ vi.mock("@alinstra/providers", () => ({ verifyRetell: () => true }));
 vi.mock("@alinstra/db", () => ({
   clientIdForRetellAgent: vi.fn(async () => "client_1"),
   plainCallerName: (value: string) => value.split("\n").join(" ").trim() || "Caller",
-  recordTakenMessage: vi.fn(async () => ({ sentence: "I've passed that message to the office.", recipients: ["office@example.com"] })),
+  recordTakenMessage: vi.fn(async () => ({
+    sentence: "I've passed that message to the office.",
+    recipients: ["office@example.com"],
+    receivedAt: new Date("2026-10-04T15:34:00.000Z"),
+    timezone: "America/New_York",
+  })),
 }));
 vi.mock("@alinstra/queue", () => ({
   enqueueMessageEmail: vi.fn(async () => undefined),
@@ -47,5 +52,8 @@ describe("take message route", () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ result: "I've passed that message to the office." });
     expect(recordTakenMessage).toHaveBeenCalled();
+    const again = await call({ caller_name: "Pat", callback_number: "4155550100", message: "The heat is out" });
+    expect(again.status).toBe(200);
+    expect(enqueueMessageEmail).toHaveBeenLastCalledWith(expect.objectContaining({ receivedAt: "2026-10-04T15:34:00.000Z", timezone: "America/New_York" }));
   });
 });

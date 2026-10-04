@@ -102,7 +102,7 @@ describe("phase 3 provisioning", () => {
     const voice = new MemoryVoice();
     const billing = new MemoryBilling();
     await billing.createCustomer({ clientId: client.id, name: client.name, email: null, idempotencyKey: "already" });
-    await startProvisioning(admin, client.id);
+    await startProvisioning(admin, client.id, { numberApproved: true });
     await advanceProvisioning(admin, client.id, deps(voice, billing));
     expect(billing.creates.customer).toBe(1);
     const stored = await prisma.client.findUniqueOrThrow({ where: { id: client.id } });
@@ -134,7 +134,7 @@ describe("phase 3 provisioning", () => {
     const voice = new MemoryVoice();
     const billing = new MemoryBilling();
     const used = deps(voice, billing);
-    await startProvisioning(admin, client.id);
+    await startProvisioning(admin, client.id, { numberApproved: true });
     await advanceProvisioning(admin, client.id, used);
     expect(billing.creates.customer).toBe(0);
     const live = await prisma.client.findUniqueOrThrow({ where: { id: client.id } });
@@ -158,7 +158,7 @@ describe("phase 3 provisioning", () => {
     const voice = new MemoryVoice();
     const billing = new MemoryBilling();
     const used = deps(voice, billing);
-    await startProvisioning(admin, client.id);
+    await startProvisioning(admin, client.id, { numberApproved: true });
     await advanceProvisioning(admin, client.id, used);
     await prisma.client.update({
       where: { id: client.id },
@@ -183,7 +183,7 @@ describe("phase 3 provisioning", () => {
     const other = await seedClient({ name: "Immediate" });
     const voice2 = new MemoryVoice();
     const billing2 = new MemoryBilling();
-    await startProvisioning(admin, other.id);
+    await startProvisioning(admin, other.id, { numberApproved: true });
     await advanceProvisioning(admin, other.id, deps(voice2, billing2));
     voice2.missingDeletes.add((await prisma.client.findUniqueOrThrow({ where: { id: other.id } })).phoneE164 ?? "");
     await endServiceNow(admin, other.id, deps(voice2, billing2));
@@ -248,7 +248,7 @@ describe("phase 3 provisioning", () => {
     const client = await seedClient({ internal: true, name: "Synced" });
     const voice = new MemoryVoice();
     const billing = new MemoryBilling();
-    await startProvisioning(admin, client.id);
+    await startProvisioning(admin, client.id, { numberApproved: true });
     await advanceProvisioning(admin, client.id, deps(voice, billing));
     const result = await applyQuickUpdate(
       { id: `owner_${client.id}`, role: "client_owner", clientId: client.id },
@@ -265,7 +265,7 @@ describe("phase 3 provisioning", () => {
     const voice = new MemoryVoice();
     const billing = new MemoryBilling();
     const used = deps(voice, billing);
-    await startProvisioning(admin, client.id);
+    await startProvisioning(admin, client.id, { numberApproved: true });
     await advanceProvisioning(admin, client.id, used);
     await prisma.knowledgeBase.create({ data: { clientId: client.id, version: 1, status: "submitted", hours: "Mon 9:00-17:00" } });
     const result = await applyQuickUpdate(
@@ -282,7 +282,7 @@ describe("phase 3 provisioning", () => {
     const client = await seedClient({ name: "Custom" });
     await prisma.client.update({ where: { id: client.id }, data: { overrideMonthlyPriceCents: 2500 } });
     const billing = new MemoryBilling();
-    await startProvisioning(admin, client.id);
+    await startProvisioning(admin, client.id, { numberApproved: true });
     await advanceProvisioning(admin, client.id, deps(new MemoryVoice(), billing));
     expect(billing.prices.get(`client_${client.id}_monthly`)?.amountCents).toBe(2500);
     expect([...billing.prices.keys()].some((key) => key.startsWith("plan_") && key.endsWith("_monthly"))).toBe(false);
@@ -316,7 +316,7 @@ describe("phase 3 provisioning", () => {
     const sweep = await runDueTeardowns(deps(new MemoryVoice(), new MemoryBilling()));
     expect(sweep.skipped).toEqual([client.id]);
     expect((await prisma.client.findUniqueOrThrow({ where: { id: client.id } })).status).toBe("live");
-    await startProvisioning(admin, client.id);
+    await startProvisioning(admin, client.id, { numberApproved: true });
     await failProvisioning(client.id, "Missing RETELL_API_KEY");
     expect((await prisma.provisioningRun.findFirstOrThrow({ where: { clientId: client.id, kind: "provision" } })).status).toBe("failed");
   });

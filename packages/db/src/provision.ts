@@ -23,8 +23,31 @@ import {
 import { assertTenantContext, type TenantContext } from "./tenant";
 import { testDatabaseUrl } from "./test-database-url";
 
-const PROVISION_STEPS = ["stripe_customer", "stripe_checkout", "retell_llm", "retell_agent", "retell_number", "retell_bind"] as const;
-const TEARDOWN_STEPS = ["retell_number", "retell_agent", "retell_llm"] as const;
+export const PROVISION_STEPS = ["stripe_customer", "stripe_checkout", "retell_llm", "retell_agent", "retell_number", "retell_bind"] as const;
+export const TEARDOWN_STEPS = ["retell_number", "retell_agent", "retell_llm"] as const;
+
+/** Human labels for provisioning steps, shared by the admin UI and the failure email. */
+export const PROVISION_STEP_LABELS: Record<string, string> = {
+  stripe_customer: "Create billing account",
+  stripe_checkout: "Create payment link",
+  retell_llm: "Build receptionist",
+  retell_agent: "Create voice agent",
+  retell_number: "Buy phone number",
+  retell_bind: "Connect and publish",
+};
+
+export function provisionStepLabel(name: string): string {
+  return PROVISION_STEP_LABELS[name] ?? name;
+}
+
+/** Step status used while a run waits for the admin to approve buying a phone number. */
+export const AWAITING_NUMBER_APPROVAL = "awaiting_approval";
+
+/** Retell number pricing shown in the approval modal. Toll-free also bills inbound minutes. */
+export const NUMBER_PRICING = {
+  tollFree: { monthlyCents: 500, inboundPerMinuteCents: 6 },
+  local: { monthlyCents: 200, inboundPerMinuteCents: 0 },
+} as const;
 
 const WEBHOOK_ACTOR: Actor = { id: "provider-webhook", role: "admin" };
 
@@ -265,7 +288,28 @@ export async function clientIdForRetellAgent(agentId: string): Promise<string | 
   return client?.id ?? null;
 }
 
-export async function startProvisioning(ctx: Actor, clientId: string): Promise<{ runId: string }> {
+/** What the number step will buy for this client, so the admin can approve it with the price in front of them. */
+export function numberPurchaseFor(phone: unknown, defaults: { areaCode: string | null; tollFree: boolean }): {
+  tollFree: boolean;
+  areaCode: string | null;
+  monthlyCents: number;
+  inboundPerMinuteCents: number;
+} {
+  const choice = numberChoice(phone, defaults);
+  const pricing = choice.tollFree ? NUMBER_PRICING.tollFree : NUMBER_PRICING.local;
+  return {
+    tollFree: choice.tollFree,
+    areaCode: choice.areaCode === null ? null : String(choice.areaCode),
+    monthlyCents: pricing.monthlyCents,
+    inboundPerMinuteCents: pricing.inboundPerMinuteCents,
+  };
+}
+
+/**
+ * Starts a provisioning run. `numberApproved` records that the admin confirmed the number purchase in the
+ * modal; without it the run stops before `retell_number` and waits for `approveNumberPurchase`.
+ */
+export async function startProvisioning(ctx: Actor, clientId: string, options: { numberApproved?: boolean } = {}): Promise<{ runId: string }> {
   if (ctx.role !== "admin") throw new Error("Only an admin can provision a client.");
   const { client, config } = await loadReady(clientId);
   if (!client.wizardSubmittedAt) throw new Error("Submit the wizard before provisioning.");
@@ -276,7 +320,10 @@ export async function startProvisioning(ctx: Actor, clientId: string): Promise<{
     where: { clientId, kind: "provision", status: { in: ["running", "failed"] } },
     orderBy: { createdAt: "desc" },
   });
-  if (existing) return { runId: existing.id };
+  if (existing) {
+    if (options.numberApproved && !existing.numberApprovedAt) await approveNumberPurchase(ctx, clientId);
+    return { runId: existing.id };
+  }
   try {
   return await prisma.$transaction(async (tx) => {
     const run = await tx.provisioningRun.create({
@@ -285,6 +332,7 @@ export async function startProvisioning(ctx: Actor, clientId: string): Promise<{
         kind: "provision",
         status: "running",
         createdById: ctx.id,
+        numberApprovedAt: options.numberApproved ? new Date() : null,
         steps: { create: PROVISION_STEPS.map((name) => ({ name, status: "pending" })) },
       },
     });
@@ -294,7 +342,8 @@ export async function startProvisioning(ctx: Actor, clientId: string): Promise<{
       action: "provision.started",
       entityType: "provisioning_run",
       entityId: run.id,
-      summary: `Started provisioning for ${client.name}`,
+      summary: `Started provisioning for ${client.name}${options.numberApproved ? " (number purchase approved)" : ""}`,
+      after: { numberApproved: Boolean(options.numberApproved) },
     });
     return { runId: run.id };
   });
@@ -308,6 +357,65 @@ export async function startProvisioning(ctx: Actor, clientId: string): Promise<{
     }
     throw error;
   }
+}
+
+/**
+ * Records the admin's explicit click on the "Buy number" modal. The provisioning run will not call
+ * createNumber until this has happened.
+ */
+export async function approveNumberPurchase(ctx: Actor, clientId: string): Promise<{ runId: string }> {
+  if (ctx.role !== "admin") throw new Error("Only an admin can approve a number purchase.");
+  const run = await prisma.provisioningRun.findFirst({
+    where: { clientId, kind: "provision", status: { in: ["running", "failed"] } },
+    orderBy: { createdAt: "desc" },
+    include: { steps: true },
+  });
+  if (!run) throw new Error("Start provisioning first.");
+  const client = await prisma.client.findFirstOrThrow({ where: { id: clientId }, select: { name: true } });
+  await prisma.$transaction(async (tx) => {
+    await tx.provisioningRun.update({ where: { id: run.id }, data: { numberApprovedAt: run.numberApprovedAt ?? new Date(), status: "running", finishedAt: null } });
+    const waiting = run.steps.find((step) => step.name === "retell_number" && step.status === AWAITING_NUMBER_APPROVAL);
+    if (waiting) await tx.provisioningStep.update({ where: { id: waiting.id }, data: { status: "pending", error: null } });
+    await recordChange(tx, {
+      clientId,
+      actor: ctx,
+      action: "provision.number_approved",
+      entityType: "provisioning_run",
+      entityId: run.id,
+      summary: `Approved buying a phone number for ${client.name}`,
+    });
+  });
+  return { runId: run.id };
+}
+
+export type ProvisionFailure = {
+  clientId: string;
+  clientName: string;
+  stepName: string;
+  stepLabel: string;
+  error: string;
+  runOwnerEmail: string | null;
+};
+
+/** Details of the latest failed provisioning run, for the failure email. Null when the latest run did not fail. */
+export async function latestProvisionFailure(clientId: string): Promise<ProvisionFailure | null> {
+  const run = await prisma.provisioningRun.findFirst({
+    where: { clientId, kind: "provision" },
+    orderBy: { createdAt: "desc" },
+    include: { steps: true },
+  });
+  if (!run || run.status !== "failed") return null;
+  const client = await prisma.client.findFirst({ where: { id: clientId }, select: { name: true } });
+  const step = run.steps.find((item) => item.status === "failed");
+  const owner = await prisma.user.findUnique({ where: { id: run.createdById }, select: { email: true } });
+  return {
+    clientId,
+    clientName: client?.name ?? clientId,
+    stepName: step?.name ?? "unknown",
+    stepLabel: step ? provisionStepLabel(step.name) : "Unknown step",
+    error: step?.error ?? "No error detail was recorded.",
+    runOwnerEmail: owner?.email ?? null,
+  };
 }
 
 export async function failProvisioning(clientId: string, message: string): Promise<void> {
@@ -477,6 +585,16 @@ async function advanceProvisioningBody(ctx: Actor, clientId: string, deps: Phase
   for (const name of PROVISION_STEPS) {
     const step = run.steps.find((item) => item.name === name);
     if (step?.status === "succeeded") continue;
+    if (name === "retell_number" && !run.numberApprovedAt) {
+      const current = await prisma.client.findFirst({ where: { id: clientId }, select: { phoneE164: true } });
+      if (!current?.phoneE164) {
+        // Buying a number costs money every month. Stop here until the admin confirms it in the modal.
+        if (step?.status !== AWAITING_NUMBER_APPROVAL) {
+          await markStep(run.id, name, { status: AWAITING_NUMBER_APPROVAL, error: null }, actor, clientId, "Waiting for approval to buy a phone number");
+        }
+        return { status: AWAITING_NUMBER_APPROVAL };
+      }
+    }
     await markStep(run.id, name, { status: "running", error: null }, actor, clientId, `Running ${name}`);
     try {
       const externalId = await runProvisionStep(name, clientId, deps);
@@ -826,13 +944,13 @@ export async function recordTakenMessage(
   clientId: string,
   args: { callerName?: string; callbackNumber?: string; message?: string },
   danielEmail: string | null,
-): Promise<{ sentence: string; recipients: string[] }> {
+): Promise<{ sentence: string; recipients: string[]; receivedAt: Date; timezone: string }> {
   const client = await prisma.client.findFirst({ where: { id: clientId, archivedAt: null } });
   if (!client) throw new Error("That client is not available.");
   const body = (args.message ?? "").trim();
   if (!body) throw new Error("A message is required.");
   const recipients = recipientsOf(client.features, client.internal, danielEmail);
-  await prisma.$transaction(async (tx) => {
+  const receivedAt = await prisma.$transaction(async (tx) => {
     const row = await tx.clientMessage.create({
       data: {
         clientId,
@@ -849,8 +967,9 @@ export async function recordTakenMessage(
       entityId: row.id,
       summary: `Stored a message for ${client.name}`,
     });
+    return row.createdAt;
   });
-  return { sentence: "I've passed that message to the office.", recipients };
+  return { sentence: "I've passed that message to the office.", recipients, receivedAt, timezone: client.timezone };
 }
 
 export type TransferDecision = { allowed: true; tool: string } | { allowed: false; reason: string };

@@ -7,9 +7,13 @@ import { diffSection } from "./edit-diff";
 import { clientEditPayload, editClientStep } from "./wizard";
 import {
   advanceProvisioning,
+  approveNumberPurchase,
+  AWAITING_NUMBER_APPROVAL,
   createClientZero,
   decideTransfer,
   inboundVariables,
+  latestProvisionFailure,
+  numberPurchaseFor,
   replaceTransferTargets,
   startProvisioning,
   syncProvisionedAgent,
@@ -107,7 +111,7 @@ describe("phase 4 privacy", () => {
   it("publishes transfer tools by label with no phone number in any name or description", async () => {
     const client = await seedClient();
     const voice = new MemoryVoice();
-    await startProvisioning(admin, client.id);
+    await startProvisioning(admin, client.id, { numberApproved: true });
     await advanceProvisioning(admin, client.id, deps(voice, new MemoryBilling()));
     const stored = await prisma.client.findUniqueOrThrow({ where: { id: client.id } });
     const llm = voice.llms.get(stored.retellLlmId ?? "");
@@ -155,7 +159,7 @@ describe("phase 4 privacy", () => {
     const client = await seedClient({ internal: true, name: "Alinstra" });
     const voice = new MemoryVoice();
     const used = deps(voice, new MemoryBilling());
-    await startProvisioning(admin, client.id);
+    await startProvisioning(admin, client.id, { numberApproved: true });
     await advanceProvisioning(admin, client.id, used);
     const stored = await prisma.client.findUniqueOrThrow({ where: { id: client.id } });
     const active = await prisma.agentConfig.findFirstOrThrow({ where: { clientId: client.id, status: "active" } });
@@ -183,7 +187,7 @@ describe("phase 4 privacy", () => {
   it("edits a live client step by step: new config, redacted change log, sync only when Ava is affected", async () => {
     const client = await seedClient();
     const voice = new MemoryVoice();
-    await startProvisioning(admin, client.id);
+    await startProvisioning(admin, client.id, { numberApproved: true });
     await advanceProvisioning(admin, client.id, deps(voice, new MemoryBilling()));
     const before = await prisma.agentConfig.findFirstOrThrow({ where: { clientId: client.id, status: "active" } });
     const base = await clientEditPayload(admin, client.id);
@@ -277,7 +281,7 @@ describe("phase 4 privacy", () => {
     });
     const voice = new MemoryVoice();
     const used = deps(voice, new MemoryBilling());
-    await startProvisioning(admin, client.id);
+    await startProvisioning(admin, client.id, { numberApproved: true });
     await advanceProvisioning(admin, client.id, used);
     const stored = await prisma.client.findUniqueOrThrow({ where: { id: client.id } });
     const tools = voice.llms.get(stored.retellLlmId ?? "")?.tools ?? [];
@@ -332,6 +336,52 @@ describe("phase 4 privacy", () => {
     await prisma.wizardDraft.deleteMany({ where: { clientId: first.id } });
     await createClientZero(admin);
     expect(await prisma.wizardDraft.count({ where: { clientId: first.id } })).toBe(0);
+  });
+
+  it("never buys a number until the admin approves it, then resumes the run", async () => {
+    const client = await seedClient();
+    const voice = new MemoryVoice();
+    const used = deps(voice, new MemoryBilling());
+    await startProvisioning(admin, client.id);
+    expect(await advanceProvisioning(admin, client.id, used)).toEqual({ status: AWAITING_NUMBER_APPROVAL });
+    expect(voice.creates.number).toBe(0);
+    expect(voice.creates.agent).toBe(1);
+    const run = await prisma.provisioningRun.findFirstOrThrow({ where: { clientId: client.id }, include: { steps: true } });
+    expect(run.status).toBe("running");
+    expect(run.numberApprovedAt).toBeNull();
+    expect(run.steps.find((step) => step.name === "retell_number")?.status).toBe(AWAITING_NUMBER_APPROVAL);
+    expect(run.steps.find((step) => step.name === "retell_bind")?.status).toBe("pending");
+    expect(await advanceProvisioning(admin, client.id, used)).toEqual({ status: AWAITING_NUMBER_APPROVAL });
+    expect(voice.creates.number).toBe(0);
+    expect(await latestProvisionFailure(client.id)).toBeNull();
+
+    await approveNumberPurchase(admin, client.id);
+    const approved = await prisma.provisioningRun.findUniqueOrThrow({ where: { id: run.id }, include: { steps: true } });
+    expect(approved.numberApprovedAt).toBeInstanceOf(Date);
+    expect(approved.steps.find((step) => step.name === "retell_number")?.status).toBe("pending");
+    expect(await advanceProvisioning(admin, client.id, used)).toEqual({ status: "succeeded" });
+    expect(voice.creates.number).toBe(1);
+    expect((await prisma.client.findUniqueOrThrow({ where: { id: client.id } })).phoneE164).toMatch(/^\+1555/);
+    expect(numberPurchaseFor({ tollFree: true }, { areaCode: null, tollFree: false })).toEqual({ tollFree: true, areaCode: null, monthlyCents: 500, inboundPerMinuteCents: 6 });
+    expect(numberPurchaseFor({ areaCode: "423" }, { areaCode: null, tollFree: false })).toEqual({ tollFree: false, areaCode: "423", monthlyCents: 200, inboundPerMinuteCents: 0 });
+  });
+
+  it("describes the latest failed run for the failure email", async () => {
+    const client = await seedClient();
+    const voice = new MemoryVoice();
+    voice.failSync = true;
+    await prisma.user.create({ data: { id: admin.id, name: "Admin", email: "ops@example.com", role: "admin" } });
+    await startProvisioning(admin, client.id, { numberApproved: true });
+    expect(await advanceProvisioning(admin, client.id, deps(voice, new MemoryBilling()))).toEqual({ status: "failed" });
+    const failure = await latestProvisionFailure(client.id);
+    expect(failure).toEqual({
+      clientId: client.id,
+      clientName: "West Dental Lab",
+      stepName: "retell_bind",
+      stepLabel: "Connect and publish",
+      error: "Retell sync failed",
+      runOwnerEmail: "ops@example.com",
+    });
   });
 
   it("normalizes and validates the public phone and email", () => {

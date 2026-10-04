@@ -39,6 +39,8 @@ export async function POST(request: Request): Promise<Response> {
           recipients: saved.recipients,
           callerName,
           body: body.args?.message?.trim() || "Message",
+          receivedAt: saved.receivedAt.toISOString(),
+          timezone: saved.timezone,
         });
       } catch (error) {
         log("error", "message email was not queued", { error: error instanceof Error ? error.name : "unknown" });

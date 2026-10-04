@@ -1,4 +1,4 @@
-import { changeRequests, clientMessages, clients, plans, quickUpdates, type TenantContext } from "@alinstra/db";
+import { changeRequests, clientMessages, clients, formatLocalTime, plans, quickUpdates, type TenantContext } from "@alinstra/db";
 import { requireUser } from "@/lib/session";
 import Link from "next/link";
 
@@ -10,6 +10,7 @@ export default async function HomePage() {
   const clientId = session.user.clientId;
   let messages: Array<{ id: string; callerName: string; body: string; createdAt: Date }> = [];
   let clientName: string | null = null;
+  let clientTimezone = "America/New_York";
   let planName: string | null = null;
   let minutes = 0;
   let heldUpdates: Array<{ id: string; clientId: string; kind: string }> = [];
@@ -23,6 +24,7 @@ export default async function HomePage() {
     messages = messageRows;
     const plan = client?.planId ? await plans(ctx).getById(client.planId) : null;
     clientName = client?.name ?? null;
+    clientTimezone = client?.timezone ?? clientTimezone;
     planName = plan?.name ?? null;
     minutes = client?.overrideIncludedMinutes ?? plan?.includedMinutes ?? 0;
   }
@@ -80,7 +82,7 @@ export default async function HomePage() {
             {messages.length === 0 ? <p className="text-[var(--muted)]">No messages yet.</p> : null}
             <ul className="grid gap-1">
               {messages.map((message) => (
-                <li key={message.id}>{message.createdAt.toISOString()} · {message.callerName}: {message.body}</li>
+                <li key={message.id}>{formatLocalTime(message.createdAt, clientTimezone)} · {message.callerName}: {message.body}</li>
               ))}
             </ul>
           </div>

@@ -2,6 +2,7 @@
 
 import { getEnv, log } from "@alinstra/config";
 import {
+  approveNumberPurchase,
   createClientZero,
   endServiceNow,
   refreshPaymentLink,
@@ -37,15 +38,33 @@ function message(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
 }
 
-export async function startProvisioningAction(clientId: string) {
+/**
+ * Starts (or resumes) a provisioning run. `numberApproved` is only true when the admin
+ * clicked the confirmation in the number-purchase modal; without it the run stops before
+ * the `retell_number` step and waits.
+ */
+export async function startProvisioningAction(clientId: string, options: { numberApproved?: boolean } = {}) {
   const session = await requireAdmin();
   try {
-    await startProvisioning(adminActor(session), clientId);
+    await startProvisioning(adminActor(session), clientId, { numberApproved: options.numberApproved === true });
     await enqueueProvisionClient({ clientId });
     revalidatePath(`/admin/clients/${clientId}`);
     return { ok: true };
   } catch (error) {
     return { error: message(error, "Could not start provisioning.") };
+  }
+}
+
+/** Records the admin's explicit approval of the number purchase and resumes the waiting run. */
+export async function approveNumberPurchaseAction(clientId: string) {
+  const session = await requireAdmin();
+  try {
+    await approveNumberPurchase(adminActor(session), clientId);
+    await enqueueProvisionClient({ clientId });
+    revalidatePath(`/admin/clients/${clientId}`);
+    return { ok: true };
+  } catch (error) {
+    return { error: message(error, "Could not approve the number purchase.") };
   }
 }
 

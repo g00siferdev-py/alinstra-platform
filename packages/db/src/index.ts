@@ -27,7 +27,7 @@ export {
   submitChangeRequest,
 } from "./agent";
 export type { ReceptionistFields } from "./agent";
-export { faqItems, type QuickUpdateInput } from "@alinstra/agent";
+export { faqItems, formatLocalTime, formatPhone, type QuickUpdateInput } from "@alinstra/agent";
 export {
   DEFAULT_TIMEZONE,
   EXTRA_CHANGE_FEE_CENTS,
@@ -48,8 +48,18 @@ export {
 export { assertTenantContext, ROLES, type Role, type TenantContext } from "./tenant";
 export {
   advanceProvisioning,
+  approveNumberPurchase,
+  AWAITING_NUMBER_APPROVAL,
   clientIdForRetellAgent,
   createClientZero,
+  latestProvisionFailure,
+  NUMBER_PRICING,
+  numberPurchaseFor,
+  PROVISION_STEP_LABELS,
+  PROVISION_STEPS,
+  provisionStepLabel,
+  TEARDOWN_STEPS,
+  type ProvisionFailure,
   applyRetellCall,
   applyStripeEvent,
   callRecords,

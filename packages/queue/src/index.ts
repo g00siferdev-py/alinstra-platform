@@ -45,6 +45,9 @@ export const sendMessageEmail = z.object({
   recipients: z.array(z.string().email()).min(1),
   callerName: z.string().min(1),
   body: z.string().min(1),
+  /** ISO timestamp of when the message was taken; rendered in the client's timezone. */
+  receivedAt: z.string().datetime().optional(),
+  timezone: z.string().min(1).optional(),
 });
 
 export type SyncAgent = z.infer<typeof syncAgent>;

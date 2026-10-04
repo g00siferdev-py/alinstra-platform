@@ -2,6 +2,7 @@
 
 import { continueWizardAction, discardWizardAction, editClientStepAction, previewWizardPromptAction, saveDraftAction, submitWizardAction } from "@/app/admin/actions";
 import { useNavigationGuard } from "@/components/navigation-guard";
+import { useToast } from "@/components/toast";
 import { Button, ErrorText, FileDropzone, Input } from "@/components/ui";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -141,6 +142,7 @@ export function WizardForm({
   provisioned?: boolean;
 }) {
   const router = useRouter();
+  const toast = useToast();
   const editing = mode === "edit";
   const [step, setStep] = useState(initialStep);
   const [editNote, setEditNote] = useState<{ tone: "ok" | "warn"; text: string } | null>(null);
@@ -248,6 +250,7 @@ export function WizardForm({
     setPending(false);
     if (!result.ok) {
       setError(result.error);
+      toast.error("Save failed", result.error);
       return;
     }
     const synced = result.sync
@@ -259,6 +262,7 @@ export function WizardForm({
       ? `${result.title} saved. Nothing changed.`
       : `${result.title} saved.${synced}`;
     setEditNote(result.stripeWarning ? { tone: "warn", text: `${text} ${STRIPE_WARNING}` } : { tone: "ok", text });
+    toast.success(`${result.title} saved`, result.stripeWarning ? STRIPE_WARNING : synced.trim() || undefined);
     router.refresh();
   }
 

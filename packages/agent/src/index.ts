@@ -40,3 +40,4 @@ export {
 } from "./validate";
 export { allowanceState, calendarMonthRange, isIanaTimezone, type AllowanceState } from "./allowance";
 export { diffFields, diffLines, type FieldDiff, type LineDiff } from "./diff";
+export { formatLocalTime, formatPhone } from "./format";
