@@ -45,7 +45,7 @@ export function LeadForm() {
           id="industry"
           name="industry"
           required
-          className="w-full rounded-md border border-[var(--line)] bg-white px-3 py-2 text-sm"
+          className="w-full rounded-md border border-[var(--line)] bg-[var(--card)] px-3 py-2 text-sm text-[var(--ink)]"
           value={industry}
           onChange={(event) => setIndustry(event.target.value)}
         >
@@ -71,7 +71,7 @@ export function LeadForm() {
           id="missedCalls"
           name="missedCalls"
           required
-          className="w-full rounded-md border border-[var(--line)] bg-white px-3 py-2 text-sm"
+          className="w-full rounded-md border border-[var(--line)] bg-[var(--card)] px-3 py-2 text-sm text-[var(--ink)]"
           defaultValue=""
         >
           <option value="" disabled>
@@ -90,7 +90,7 @@ export function LeadForm() {
           name="notes"
           rows={3}
           maxLength={2000}
-          className="w-full rounded-md border border-[var(--line)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--accent)]"
+          className="w-full rounded-md border border-[var(--line)] bg-[var(--card)] px-3 py-2 text-sm text-[var(--ink)] outline-none focus:border-[var(--accent)]"
         />
       </div>
       {state && !state.ok ? <ErrorText>{state.error}</ErrorText> : null}

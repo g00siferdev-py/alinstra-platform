@@ -20,7 +20,7 @@ export function Label(props: LabelHTMLAttributes<HTMLLabelElement>) {
 export function Input(props: InputHTMLAttributes<HTMLInputElement>) {
   return (
     <input
-      className="w-full rounded-md border border-[var(--line)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--accent)]"
+      className="w-full rounded-md border border-[var(--line)] bg-[var(--card)] px-3 py-2 text-sm text-[var(--ink)] outline-none focus:border-[var(--accent)]"
       {...props}
     />
   );
@@ -29,9 +29,9 @@ export function Input(props: InputHTMLAttributes<HTMLInputElement>) {
 const buttonTones = {
   primary: buttonClassName,
   secondary:
-    "inline-block cursor-pointer rounded-md border border-[var(--line)] bg-white px-4 py-2 text-center text-sm font-medium text-[var(--ink)] disabled:cursor-not-allowed disabled:opacity-60",
+    "inline-block cursor-pointer rounded-md border border-[var(--line)] bg-[var(--card)] px-4 py-2 text-center text-sm font-medium text-[var(--ink)] disabled:cursor-not-allowed disabled:opacity-60",
   danger:
-    "inline-block cursor-pointer rounded-md border border-[var(--danger)] bg-white px-4 py-2 text-center text-sm font-medium text-[var(--danger)] disabled:cursor-not-allowed disabled:opacity-60",
+    "inline-block cursor-pointer rounded-md border border-[var(--danger)] bg-[var(--card)] px-4 py-2 text-center text-sm font-medium text-[var(--danger)] disabled:cursor-not-allowed disabled:opacity-60",
 } as const;
 
 export function Button({ tone = "primary", ...props }: ButtonHTMLAttributes<HTMLButtonElement> & { tone?: keyof typeof buttonTones }) {
