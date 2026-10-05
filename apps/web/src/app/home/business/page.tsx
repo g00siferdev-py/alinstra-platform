@@ -3,7 +3,7 @@ import { OutcomeBadge } from "@/components/calls-list";
 import { QuickUpdateForms } from "@/components/quick-update-forms";
 import { formatDuration } from "@/lib/call-view";
 import { callViewerFor } from "@/lib/call-viewer";
-import { interviewEnabled } from "@/lib/interview-server";
+import { interviewEnabled } from "@/lib/interview-config";
 import { requireUser } from "@/lib/session";
 import {
   AGENT_AFFECTING_STEPS,

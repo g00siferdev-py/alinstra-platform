@@ -1,5 +1,5 @@
 import { WizardForm } from "@/components/wizard-form";
-import { interviewEnabled } from "@/lib/interview-server";
+import { interviewEnabled } from "@/lib/interview-config";
 import { formPayload } from "@/lib/wizard-form-payload";
 import {
   clientEditPayload,

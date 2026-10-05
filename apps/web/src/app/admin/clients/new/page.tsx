@@ -1,6 +1,6 @@
 import { NewClientForm } from "@/components/new-client-form";
 import { Card } from "@/components/ui";
-import { interviewEnabled } from "@/lib/interview-server";
+import { interviewEnabled } from "@/lib/interview-config";
 import { requireAdmin } from "@/lib/session";
 import Link from "next/link";
 

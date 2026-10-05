@@ -60,3 +60,20 @@ jobs:
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
+      # Catch Turbopack/"use server" and prerender failures that unit tests miss.
+      # Placeholder env matches apps/web/Dockerfile; DATABASE_URL is unreachable (no Postgres in this step).
+      - name: Production web build (no database)
+        env:
+          NODE_ENV: production
+          NEXT_PHASE: phase-production-build
+          APP_URL: http://localhost:3000
+          BETTER_AUTH_URL: http://localhost:3000
+          BETTER_AUTH_SECRET: build-time-placeholder-secret-32-chars-min
+          ENCRYPTION_KEY: build-time-placeholder-not-a-real-key
+          ADMIN_EMAIL: build@example.com
+          DATABASE_URL: postgresql://alinstra:alinstra@127.0.0.1:1/alinstra?schema=public&connect_timeout=1
+          REDIS_URL: redis://127.0.0.1:1
+          EMAIL_FROM: notifications@alinstra.com
+          EMAIL_TRANSPORT: resend
+          RESEND_API_KEY: build-placeholder
+        run: pnpm --filter @alinstra/web build

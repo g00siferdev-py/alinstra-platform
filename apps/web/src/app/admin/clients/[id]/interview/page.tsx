@@ -1,5 +1,6 @@
 import { InterviewChat } from "@/components/interview-chat";
-import { ensureInterviewSession, interviewEnabled } from "@/lib/interview-server";
+import { interviewEnabled } from "@/lib/interview-config";
+import { ensureInterviewSession } from "@/lib/interview-server";
 import { requireAdmin } from "@/lib/session";
 import { clients, type Actor } from "@alinstra/db";
 import Link from "next/link";

@@ -8,17 +8,12 @@ import {
   postInterviewMessage,
   resolveTextInterviewConfig,
   startInterviewSession,
-  textInterviewConfig,
   textPlatformFor,
   type Actor,
 } from "@alinstra/db";
+import type { InterviewActionState } from "@/lib/interview-config";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-
-export type InterviewActionState =
-  | { ok: true; reply?: string; done?: boolean; sessionId?: string }
-  | { ok: false; error: string }
-  | null;
 
 function rethrowRedirect(error: unknown): void {
   if (
@@ -95,8 +90,4 @@ export async function discardInterviewAction(
     rethrowRedirect(error);
     return { ok: false, error: error instanceof Error ? error.message : "Could not discard the interview." };
   }
-}
-
-export function interviewEnabled(): boolean {
-  return textInterviewConfig(getEnv()).enabled;
 }

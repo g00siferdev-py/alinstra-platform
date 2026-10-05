@@ -147,6 +147,40 @@ describe("httpText", () => {
     ).rejects.toBeInstanceOf(ProviderRequestError);
     expect(hits).toBe(1);
   });
+
+  it("retries once without response_format when the provider returns 400 for json mode", async () => {
+    const bodies: Array<Record<string, unknown>> = [];
+    const text = httpText({
+      apiKey: "key-12345678",
+      baseUrl: "https://api.openai.com/v1",
+      model: "provider-without-json-mode",
+      sleep: async () => undefined,
+      fetchImpl: async (_url, init) => {
+        const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+        bodies.push(body);
+        if (body.response_format) {
+          return new Response(JSON.stringify({ error: { message: "response_format not supported" } }), { status: 400 });
+        }
+        return new Response(
+          JSON.stringify({
+            choices: [{ message: { content: 'Sure.\n{"reply":"ok","updates":{},"done":false}' } }],
+            usage: { prompt_tokens: 4, completion_tokens: 6 },
+          }),
+          { status: 200 },
+        );
+      },
+    });
+    const result = await text.complete({
+      system: "json please",
+      messages: [{ role: "user", content: "hi" }],
+      maxTokens: 64,
+      json: true,
+    });
+    expect(bodies).toHaveLength(2);
+    expect(bodies[0]?.response_format).toEqual({ type: "json_object" });
+    expect(bodies[1]?.response_format).toBeUndefined();
+    expect(parseJsonObject(result.text)).toMatchObject({ reply: "ok" });
+  });
 });
 
 describe("memoryText + platformsFor", () => {

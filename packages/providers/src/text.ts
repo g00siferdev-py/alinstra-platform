@@ -154,6 +154,7 @@ export function httpText(options: HttpTextOptions): TextPlatform {
   ): Promise<TextCompleteResult> {
     const url = `${baseUrl}/chat/completions`;
     let lastError: Error | null = null;
+    let omitResponseFormat = false;
 
     for (let attempt = 0; attempt < MAX_RETRIES; attempt += 1) {
       const controller = new AbortController();
@@ -174,7 +175,7 @@ export function httpText(options: HttpTextOptions): TextPlatform {
           max_tokens: maxTokens,
           temperature: 0.4,
         };
-        if (json) body.response_format = { type: "json_object" };
+        if (json && !omitResponseFormat) body.response_format = { type: "json_object" };
 
         const response = await fetchImpl(url, {
           method: "POST",
@@ -189,6 +190,12 @@ export function httpText(options: HttpTextOptions): TextPlatform {
           parsed = text ? (JSON.parse(text) as Record<string, unknown>) : null;
         } catch {
           parsed = null;
+        }
+
+        // Some providers (or models) reject response_format; retry once without it and extract JSON from prose.
+        if (json && !omitResponseFormat && response.status === 400) {
+          omitResponseFormat = true;
+          continue;
         }
 
         if (RETRYABLE.has(response.status) && attempt < MAX_RETRIES - 1) {
