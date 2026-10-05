@@ -1,4 +1,5 @@
 import { decryptString, encryptString } from "@alinstra/crypto";
+import { callFlags, parseCallFlags, type CallFlag } from "./call-flags";
 import {
   costCentsOf,
   deriveOutcome,
@@ -14,7 +15,7 @@ import {
 import { recordChange, type Actor } from "./changes";
 import { prisma } from "./client";
 import { CALL_RETENTION_DEFAULT_DAYS, CALL_RETENTION_MAX_DAYS, CALL_RETENTION_MIN_DAYS, maskCaller } from "./domain";
-import type { Prisma } from "./generated/prisma/client";
+import { Prisma, type Prisma as PrismaTypes } from "./generated/prisma/client";
 import { assertTenantContext, type TenantContext } from "./tenant";
 
 const WEBHOOK_ACTOR: Actor = { id: "provider-webhook", role: "admin" };
@@ -109,24 +110,36 @@ export async function applyRetellCall(payload: RetellCallEvent): Promise<{ recor
     const outcome: CallOutcome | null = ended || existing?.endedAt ? deriveOutcome(turns, { disconnection_reason: call.disconnection_reason ?? existing?.endReason ?? undefined }) : null;
     const purged = Boolean(existing?.purgedAt);
     const recordingQueued = !purged && hasRecording && (existing?.recordingStatus ?? "none") === "none";
+    const mergedDuration = existing?.durationSeconds ?? durationSeconds;
+    const mergedSentiment = normalizeSentiment(analysis?.user_sentiment) ?? existing?.sentiment ?? null;
+    const mergedEndReason = (ended ? call.disconnection_reason : undefined) ?? existing?.endReason ?? null;
+    const shouldFlag = !purged && (ended || event === "call_analyzed") && (turns.length > 0 || Boolean(mergedSentiment));
+    const computedFlags: CallFlag[] = shouldFlag
+      ? callFlags(turns, {
+          durationSeconds: mergedDuration,
+          sentiment: mergedSentiment,
+          endReason: mergedEndReason,
+        })
+      : [];
 
-    const data: Prisma.CallRecordUncheckedUpdateInput & Prisma.CallRecordUncheckedCreateInput = {
+    const data: PrismaTypes.CallRecordUncheckedUpdateInput & PrismaTypes.CallRecordUncheckedCreateInput = {
       clientId: client.id,
       retellCallId: callId,
       startedAt: existing?.startedAt ?? startedAt,
       endedAt: existing?.endedAt ?? endedAt,
-      durationSeconds: existing?.durationSeconds ?? durationSeconds,
+      durationSeconds: mergedDuration,
       callerMasked: existing?.callerMasked || maskCaller(fromNumber),
       callerE164Cipher: purged ? null : existing?.callerE164Cipher ?? (fromNumber ? seal(fromNumber) : null),
-      endReason: (ended ? call.disconnection_reason : undefined) ?? existing?.endReason ?? null,
+      endReason: mergedEndReason,
       transcriptCipher: purged ? null : transcript ? seal(JSON.stringify(transcript)) : existing?.transcriptCipher ?? null,
       summaryCipher: purged ? null : analysis?.call_summary ? seal(analysis.call_summary) : existing?.summaryCipher ?? null,
       rawEventsCipher: purged ? null : seal(JSON.stringify(rawEvents)),
-      sentiment: normalizeSentiment(analysis?.user_sentiment) ?? existing?.sentiment ?? null,
+      sentiment: mergedSentiment,
       successful: typeof analysis?.call_successful === "boolean" ? analysis.call_successful : existing?.successful ?? null,
       inVoicemail: typeof analysis?.in_voicemail === "boolean" ? analysis.in_voicemail : existing?.inVoicemail ?? null,
       costCents: costCentsOf(call) ?? existing?.costCents ?? null,
       outcome: outcome ?? existing?.outcome ?? null,
+      flags: purged ? Prisma.DbNull : shouldFlag ? computedFlags : existing?.flags ?? Prisma.DbNull,
       analyzedAt: event === "call_analyzed" ? existing?.analyzedAt ?? new Date() : existing?.analyzedAt ?? null,
       recordingStatus: recordingQueued ? "pending" : existing?.recordingStatus ?? "none",
     };
@@ -271,6 +284,8 @@ export type CallSummaryRow = {
   endReason: string | null;
   hasRecording: boolean;
   purgedAt: Date | null;
+  flags: CallFlag[];
+  flagged: boolean;
 };
 
 export type CallListPage = { rows: CallSummaryRow[]; nextCursor: string | null };
@@ -302,8 +317,10 @@ function summaryRow(row: {
   endReason: string | null;
   recordingStatus: string;
   purgedAt: Date | null;
+  flags?: unknown;
 }, fullNumber: boolean): CallSummaryRow {
   const caller = fullNumber ? open(row.callerE164Cipher) ?? row.callerMasked : row.callerMasked;
+  const flags = parseCallFlags(row.flags);
   return {
     id: row.id,
     retellCallId: row.retellCallId,
@@ -316,6 +333,8 @@ function summaryRow(row: {
     endReason: row.endReason,
     hasRecording: row.recordingStatus === "stored",
     purgedAt: row.purgedAt,
+    flags,
+    flagged: flags.length > 0,
   };
 }
 
@@ -458,6 +477,7 @@ export async function purgeExpiredCalls(deps: PurgeDeps, now = new Date()): Prom
             recordingKey: null,
             recordingError: null,
             recordingBytes: null,
+            flags: Prisma.DbNull,
             recordingStatus: call.recordingStatus === "stored" || call.recordingStatus === "pending" || call.recordingStatus === "failed" ? "purged" : call.recordingStatus,
             purgedAt: now,
           },

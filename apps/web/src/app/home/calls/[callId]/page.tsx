@@ -26,6 +26,7 @@ export default async function PortalCallDetailPage({ params }: { params: Promise
       retentionDays={client.callRetentionDays}
       fullNumbers={canSeeCallerNumber(viewer)}
       admin={false}
+      businessName={client.name}
       messageHref={call.message ? "/home#messages" : null}
       backHref="/home/calls"
     />

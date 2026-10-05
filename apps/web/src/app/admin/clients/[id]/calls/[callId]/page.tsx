@@ -22,6 +22,7 @@ export default async function AdminCallDetailPage({ params }: { params: Promise<
       retentionDays={client.callRetentionDays}
       fullNumbers
       admin
+      businessName={client.name}
       messageHref={call.message ? `/admin/clients/${client.id}#messages` : null}
       backHref={`/admin/clients/${client.id}/calls`}
     />

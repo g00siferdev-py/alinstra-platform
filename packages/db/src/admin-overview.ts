@@ -1,5 +1,7 @@
-import { prisma } from "./client";
+import { parseCallFlags } from "./call-flags";
 import type { Actor } from "./changes";
+import { prisma } from "./client";
+import { Prisma } from "./generated/prisma/client";
 import { assertTenantContext } from "./tenant";
 
 const LIVE_WINDOW_MS = 20 * 60 * 1000;
@@ -118,6 +120,7 @@ export async function adminOverview(ctx: Actor, now = new Date()): Promise<Admin
     held,
     pending,
     failedRecordings,
+    flaggedCalls,
     uncontactedLeads,
     clients,
     latestCallRows,
@@ -144,6 +147,12 @@ export async function adminOverview(ctx: Actor, now = new Date()): Promise<Admin
     prisma.callRecord.findMany({
       where: { recordingStatus: "failed", purgedAt: null },
       take: 10,
+      orderBy: { updatedAt: "desc" },
+      include: { client: { select: { name: true } } },
+    }),
+    prisma.callRecord.findMany({
+      where: { purgedAt: null, flags: { not: Prisma.DbNull } },
+      take: 20,
       orderBy: { updatedAt: "desc" },
       include: { client: { select: { name: true } } },
     }),
@@ -216,6 +225,17 @@ export async function adminOverview(ctx: Actor, now = new Date()): Promise<Admin
       kind: "failed_recording",
       title: "Retry a recording",
       detail: `${row.client.name} has a recording that failed to copy.`,
+      href: `/admin/clients/${row.clientId}/calls/${row.id}`,
+    });
+  }
+  for (const row of flaggedCalls) {
+    const flags = parseCallFlags(row.flags);
+    if (flags.length === 0) continue;
+    todos.push({
+      id: `flag-${row.id}`,
+      kind: "flagged_call",
+      title: `Review a flagged call`,
+      detail: `${row.client.name} has ${flags.length} flag${flags.length === 1 ? "" : "s"} on a recent call.`,
       href: `/admin/clients/${row.clientId}/calls/${row.id}`,
     });
   }
@@ -308,7 +328,7 @@ export async function adminOverview(ctx: Actor, now = new Date()): Promise<Admin
       durationSeconds: row.durationSeconds,
       outcome: row.outcome,
       summarySnippet: row.endReason ? `${row.client.name} · ${row.endReason}` : row.client.name,
-      flagged: false,
+      flagged: parseCallFlags(row.flags).length > 0,
     })),
     startInterviewHref,
   };

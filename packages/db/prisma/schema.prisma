@@ -448,6 +448,8 @@ model CallRecord {
   recordingBytes       Int?
   /// message_taken | transferred | booked | no_action | hung_up, derived from the tool calls in the turns.
   outcome              String?
+  /// JSON CallFlag[] derived from transcript/analysis (long_silence, short_hangup, tool_error, negative_sentiment).
+  flags                Json?
   analyzedAt           DateTime?
   purgedAt             DateTime?
 
