@@ -3,6 +3,7 @@ import { OutcomeBadge } from "@/components/calls-list";
 import { QuickUpdateForms } from "@/components/quick-update-forms";
 import { formatDuration } from "@/lib/call-view";
 import { callViewerFor } from "@/lib/call-viewer";
+import { interviewEnabled } from "@/lib/interview-server";
 import { requireUser } from "@/lib/session";
 import {
   AGENT_AFFECTING_STEPS,
@@ -71,6 +72,15 @@ export default async function MyBusinessPage() {
           ? "Edit each section below, or use the quick updates for hours, notices, staff, and one FAQ at a time."
           : "Read only. Ask the account owner to change hours, notices, staff, or FAQs."}
       </p>
+      {owner && !client.wizardSubmittedAt && interviewEnabled() ? (
+        <p className="rounded-xl border border-[var(--line)] p-4 text-sm">
+          <Link className="font-medium underline" href="/home/business/interview">
+            Set up your receptionist
+          </Link>
+          {" — "}
+          answer a short interview, then review the draft before anything goes live.
+        </p>
+      ) : null}
       <section className="rounded-xl border border-[var(--line)] p-4 text-sm">
         <p>{client.name}{client.namePronunciation ? ` · pronounced ${client.namePronunciation}` : ""}</p>
         <p>{client.contactName} · {client.contactEmail}</p>

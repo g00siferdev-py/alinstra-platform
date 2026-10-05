@@ -1,4 +1,5 @@
 import { WizardForm } from "@/components/wizard-form";
+import { interviewEnabled } from "@/lib/interview-server";
 import { formPayload } from "@/lib/wizard-form-payload";
 import {
   clientEditPayload,
@@ -72,7 +73,14 @@ export default async function WizardPage({
   return (
     <main className="mx-auto grid max-w-2xl gap-4 p-6">
       <Link className="text-sm text-[var(--muted)]" href={`/admin/clients/${id}`}>{client.name}</Link>
-      <h1 className="text-2xl font-semibold">Wizard · {client.name}</h1>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <h1 className="text-2xl font-semibold">Wizard · {client.name}</h1>
+        {interviewEnabled() ? (
+          <Link className="text-sm underline" href={`/admin/clients/${id}/interview`}>
+            Start with an interview
+          </Link>
+        ) : null}
+      </div>
       <WizardForm
         {...shared}
         initialStep={stepFrom(query.step) || draft.currentStep}

@@ -1,5 +1,6 @@
 import { NewClientForm } from "@/components/new-client-form";
 import { Card } from "@/components/ui";
+import { interviewEnabled } from "@/lib/interview-server";
 import { requireAdmin } from "@/lib/session";
 import Link from "next/link";
 
@@ -29,7 +30,7 @@ export default async function NewClientPage({
       </Link>
       <Card>
         <h1 className="mb-4 text-xl font-semibold">New client</h1>
-        <NewClientForm defaults={defaults} />
+        <NewClientForm defaults={defaults} interviewEnabled={interviewEnabled()} />
       </Card>
     </main>
   );

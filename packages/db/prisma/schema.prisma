@@ -189,10 +189,32 @@ model Client {
   callRecords                     CallRecord[]
   provisioningRuns                ProvisioningRun[]
   leads                           Lead[]
+  interviewSessions               InterviewSession[]
 
   @@index([status])
   @@index([archivedAt])
   @@map("client")
+}
+
+/// Chat-style AI onboarding interview that fills WizardDraft.payload. Feature off when TEXT_API_KEY is unset.
+model InterviewSession {
+  id         String    @id @default(cuid())
+  clientId   String?
+  client     Client?   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  draftId    String?
+  industry   String
+  state      Json
+  status     String
+  model      String
+  tokensIn   Int       @default(0)
+  tokensOut  Int       @default(0)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  finishedAt DateTime?
+
+  @@index([clientId, createdAt])
+  @@index([status, createdAt])
+  @@map("interview_session")
 }
 
 model WizardDraft {

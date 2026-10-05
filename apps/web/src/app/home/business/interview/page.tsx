@@ -1,0 +1,46 @@
+import { InterviewChat } from "@/components/interview-chat";
+import { ensureInterviewSession, interviewEnabled } from "@/lib/interview-server";
+import { requireUser } from "@/lib/session";
+import { clients, type Actor } from "@alinstra/db";
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import { ownerDiscardInterview, ownerFinishInterview, ownerSendInterviewMessage } from "./actions";
+
+export default async function OwnerInterviewPage() {
+  if (!interviewEnabled()) notFound();
+  const session = await requireUser();
+  if (session.user.role !== "client_owner" || !session.user.clientId) notFound();
+
+  const ctx = { role: "client_owner" as const, clientId: session.user.clientId };
+  const client = await clients(ctx).getById(session.user.clientId);
+  if (!client || client.wizardSubmittedAt) notFound();
+
+  const actor: Actor = { id: session.user.id, role: "client_owner", clientId: session.user.clientId };
+  const interview = await ensureInterviewSession(actor, session.user.clientId, client.industry);
+  const state = interview.state as {
+    transcript?: Array<{ role: "user" | "assistant"; content: string }>;
+    collected?: Record<string, unknown>;
+    done?: boolean;
+  };
+
+  return (
+    <main className="mx-auto grid max-w-4xl gap-4 p-6">
+      <Link className="text-sm text-[var(--muted)]" href="/home/business">
+        My business
+      </Link>
+      <h1 className="text-2xl font-semibold">Set up your receptionist</h1>
+      <p className="text-sm text-[var(--muted)]">
+        Answer a few short questions. You can review and edit everything in the form before anything goes live.
+      </p>
+      <InterviewChat
+        sessionId={interview.id}
+        initialTranscript={state.transcript ?? []}
+        initialCaptured={state.collected ?? {}}
+        initialDone={interview.status !== "active" || state.done === true}
+        sendAction={ownerSendInterviewMessage}
+        finishAction={ownerFinishInterview}
+        discardAction={ownerDiscardInterview}
+      />
+    </main>
+  );
+}

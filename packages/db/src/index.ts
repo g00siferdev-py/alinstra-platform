@@ -188,3 +188,16 @@ export {
   type CallTurn,
   type Sentiment,
 } from "./call-transcript";
+export {
+  INTERVIEW_STATUS,
+  activeInterviewForClient,
+  discardInterviewSession,
+  finishInterviewSession,
+  getInterviewSession,
+  listInterviewSessions,
+  postInterviewMessage,
+  startInterviewSession,
+  textInterviewConfig,
+  textPlatformFor,
+  type TextInterviewConfig,
+} from "./interview";

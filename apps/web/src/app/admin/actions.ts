@@ -53,6 +53,10 @@ export async function startWizardAction(_prev: ActionState, formData: FormData):
     if (leadId) {
       await linkLeadToClient(actor, leadId, client.id).catch(() => undefined);
     }
+    const intent = String(formData.get("intent") ?? "").trim();
+    if (intent === "interview") {
+      redirect(`/admin/clients/${client.id}/interview`);
+    }
     redirect(`/admin/clients/${client.id}/wizard`);
   } catch (error) {
     rethrowRedirect(error);
