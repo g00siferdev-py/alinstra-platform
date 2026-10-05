@@ -1,6 +1,6 @@
 # Phase 5b-i — Interview wizard
 
-Status: in progress on branch `phase-5b-interview` (from `9dc57aa`). Chat-style AI onboarding that fills the existing `WizardPayload` / `WizardDraft`. Nothing downstream (render, provisioning, holds) changes. Industry-neutral by default; deeper banks for HVAC and veterinary. Feature off when `TEXT_API_KEY` is absent.
+Status: shipped on branch `phase-5b-interview` (from `9dc57aa`). Chat-style AI onboarding that fills the existing `WizardPayload` / `WizardDraft`. Nothing downstream (render, provisioning, holds) changes. Industry-neutral by default; deeper banks for HVAC and veterinary. Feature off when `TEXT_API_KEY` is absent.
 
 ## Spec source
 

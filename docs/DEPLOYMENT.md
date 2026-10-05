@@ -163,6 +163,12 @@ In Railway, web and worker do not share a variable group with production later. 
 | `NEXT_PUBLIC_SENTRY_ENVIRONMENT` | `staging` |
 | `TRUSTED_PROXY_HOPS` | `1` (the default). Railway's client IP is `X-Real-IP`, which the app prefers when it is present. |
 | `MARKETING_PHONE` | optional E.164 fallback for marketing "Call Ava" when client zero has no public phone yet (e.g. `+18883871525`). Leave empty when client zero is live. |
+| `TEXT_API_BASE` | optional. OpenAI-compatible chat base URL. Default `https://openrouter.ai/api/v1`. |
+| `TEXT_API_KEY` | optional. When empty, the interview wizard is disabled (buttons hidden, routes 404). |
+| `TEXT_MODEL` | optional. Default `moonshotai/kimi-k2.5`. |
+| `TEXT_FALLBACK_MODEL` | optional. Used once if the primary fails or returns invalid JSON twice. |
+| `TEXT_BUDGET_INPUT_TOKENS` | optional. Per-interview input token cap. Default `60000`. |
+| `TEXT_BUDGET_OUTPUT_TOKENS` | optional. Per-interview output token cap. Default `12000`. |
 
 `UPLOAD_DIR` and `LOCKOUT_STORE` stay unset. Production storage is the bucket, and lockout uses Redis.
 
@@ -413,6 +419,22 @@ Public marketing site at `/` (route group `apps/web/src/app/(marketing)/`). Copy
 5. Wait for Railway certificates on both apex and `www`. Confirm `https://alinstra.com` serves marketing and `https://staging.alinstra.com` still serves staging.
 
 Do not orange-cloud (proxy) the apex or `www` until you have a reason; grey cloud matches the staging setup.
+
+## Shipped in Phase 5b-i (interview wizard)
+
+Chat-style AI onboarding that fills the existing `WizardDraft` / `WizardPayload`. Nothing in render, provisioning, or holds changed. Plan: `docs/phase-5b-interview-plan.md`.
+
+**Feature flag.** When `TEXT_API_KEY` is empty, "Start with an interview" is hidden and `/admin/clients/[id]/interview` plus `/home/business/interview` return 404. The API key is env-only — never stored in `AppSetting`.
+
+**Provider.** `packages/providers` `TextPlatform` / `httpText()` posts OpenAI chat-completions to `{TEXT_API_BASE}/chat/completions`. Same client works against OpenRouter, Ollama Cloud, OpenAI, and Anthropic's OpenAI-compatible endpoint. OpenRouter gets `HTTP-Referer: https://alinstra.com` and `X-Title: Alinstra`. Retries on 429/5xx with backoff; 30s timeout; prompts are never logged.
+
+**Cost guard.** Each interview stops with a friendly message after the input/output token budgets (defaults 60k / 12k). Override via env or `/admin/interview` (`AppSetting` overrides base/model/fallback/budget; env remains the default).
+
+**Question banks.** Data files under `packages/agent/src/interview/banks/`. `general.ts` always loads; `hvac.ts` and `veterinary.ts` append for those industries. To add an industry: add a bank file, register it in `banks/index.ts`, and use the industry string from the client/wizard. No engine code changes required for new questions.
+
+**Switching models.** Set `TEXT_MODEL` / `TEXT_FALLBACK_MODEL` in the environment, or save overrides on `/admin/interview`. Sessions record the model and token counts used.
+
+**Routes.** Admin: `/admin/clients/new` (optional interview intent), `/admin/clients/[id]/interview`, `/admin/interview` (settings + sessions). Owner: `/home/business/interview` while `wizardSubmittedAt` is null ("Set up your receptionist"). Finish merges collected fields into the draft without overwriting admin/owner-filled values, then returns to the wizard (admin) or My Business (owner).
 
 ## Production later
 

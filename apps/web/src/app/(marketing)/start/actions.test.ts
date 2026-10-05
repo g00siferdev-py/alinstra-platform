@@ -73,4 +73,12 @@ describe("submitLeadAction", () => {
     expect(result).toEqual({ ok: false, error: "Too many submissions from this network. Try again in an hour." });
     expect(createLead).not.toHaveBeenCalled();
   });
+
+  it("still succeeds when the admin-email enqueue fails after the lead is saved", async () => {
+    createLead.mockResolvedValue({ id: "lead_1", business: "North HVAC" });
+    enqueueSendAdminNotice.mockRejectedValue(new Error("redis down"));
+    const result = await submitLeadAction(null, form(valid));
+    expect(result).toEqual({ ok: true });
+    expect(createLead).toHaveBeenCalled();
+  });
 });

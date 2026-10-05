@@ -1,6 +1,7 @@
 "use server";
 
 import { clientIp, getCounter } from "@alinstra/auth";
+import { log } from "@alinstra/config";
 import { createLead, leadAdminNotice } from "@alinstra/db";
 import { enqueueSendAdminNotice } from "@alinstra/queue";
 import { headers } from "next/headers";
@@ -50,7 +51,14 @@ export async function submitLeadAction(_prev: LeadFormState, formData: FormData)
       notes: field(formData, "notes"),
       source: "marketing",
     });
-    await enqueueSendAdminNotice(leadAdminNotice(lead));
+    try {
+      await enqueueSendAdminNotice(leadAdminNotice(lead));
+    } catch (error) {
+      log("warn", "lead.admin_notice_enqueue_failed", {
+        leadId: lead.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
     return { ok: true };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : "Could not send that. Try again." };

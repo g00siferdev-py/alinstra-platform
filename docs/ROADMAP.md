@@ -1,6 +1,6 @@
 # Roadmap
 
-Updated 4 October 2026 after Phase M. Phases below Phase 6 are not yet implemented. Each phase gets its own plan document before work starts, following the pattern of `docs/phase-3-plan.md`.
+Updated 4 October 2026 after Phase 5b-i. Phases below Phase 6 are not yet implemented. Each phase gets its own plan document before work starts, following the pattern of `docs/phase-3-plan.md`.
 
 ## Where things stand
 
@@ -10,6 +10,7 @@ Updated 4 October 2026 after Phase M. Phases below Phase 6 are not yet implement
 - Phase 4c hardens recording-job enqueue (rollback + stale-pending sweep) and strengthens Ava's `end_call` prompt so she hangs up after goodbye instead of waiting on the caller.
 - **Phase 5 shipped** (branch `phase-5`, plan `docs/phase-5-plan.md`): owner edit flow on My Business with `owner_edit` ChangeLog; held `owner_step` QuickUpdates for voice / transfer / booking / sensitive text; own-number forwarding page (`phone.mode = "forward"`); continuous greeting opening (template v7) with inbound `begin_message` override; recent calls card on My Business. **Toll-free SMS verification is deferred** to a later phase (no SMS in Phase 5).
 - **Phase M shipped** (branch `phase-m`, plan `docs/phase-m-plan.md`): public marketing site at `/` from `docs/marketing-copy.md`, live pricing from `publicPlans()`, lead form + `Lead` model + `/admin/leads`, `publicSiteConfig` / optional `MARKETING_PHONE`, SEO sitemap/robots, apex DNS cutover notes.
+- **Phase 5b-i shipped** (branch `phase-5b-interview`, plan `docs/phase-5b-interview-plan.md`): chat-style AI onboarding interview that fills `WizardDraft` via an OpenAI-compatible text provider; industry banks (general / HVAC / vet); admin settings + sessions. A voice-call version of the interview is a later idea, not in this phase.
 
 ## Phase M: marketing site (shipped)
 
@@ -29,6 +30,14 @@ Shipped. Details in `docs/phase-5-plan.md` and `docs/DEPLOYMENT.md` ("Shipped in
 - **Own-number forwarding.** `/home/business/forwarding` when `phone.mode = "forward"` (schema name; ROADMAP historically said `own_number`).
 - **Greeting dead-air fix.** Template version 7; one continuous opening; inbound webhook overrides `begin_message` for open vs closed.
 - **Recent calls** card on My Business for owner and granted staff.
+
+## Phase 5b-i: interview wizard (shipped)
+
+Shipped. Details in `docs/phase-5b-interview-plan.md` and `docs/DEPLOYMENT.md` ("Shipped in Phase 5b-i"). Summary:
+
+- Server-side `TextPlatform` (`httpText`) against any OpenAI-compatible chat API; feature off without `TEXT_API_KEY`.
+- Pure interview engine + question banks as data; merge into existing wizard payload; admin/owner chat UI; `/admin/interview` settings.
+- **Later idea (not shipped):** a voice-call version of the same interview.
 
 ## Phase 6: admin dashboard and client reports
 
