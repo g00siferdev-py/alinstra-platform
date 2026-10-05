@@ -4,7 +4,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   return (
     <>
       <AppHeader />
-      {children}
+      <div className="app-shell-main">{children}</div>
     </>
   );
 }

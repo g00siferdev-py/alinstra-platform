@@ -1,51 +1,55 @@
 import { SignOutControl } from "@/components/account-menu";
+import { AppNav, type AppNavLink } from "@/components/app-nav";
 import { GuardedLink } from "@/components/guarded-link";
+import { WaveformMark } from "@/components/ui";
 import { peekSession } from "@/lib/session";
 
-export async function AppHeader() {
+export async function AppHeader({ liveCallCount = 0 }: { liveCallCount?: number }) {
   const session = await peekSession();
   if (!session) return null;
   const role = session.user.role;
-  const links =
+  const liveBadge = liveCallCount > 0 ? `${liveCallCount} live` : null;
+
+  const links: AppNavLink[] =
     role === "admin"
       ? [
-          ["/home", "Home"],
-          ["/admin/clients", "Clients"],
-          ["/admin/leads", "Leads"],
-          ["/admin/plans", "Plans"],
-          ["/admin/interview", "Interview"],
-          ["/admin/services", "Services"],
+          { href: "/home", label: "Home" },
+          { href: "/admin/clients", label: "Clients" },
+          { href: "/admin/calls", label: "Calls", badge: liveBadge },
+          { href: "/admin/leads", label: "Leads" },
+          { href: "/admin/plans", label: "Plans" },
+          { href: "/admin/interview", label: "Interview" },
+          { href: "/admin/services", label: "Services" },
         ]
       : role === "client_owner"
         ? [
-            ["/home", "Home"],
-            ["/home/business", "My Business"],
-            ["/home/calls", "Calls"],
-            ["/home/changes", "Change Requests"],
-            ["/home/team", "Team"],
+            { href: "/home", label: "Home" },
+            { href: "/home/business", label: "My Business" },
+            { href: "/home/calls", label: "Calls" },
+            { href: "/home/changes", label: "Change Requests" },
+            { href: "/home/team", label: "Team" },
           ]
         : [
-            ["/home", "Home"],
-            ["/home/business", "My Business"],
-            // Staff only see Calls once the owner grants call access.
-            ...(session.user.canViewCalls === true ? [["/home/calls", "Calls"]] : []),
+            { href: "/home", label: "Home" },
+            { href: "/home/business", label: "My Business" },
+            ...(session.user.canViewCalls === true ? [{ href: "/home/calls", label: "Calls" }] : []),
           ];
 
   return (
-    <header className="border-b border-[var(--line)] bg-[var(--card)]">
-      <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-5 gap-y-2 px-6 py-3">
-        <GuardedLink className="text-base font-semibold text-[var(--ink)] no-underline" href="/home">
-          Alinstra
+    <header className="border-b border-[var(--line)] bg-[var(--surface)]">
+      <div className="mx-auto flex max-w-[1160px] flex-wrap items-center gap-x-5 gap-y-3 px-7 py-3">
+        <GuardedLink className="inline-flex items-center gap-2.5 no-underline" href="/home">
+          <span className="inline-flex h-[34px] w-[34px] items-center justify-center rounded-[10px] bg-[var(--primary)]">
+            <WaveformMark />
+          </span>
+          <span className="text-lg font-extrabold tracking-[-0.02em] text-[var(--ink)]">Alinstra</span>
         </GuardedLink>
-        <nav className="flex flex-wrap items-center gap-4 text-sm">
-          {links.map(([href, label]) => (
-            <GuardedLink key={href} className="text-[var(--ink)] no-underline" href={href ?? "/home"}>
-              {label}
-            </GuardedLink>
-          ))}
-        </nav>
+        <AppNav links={links} />
         <div className="ml-auto">
-          <SignOutControl email={session.user.email} replaceAuthenticator={role === "admin" && session.user.twoFactorEnabled === true} />
+          <SignOutControl
+            email={session.user.email}
+            replaceAuthenticator={role === "admin" && session.user.twoFactorEnabled === true}
+          />
         </div>
       </div>
     </header>
