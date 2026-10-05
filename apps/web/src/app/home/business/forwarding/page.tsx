@@ -1,4 +1,5 @@
 import { CopyButton } from "@/components/copy-button";
+import { Card, PageHeader } from "@/components/ui";
 import { requireUser } from "@/lib/session";
 import { clients, formatPhone, needsOwnNumberForwarding } from "@alinstra/db";
 import Link from "next/link";
@@ -19,67 +20,73 @@ export default async function ForwardingPage() {
   const dial = alinstra.replace(/^\+1/, "").replace(/\D/g, "");
 
   return (
-    <main className="mx-auto grid max-w-3xl gap-4 p-6">
-      <Link className="text-sm text-[var(--muted)]" href="/home/business">My business</Link>
-      <h1 className="text-2xl font-semibold">Forward your number</h1>
-      <p className="text-sm text-[var(--muted)]">
-        You keep your existing business number. Set <strong className="font-medium text-[var(--fg)]">conditional call forwarding</strong> (no answer and busy) to the Alinstra number below so Ava takes the calls you miss. Do not use unconditional forwarding.
-      </p>
+    <main className="grid gap-6">
+      <Link className="text-sm text-[var(--muted)]" href="/home/business">
+        My business
+      </Link>
+      <PageHeader
+        title="Forward your number"
+        description={
+          <>
+            You keep your existing business number. Set <strong className="font-semibold text-[var(--ink)]">conditional call forwarding</strong> (no answer and busy) to the Alinstra number below so Ava takes the calls you miss. Do not use unconditional forwarding.
+          </>
+        }
+      />
       <p className="text-sm text-[var(--muted)]">
         Nothing in this app sets up forwarding for you — you (or your carrier) do it on your line. Confirm the exact codes with your carrier; some business lines have forwarding disabled by default.
       </p>
 
-      <section className="rounded-xl border border-[var(--line)] p-4">
+      <Card>
         <p className="text-sm text-[var(--muted)]">Forward missed calls to</p>
         {display ? (
           <div className="mt-2 flex flex-wrap items-center gap-3">
-            <p className="text-3xl font-semibold tracking-tight">{display}</p>
+            <p className="text-3xl font-extrabold tracking-tight text-[var(--ink)]">{display}</p>
             <CopyButton value={alinstra} label="number" />
           </div>
         ) : (
           <p className="mt-2 text-sm">Your Alinstra number is not ready yet. Check back after provisioning finishes.</p>
         )}
-      </section>
+      </Card>
 
-      <section className="rounded-xl border border-[var(--line)] p-4 text-sm">
-        <h2 className="mb-2 font-medium">Carrier codes</h2>
+      <Card className="text-sm">
+        <h2 className="mb-2 text-base font-extrabold text-[var(--ink)]">Carrier codes</h2>
         <ul className="grid gap-2">
           <li>
-            <strong className="font-medium">AT&amp;T (landline and wireless):</strong> dial{" "}
+            <strong className="font-semibold">AT&amp;T (landline and wireless):</strong> dial{" "}
             <code>*92</code> then the Alinstra number for no answer; <code>*90</code> then the number for busy. Cancel with{" "}
             <code>*93</code> / <code>*91</code>.
           </li>
           <li>
-            <strong className="font-medium">Verizon:</strong> dial <code>*71</code> then the Alinstra number for no-answer and busy
+            <strong className="font-semibold">Verizon:</strong> dial <code>*71</code> then the Alinstra number for no-answer and busy
             forwarding. Cancel with <code>*73</code>.
           </li>
           <li>
-            <strong className="font-medium">T-Mobile:</strong> dial <code>**61*1{dial || "<alinstra number>"}#</code> for no answer
+            <strong className="font-semibold">T-Mobile:</strong> dial <code>**61*1{dial || "<alinstra number>"}#</code> for no answer
             and <code>**67*1{dial || "<alinstra number>"}#</code> for busy. Cancel with <code>##61#</code> / <code>##67#</code>.
           </li>
           <li>
-            <strong className="font-medium">Landline and VoIP (Comcast, Spectrum, RingCentral, Ooma, and others):</strong> codes
+            <strong className="font-semibold">Landline and VoIP (Comcast, Spectrum, RingCentral, Ooma, and others):</strong> codes
             vary; most expose &quot;Forward when unanswered&quot; and &quot;Forward when busy&quot; in the account portal. Set both to the
             Alinstra number and pick 3–4 rings before forwarding.
           </li>
         </ul>
-      </section>
+      </Card>
 
-      <section className="rounded-xl border border-[var(--line)] p-4 text-sm">
-        <h2 className="mb-2 font-medium">Test it</h2>
+      <Card className="text-sm">
+        <h2 className="mb-2 text-base font-extrabold text-[var(--ink)]">Test it</h2>
         <ol className="list-decimal space-y-1 pl-5">
           <li>From a cell phone, call your usual business number (not the Alinstra number).</li>
           <li>Let it ring out — do not answer.</li>
           <li>Ava should answer with your greeting.</li>
           <li>
             Confirm the call appears on{" "}
-            <Link className="underline" href="/home/calls">
+            <Link className="font-semibold" href="/home/calls">
               Calls
             </Link>
             .
           </li>
         </ol>
-      </section>
+      </Card>
     </main>
   );
 }

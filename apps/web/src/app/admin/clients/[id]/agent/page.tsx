@@ -1,4 +1,5 @@
 import { AgentConfigPanel } from "@/components/agent-config-panel";
+import { Button, Card, Input, Label, PageHeader } from "@/components/ui";
 import { diffAgentConfigs, agentConfigs, clients } from "@alinstra/db";
 import { requireAdmin } from "@/lib/session";
 import Link from "next/link";
@@ -24,10 +25,14 @@ export default async function AgentConfigPage({
     : null;
 
   return (
-    <main className="mx-auto grid max-w-3xl gap-4 p-6">
-      <Link className="text-sm text-[var(--muted)]" href={`/admin/clients/${id}`}>Back to {client.name}</Link>
-      <h1 className="text-2xl font-semibold">Agent config</h1>
-      <p className="text-sm text-[var(--muted)]">Versions are kept. Activate and rollback copy a version into a new active one. Nothing is provisioned.</p>
+    <main className="grid gap-6">
+      <Link className="text-sm text-[var(--muted)]" href={`/admin/clients/${id}`}>
+        Back to {client.name}
+      </Link>
+      <PageHeader
+        title="Agent config"
+        description="Versions are kept. Activate and rollback copy a version into a new active one. Nothing is provisioned."
+      />
       <AgentConfigPanel
         clientId={id}
         versions={versions.map((version) => ({
@@ -39,37 +44,41 @@ export default async function AgentConfigPage({
           promptText: version.promptText,
         }))}
       />
-      <form className="flex flex-wrap items-end gap-2 text-sm" method="get">
-        <label className="grid gap-1">
-          From
-          <input className="w-20 rounded-md border border-[var(--line)] px-2 py-1" name="from" defaultValue={query.from ?? ""} />
-        </label>
-        <label className="grid gap-1">
-          To
-          <input className="w-20 rounded-md border border-[var(--line)] px-2 py-1" name="to" defaultValue={query.to ?? ""} />
-        </label>
-        <button className="cursor-pointer rounded-md bg-[var(--accent)] px-3 py-1 text-[var(--accent-ink)]" type="submit">Compare</button>
-      </form>
+      <Card>
+        <form className="flex flex-wrap items-end gap-3 text-sm" method="get">
+          <div>
+            <Label htmlFor="from">From</Label>
+            <Input className="w-20" id="from" name="from" defaultValue={query.from ?? ""} />
+          </div>
+          <div>
+            <Label htmlFor="to">To</Label>
+            <Input className="w-20" id="to" name="to" defaultValue={query.to ?? ""} />
+          </div>
+          <Button variant="secondary" type="submit">
+            Compare
+          </Button>
+        </form>
+      </Card>
       {diff ? (
-        <section className="grid gap-3">
-          <h2 className="font-medium">Settings</h2>
+        <Card className="grid gap-3">
+          <h2 className="text-base font-extrabold text-[var(--ink)]">Settings</h2>
           {diff.fields.length === 0 ? <p className="text-sm">No setting changes.</p> : null}
           <ul className="grid gap-2 text-sm">
             {diff.fields.map((field) => (
               <li key={field.field}>
-                <p className="font-medium">{field.field}</p>
-                <p className="whitespace-pre-wrap text-[var(--danger)]">{field.before || "—"}</p>
+                <p className="font-semibold">{field.field}</p>
+                <p className="whitespace-pre-wrap text-[var(--danger-text)]">{field.before || "—"}</p>
                 <p className="whitespace-pre-wrap">{field.after || "—"}</p>
               </li>
             ))}
           </ul>
-          <h2 className="font-medium">Prompt</h2>
-          <pre className="overflow-auto whitespace-pre-wrap rounded-md border border-[var(--line)] p-3 text-xs">
+          <h2 className="text-base font-extrabold text-[var(--ink)]">Prompt</h2>
+          <pre className="overflow-auto whitespace-pre-wrap rounded-xl border border-[var(--line)] bg-[var(--surface-subtle)] p-3 text-xs">
             {diff.lines.map((line, index) => (
               <div key={`${line.op}-${index}`}>{line.op === "add" ? "+ " : line.op === "remove" ? "- " : "  "}{line.line}</div>
             ))}
           </pre>
-        </section>
+        </Card>
       ) : null}
     </main>
   );

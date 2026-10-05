@@ -1,4 +1,5 @@
 import { InterviewSettingsForm } from "@/components/interview-settings-form";
+import { Card, EmptyState, PageHeader, SectionCard } from "@/components/ui";
 import { requireAdmin } from "@/lib/session";
 import { getEnv } from "@alinstra/config";
 import {
@@ -49,18 +50,20 @@ export default async function AdminInterviewPage({
   const focused = focusId ? sessionRows.find((row) => row.id === focusId) : null;
 
   return (
-    <main className="mx-auto grid max-w-4xl gap-8 p-6">
-      <div>
-        <Link className="text-sm text-[var(--muted)]" href="/home">
-          Home
-        </Link>
-        <h1 className="mt-2 text-2xl font-semibold">Interview settings</h1>
-        <p className="text-sm text-[var(--muted)]">
-          Env values are defaults. Saved settings override base URL, model, fallback, and budgets. The API key stays in
-          environment only.
-          {config.enabled ? "" : " Interview is currently disabled (TEXT_API_KEY is empty)."}
-        </p>
-      </div>
+    <main className="grid gap-6">
+      <Link className="text-sm text-[var(--muted)]" href="/home">
+        Home
+      </Link>
+      <PageHeader
+        title="Interview settings"
+        description={
+          <>
+            Env values are defaults. Saved settings override base URL, model, fallback, and budgets. The API key stays in
+            environment only.
+            {config.enabled ? "" : " Interview is currently disabled (TEXT_API_KEY is empty)."}
+          </>
+        }
+      />
 
       <InterviewSettingsForm
         defaults={{
@@ -73,73 +76,65 @@ export default async function AdminInterviewPage({
         }}
       />
 
-      <section className="grid gap-3">
-        <h2 className="text-lg font-medium">Active system prompt</h2>
-        <pre className="max-h-64 overflow-auto whitespace-pre-wrap rounded-xl border border-[var(--line)] p-4 text-xs">
+      <Card className="grid gap-3">
+        <h2 className="text-base font-extrabold text-[var(--ink)]">Active system prompt</h2>
+        <pre className="max-h-64 overflow-auto whitespace-pre-wrap rounded-xl border border-[var(--line)] bg-[var(--surface-subtle)] p-4 text-xs">
           {INTERVIEW_SYSTEM_PROMPT}
         </pre>
-      </section>
+      </Card>
 
-      <section className="grid gap-3">
-        <h2 className="text-lg font-medium">Question banks</h2>
-        <ul className="grid gap-2 text-sm">
-          {banks.map((bank) => (
-            <li key={bank.industry} className="rounded-xl border border-[var(--line)] px-4 py-3">
-              <span className="font-medium">{bank.industry}</span>
-              {" — "}
-              {bank.itemCount} items
-            </li>
-          ))}
-        </ul>
-      </section>
+      <SectionCard title="Question banks">
+        {banks.map((bank) => (
+          <div key={bank.industry} className="px-5 py-4 text-sm">
+            <span className="font-bold text-[var(--ink)]">{bank.industry}</span>
+            {" — "}
+            {bank.itemCount} items
+          </div>
+        ))}
+      </SectionCard>
 
-      <section className="grid gap-3">
-        <h2 className="text-lg font-medium">Sessions</h2>
-        <div className="overflow-x-auto rounded-xl border border-[var(--line)]">
-          <table className="w-full text-left text-sm">
-            <thead className="border-b border-[var(--line)] text-[var(--muted)]">
-              <tr>
-                <th className="px-3 py-2 font-medium">Client</th>
-                <th className="px-3 py-2 font-medium">Industry</th>
-                <th className="px-3 py-2 font-medium">Status</th>
-                <th className="px-3 py-2 font-medium">Model</th>
-                <th className="px-3 py-2 font-medium">Tokens</th>
-                <th className="px-3 py-2 font-medium">Started</th>
-                <th className="px-3 py-2 font-medium">Finished</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sessionRows.length === 0 ? (
+      <SectionCard title="Sessions">
+        {sessionRows.length === 0 ? (
+          <EmptyState title="No interviews yet" />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="border-b border-[var(--divider)] text-[var(--muted)]">
                 <tr>
-                  <td className="px-3 py-3 text-[var(--muted)]" colSpan={7}>
-                    No interviews yet.
-                  </td>
+                  <th className="px-5 py-3 font-semibold">Client</th>
+                  <th className="px-5 py-3 font-semibold">Industry</th>
+                  <th className="px-5 py-3 font-semibold">Status</th>
+                  <th className="px-5 py-3 font-semibold">Model</th>
+                  <th className="px-5 py-3 font-semibold">Tokens</th>
+                  <th className="px-5 py-3 font-semibold">Started</th>
+                  <th className="px-5 py-3 font-semibold">Finished</th>
                 </tr>
-              ) : (
-                sessionRows.map((row) => (
-                  <tr key={row.id} className="border-t border-[var(--line)]">
-                    <td className="px-3 py-2">
-                      <Link className="underline" href={`/admin/interview?session=${row.id}`}>
+              </thead>
+              <tbody className="divide-y divide-[var(--divider)]">
+                {sessionRows.map((row) => (
+                  <tr key={row.id}>
+                    <td className="px-5 py-3">
+                      <Link className="font-semibold" href={`/admin/interview?session=${row.id}`}>
                         {row.clientName}
                       </Link>
                     </td>
-                    <td className="px-3 py-2">{row.industry}</td>
-                    <td className="px-3 py-2">{row.status}</td>
-                    <td className="px-3 py-2">{row.model}</td>
-                    <td className="px-3 py-2">
+                    <td className="px-5 py-3">{row.industry}</td>
+                    <td className="px-5 py-3">{row.status}</td>
+                    <td className="px-5 py-3">{row.model}</td>
+                    <td className="px-5 py-3">
                       {row.tokensIn}/{row.tokensOut}
                     </td>
-                    <td className="px-3 py-2">{row.startedAt}</td>
-                    <td className="px-3 py-2">{row.finishedAt}</td>
+                    <td className="px-5 py-3">{row.startedAt}</td>
+                    <td className="px-5 py-3">{row.finishedAt}</td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
         {focused ? (
-          <div className="grid gap-2 rounded-xl border border-[var(--line)] p-4">
-            <h3 className="font-medium">Transcript · {focused.clientName}</h3>
+          <div className="grid gap-2 border-t border-[var(--divider)] px-5 py-4">
+            <h3 className="font-extrabold text-[var(--ink)]">Transcript · {focused.clientName}</h3>
             {focused.transcript.length === 0 ? (
               <p className="text-sm text-[var(--muted)]">Empty transcript.</p>
             ) : (
@@ -153,7 +148,7 @@ export default async function AdminInterviewPage({
                     : null;
                 return (
                   <div key={`${turn.role}-${index}`} className="text-sm">
-                    <p className="text-xs uppercase tracking-wide text-[var(--muted)]">{turn.role}</p>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">{turn.role}</p>
                     <p className="whitespace-pre-wrap">{turn.content}</p>
                     {diag ? (
                       <p className="mt-1 font-mono text-[11px] text-[var(--muted)]">
@@ -168,7 +163,7 @@ export default async function AdminInterviewPage({
             )}
           </div>
         ) : null}
-      </section>
+      </SectionCard>
     </main>
   );
 }

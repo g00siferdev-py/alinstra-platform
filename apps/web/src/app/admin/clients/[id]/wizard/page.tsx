@@ -1,4 +1,5 @@
 import { WizardForm } from "@/components/wizard-form";
+import { Button, PageHeader } from "@/components/ui";
 import { interviewEnabled } from "@/lib/interview-config";
 import { formPayload } from "@/lib/wizard-form-payload";
 import {
@@ -50,9 +51,11 @@ export default async function WizardPage({
     // Edit mode reads the client record, never the WizardDraft, which stops being current after submit.
     const payload = await clientEditPayload({ role: "admin", id: session.user.id }, id);
     return (
-      <main className="mx-auto grid max-w-2xl gap-4 p-6">
-        <Link className="text-sm text-[var(--muted)]" href={`/admin/clients/${id}`}>{client.name}</Link>
-        <h1 className="text-2xl font-semibold">Edit {client.name}</h1>
+      <main className="mx-auto grid max-w-2xl gap-6">
+        <Link className="text-sm text-[var(--muted)]" href={`/admin/clients/${id}`}>
+          {client.name}
+        </Link>
+        <PageHeader title={`Edit ${client.name}`} />
         <WizardForm
           {...shared}
           mode="edit"
@@ -71,16 +74,20 @@ export default async function WizardPage({
   const parsed = wizardPayloadSchema.safeParse(draft.payload);
   const payload = parsed.success ? parsed.data : emptyWizardPayload();
   return (
-    <main className="mx-auto grid max-w-2xl gap-4 p-6">
-      <Link className="text-sm text-[var(--muted)]" href={`/admin/clients/${id}`}>{client.name}</Link>
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <h1 className="text-2xl font-semibold">Wizard · {client.name}</h1>
-        {interviewEnabled() ? (
-          <Link className="text-sm underline" href={`/admin/clients/${id}/interview`}>
-            Start with an interview
-          </Link>
-        ) : null}
-      </div>
+    <main className="mx-auto grid max-w-2xl gap-6">
+      <Link className="text-sm text-[var(--muted)]" href={`/admin/clients/${id}`}>
+        {client.name}
+      </Link>
+      <PageHeader
+        title={`Wizard · ${client.name}`}
+        actions={
+          interviewEnabled() ? (
+            <Link href={`/admin/clients/${id}/interview`}>
+              <Button variant="secondary">Start with an interview</Button>
+            </Link>
+          ) : null
+        }
+      />
       <WizardForm
         {...shared}
         initialStep={stepFrom(query.step) || draft.currentStep}

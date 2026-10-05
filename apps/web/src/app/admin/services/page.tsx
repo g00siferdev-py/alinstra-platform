@@ -1,4 +1,5 @@
 import { ServiceCheck } from "@/components/service-check";
+import { Card, PageHeader, Pill } from "@/components/ui";
 import { getEnv, type Env } from "@alinstra/config";
 import { requireAdmin } from "@/lib/session";
 import Link from "next/link";
@@ -81,23 +82,31 @@ export default async function ServicesPage() {
   await requireAdmin();
   const env = getEnv();
   return (
-    <main className="mx-auto grid max-w-3xl gap-4 p-6">
-      <Link className="text-sm text-[var(--muted)]" href="/home">Home</Link>
-      <h1 className="text-2xl font-semibold">Services</h1>
-      <p className="text-sm text-[var(--muted)]">
-        Where each outside service lives and whether this deployment has its keys. Values are never shown here; change them in Railway.
-      </p>
+    <main className="grid gap-6">
+      <Link className="text-sm text-[var(--muted)]" href="/home">
+        Home
+      </Link>
+      <PageHeader
+        title="Services"
+        description="Where each outside service lives and whether this deployment has its keys. Values are never shown here; change them in Railway."
+      />
       {SERVICES.map((service) => (
-        <section key={service.name} className="grid gap-3 rounded-xl border border-[var(--line)] p-4">
+        <Card key={service.name} className="grid gap-3">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <h2 className="text-lg font-medium">{service.name}</h2>
-            <div className="flex gap-3 text-sm">
-              <a href={service.dashboard} target="_blank" rel="noreferrer">Dashboard</a>
-              <a href={service.docs} target="_blank" rel="noreferrer">Docs</a>
+            <h2 className="text-base font-extrabold text-[var(--ink)]">{service.name}</h2>
+            <div className="flex gap-3 text-sm font-semibold">
+              <a href={service.dashboard} target="_blank" rel="noreferrer">
+                Dashboard
+              </a>
+              <a href={service.docs} target="_blank" rel="noreferrer">
+                Docs
+              </a>
             </div>
           </div>
-          <p className="text-sm">{service.purpose}</p>
-          {service.note ? <p className="rounded-md border border-[var(--line)] bg-[var(--card)] p-2 text-sm">{service.note}</p> : null}
+          <p className="text-sm text-[var(--body)]">{service.purpose}</p>
+          {service.note ? (
+            <p className="rounded-xl border border-[var(--line)] bg-[var(--surface-subtle)] p-3 text-sm">{service.note}</p>
+          ) : null}
           {service.envVars.length > 0 ? (
             <ul className="grid gap-1 text-sm sm:grid-cols-2">
               {service.envVars.map((name) => {
@@ -105,7 +114,7 @@ export default async function ServicesPage() {
                 return (
                   <li key={name} className="flex items-center justify-between gap-2">
                     <code className="text-xs">{name}</code>
-                    <span className={state === "set" ? "text-[var(--accent)]" : "text-[var(--danger)]"}>{state}</span>
+                    <Pill tone={state === "set" ? "success" : "danger"}>{state}</Pill>
                   </li>
                 );
               })}
@@ -114,7 +123,7 @@ export default async function ServicesPage() {
             <p className="text-sm text-[var(--muted)]">No environment variables. Hostname comes from APP_URL.</p>
           )}
           {service.check ? <ServiceCheck service={service.check} label={service.name} /> : null}
-        </section>
+        </Card>
       ))}
     </main>
   );

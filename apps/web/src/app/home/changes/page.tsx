@@ -1,4 +1,5 @@
 import { ChangeRequestForm } from "@/components/change-request-form";
+import { PageHeader } from "@/components/ui";
 import { changeAllowance, changeRequests } from "@alinstra/db";
 import { requireUser } from "@/lib/session";
 import Link from "next/link";
@@ -13,12 +14,14 @@ export default async function ChangeRequestsPage() {
     changeRequests(actor).list(session.user.clientId),
   ]);
   return (
-    <main className="mx-auto grid max-w-3xl gap-4 p-6">
-      <Link className="text-sm text-[var(--muted)]" href="/home">Home</Link>
-      <h1 className="text-2xl font-semibold">Change requests</h1>
-      <p className="text-sm text-[var(--muted)]">
-        These are reviewed by Alinstra. Rejected and cancelled requests do not use the monthly allowance.
-      </p>
+    <main className="grid gap-6">
+      <Link className="text-sm text-[var(--muted)]" href="/home">
+        Home
+      </Link>
+      <PageHeader
+        title="Change requests"
+        description="These are reviewed by Alinstra. Rejected and cancelled requests do not use the monthly allowance."
+      />
       <ChangeRequestForm
         unlimited={allowance.unlimited}
         remaining={allowance.remaining}

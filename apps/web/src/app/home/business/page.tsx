@@ -26,6 +26,7 @@ import {
   transferTargets,
   WIZARD_STEP_TITLES,
 } from "@alinstra/db";
+import { Card, EmptyState, PageHeader, SectionCard } from "@/components/ui";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
@@ -64,24 +65,28 @@ export default async function MyBusinessPage() {
   const reviewRows = updates.filter((row) => row.status === "held" || (row.status === "rejected" && row.kind === OWNER_STEP_HOLD_KIND)).slice(0, 10);
   const fullNumbers = viewer ? canSeeCallerNumber(viewer) : false;
   return (
-    <main className="mx-auto grid max-w-3xl gap-4 p-6">
-      <Link className="text-sm text-[var(--muted)]" href="/home">Home</Link>
-      <h1 className="text-2xl font-semibold">My business</h1>
-      <p className="text-sm text-[var(--muted)]">
-        {owner
-          ? "Edit each section below, or use the quick updates for hours, notices, staff, and one FAQ at a time."
-          : "Read only. Ask the account owner to change hours, notices, staff, or FAQs."}
-      </p>
+    <main className="grid gap-6">
+      <Link className="text-sm text-[var(--muted)]" href="/home">
+        Home
+      </Link>
+      <PageHeader
+        title="My business"
+        description={
+          owner
+            ? "Edit each section below, or use the quick updates for hours, notices, staff, and one FAQ at a time."
+            : "Read only. Ask the account owner to change hours, notices, staff, or FAQs."
+        }
+      />
       {owner && !client.wizardSubmittedAt && interviewEnabled() ? (
-        <p className="rounded-xl border border-[var(--line)] p-4 text-sm">
-          <Link className="font-medium underline" href="/home/business/interview">
+        <Card className="text-sm">
+          <Link className="font-bold" href="/home/business/interview">
             Set up your receptionist
           </Link>
           {" — "}
           answer a short interview, then review the draft before anything goes live.
-        </p>
+        </Card>
       ) : null}
-      <section className="rounded-xl border border-[var(--line)] p-4 text-sm">
+      <Card className="text-sm">
         <p>{client.name}{client.namePronunciation ? ` · pronounced ${client.namePronunciation}` : ""}</p>
         <p>{client.contactName} · {client.contactEmail}</p>
         <p>{client.timezone}</p>
@@ -102,34 +107,38 @@ export default async function MyBusinessPage() {
             <span className="opacity-70">Forwarding setup is only for clients who keep their own number.</span>
           </p>
         ) : null}
-      </section>
+      </Card>
 
       {showCalls ? (
-        <section className="rounded-xl border border-[var(--line)] p-4">
-          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-            <h2 className="font-medium">Recent calls</h2>
-            <Link className="text-sm underline" href="/home/calls">All calls</Link>
-          </div>
-          {calls.rows.length === 0 ? <p className="text-sm text-[var(--muted)]">No calls yet.</p> : null}
-          <ul className="grid gap-1 text-sm">
-            {calls.rows.map((call) => (
-              <li key={call.id} className="flex flex-wrap items-center gap-2">
-                <Link href={`/home/calls/${call.id}`}>
+        <SectionCard
+          title="Recent calls"
+          action={
+            <Link className="text-sm font-bold no-underline" href="/home/calls">
+              All calls
+            </Link>
+          }
+        >
+          {calls.rows.length === 0 ? (
+            <EmptyState title="No calls yet" />
+          ) : (
+            calls.rows.map((call) => (
+              <div key={call.id} className="flex flex-wrap items-center gap-2 px-5 py-3 text-sm">
+                <Link className="font-semibold" href={`/home/calls/${call.id}`}>
                   {call.startedAt ? formatLocalTime(call.startedAt, client.timezone) : "—"}
                 </Link>
                 <span>
                   · {fullNumbers ? formatPhone(call.caller) || call.caller : call.caller} · {formatDuration(call.durationSeconds)}
                 </span>
                 <OutcomeBadge outcome={call.outcome} />
-              </li>
-            ))}
-          </ul>
-        </section>
+              </div>
+            ))
+          )}
+        </SectionCard>
       ) : null}
 
       {owner && reviewRows.length > 0 ? (
-        <section className="rounded-xl border border-[var(--line)] p-4">
-          <h2 className="mb-2 font-medium">Waiting for review</h2>
+        <Card className="grid gap-3">
+          <h2 className="text-base font-extrabold text-[var(--ink)]">Waiting for review</h2>
           <ul className="grid gap-2 text-sm">
             {reviewRows.map((row) => {
               const body = row.payload && typeof row.payload === "object" && !Array.isArray(row.payload)
@@ -149,12 +158,12 @@ export default async function MyBusinessPage() {
               );
             })}
           </ul>
-        </section>
+        </Card>
       ) : null}
 
       {owner && client.wizardSubmittedAt ? (
-        <section className="rounded-xl border border-[var(--line)] p-4">
-          <h2 className="mb-1 font-medium">Edit</h2>
+        <Card className="grid gap-3">
+          <h2 className="text-base font-extrabold text-[var(--ink)]">Edit</h2>
           <p className="mb-3 text-sm text-[var(--muted)]">
             Each step saves to your business{client.retellAgentId ? " and Ava updates within about a minute" : ""}. Steps marked with a dot change what Ava says.
           </p>
@@ -180,13 +189,13 @@ export default async function MyBusinessPage() {
           {OWNER_BLOCKED_STEPS.size > 0 ? (
             <p className="mt-3 text-xs text-[var(--muted)]">Plan and Compliance: {OWNER_BLOCKED_STEP_HINT}</p>
           ) : null}
-        </section>
+        </Card>
       ) : null}
 
       {owner && client.wizardSubmittedAt ? (
-        <section className="rounded-xl border border-[var(--line)] p-4">
+        <Card>
           <CallRetentionForm days={client.callRetentionDays} />
-        </section>
+        </Card>
       ) : null}
 
       {owner && client.wizardSubmittedAt ? (

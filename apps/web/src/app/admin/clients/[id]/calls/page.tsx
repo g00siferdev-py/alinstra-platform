@@ -1,4 +1,5 @@
 import { CallsList } from "@/components/calls-list";
+import { PageHeader } from "@/components/ui";
 import { parseCallFilters } from "@/lib/call-view";
 import { requireAdmin } from "@/lib/session";
 import { clients, listCalls } from "@alinstra/db";
@@ -22,14 +23,14 @@ export default async function AdminClientCallsPage({
   const page = await listCalls({ id: session.user.id, role: "admin" }, client.id, { from: filters.from, to: filters.to, outcome: filters.outcome, cursor: filters.cursor });
   const basePath = `/admin/clients/${client.id}/calls`;
   return (
-    <main className="mx-auto grid max-w-4xl gap-6 p-6">
-      <Link className="text-sm text-[var(--muted)]" href={`/admin/clients/${client.id}`}>{client.name}</Link>
-      <header>
-        <h1 className="text-2xl font-semibold">Calls</h1>
-        <p className="text-sm text-[var(--muted)]">
-          Times in {client.timezone}. Transcripts, recordings, and caller numbers are kept {client.callRetentionDays} days.
-        </p>
-      </header>
+    <main className="grid gap-6">
+      <Link className="text-sm text-[var(--muted)]" href={`/admin/clients/${client.id}`}>
+        {client.name}
+      </Link>
+      <PageHeader
+        title="Calls"
+        description={`Times in ${client.timezone}. Transcripts, recordings, and caller numbers are kept ${client.callRetentionDays} days.`}
+      />
       <CallsList rows={page.rows} nextCursor={page.nextCursor} filters={filters} basePath={basePath} timezone={client.timezone} fullNumbers />
     </main>
   );

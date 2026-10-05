@@ -1,5 +1,6 @@
 import { ownerEditClientStepAction } from "@/app/home/actions";
 import { WizardForm } from "@/components/wizard-form";
+import { PageHeader } from "@/components/ui";
 import { formPayload } from "@/lib/wizard-form-payload";
 import { requireUser } from "@/lib/session";
 import {
@@ -23,10 +24,11 @@ export default async function OwnerEditStepPage({ params }: { params: Promise<{ 
   if (!Number.isInteger(step) || step < 1 || step > 10) notFound();
   if (OWNER_BLOCKED_STEPS.has(step)) {
     return (
-      <main className="mx-auto grid max-w-2xl gap-4 p-6">
-        <Link className="text-sm text-[var(--muted)]" href="/home/business">My business</Link>
-        <h1 className="text-2xl font-semibold">{wizardStepTitle(step)}</h1>
-        <p className="text-sm text-[var(--muted)]">{OWNER_BLOCKED_STEP_HINT}</p>
+      <main className="mx-auto grid max-w-2xl gap-6">
+        <Link className="text-sm text-[var(--muted)]" href="/home/business">
+          My business
+        </Link>
+        <PageHeader title={wizardStepTitle(step)} description={OWNER_BLOCKED_STEP_HINT} />
       </main>
     );
   }
@@ -39,9 +41,11 @@ export default async function OwnerEditStepPage({ params }: { params: Promise<{ 
     knowledgeDocuments(actor).list(session.user.clientId),
   ]);
   return (
-    <main className="mx-auto grid max-w-2xl gap-4 p-6">
-      <Link className="text-sm text-[var(--muted)]" href="/home/business">My business</Link>
-      <h1 className="text-2xl font-semibold">Edit {wizardStepTitle(step)}</h1>
+    <main className="mx-auto grid max-w-2xl gap-6">
+      <Link className="text-sm text-[var(--muted)]" href="/home/business">
+        My business
+      </Link>
+      <PageHeader title={`Edit ${wizardStepTitle(step)}`} />
       <WizardForm
         clientId={client.id}
         mode="edit"
