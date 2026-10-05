@@ -5,6 +5,8 @@ import {
   discardInterviewSession,
   finishInterviewSession,
   postInterviewMessage,
+  resolveTextInterviewConfig,
+  saveInterviewSettings,
   startInterviewSession,
   textInterviewConfig,
 } from "./interview";
@@ -100,5 +102,25 @@ describe("interview persistence", () => {
   it("reports disabled when TEXT_API_KEY is absent", () => {
     expect(textInterviewConfig({ TEXT_API_KEY: "" }).enabled).toBe(false);
     expect(textInterviewConfig({ TEXT_API_KEY: "sk-test" }).enabled).toBe(true);
+  });
+
+  it("lets AppSetting override model while keeping the env API key", async () => {
+    await saveInterviewSettings(admin, {
+      textApiBase: "https://example.test/v1",
+      textModel: "override/model",
+      textFallbackModel: "fallback/model",
+      budgetInputTokens: 12_000,
+      budgetOutputTokens: 3_000,
+    });
+    const resolved = await resolveTextInterviewConfig({
+      TEXT_API_KEY: "sk-env-only",
+      TEXT_API_BASE: "https://openrouter.ai/api/v1",
+      TEXT_MODEL: "env/model",
+    });
+    expect(resolved.apiKey).toBe("sk-env-only");
+    expect(resolved.apiBase).toBe("https://example.test/v1");
+    expect(resolved.model).toBe("override/model");
+    expect(resolved.fallbackModel).toBe("fallback/model");
+    expect(resolved.budgetInputTokens).toBe(12_000);
   });
 });

@@ -13,6 +13,7 @@ export async function AppHeader() {
           ["/admin/clients", "Clients"],
           ["/admin/leads", "Leads"],
           ["/admin/plans", "Plans"],
+          ["/admin/interview", "Interview"],
           ["/admin/services", "Services"],
         ]
       : role === "client_owner"

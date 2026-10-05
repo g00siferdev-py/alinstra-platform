@@ -514,6 +514,16 @@ model StripePrice {
   @@map("stripe_price")
 }
 
+/// Platform-wide key/value settings. Interview text API key stays env-only; DB can override base/model/budget.
+model AppSetting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+  updatedBy String?
+
+  @@map("app_setting")
+}
+
 /// Marketing /start submissions. No auto-reply to the lead; admin is notified by email.
 model Lead {
   id                String    @id @default(cuid())

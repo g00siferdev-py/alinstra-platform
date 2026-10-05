@@ -16,6 +16,7 @@ import {
   type TextPlatform,
 } from "@alinstra/providers";
 import type { Prisma } from "./generated/prisma/client";
+import { getAppSettings, setAppSetting } from "./app-settings";
 import { prisma } from "./client";
 import { emptyWizardPayload, wizardPayloadSchema, type WizardPayload } from "./domain";
 import { recordChange, type Actor } from "./changes";
@@ -24,6 +25,14 @@ import { assertTenantContext } from "./tenant";
 function json(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
 }
+
+export const INTERVIEW_SETTING_KEYS = {
+  textApiBase: "interview.textApiBase",
+  textModel: "interview.textModel",
+  textFallbackModel: "interview.textFallbackModel",
+  budgetInputTokens: "interview.budgetInputTokens",
+  budgetOutputTokens: "interview.budgetOutputTokens",
+} as const;
 
 export const INTERVIEW_STATUS = {
   active: "active",
@@ -41,7 +50,7 @@ export type TextInterviewConfig = {
   budgetOutputTokens: number;
 };
 
-/** Env-backed config. Part 4 adds AppSetting overrides (except the API key). */
+/** Env-backed defaults. API key is always env-only. */
 export function textInterviewConfig(env: {
   TEXT_API_KEY?: string;
   TEXT_API_BASE?: string;
@@ -60,6 +69,55 @@ export function textInterviewConfig(env: {
     budgetInputTokens: env.TEXT_BUDGET_INPUT_TOKENS ?? DEFAULT_TEXT_TOKEN_BUDGET.inputTokens,
     budgetOutputTokens: env.TEXT_BUDGET_OUTPUT_TOKENS ?? DEFAULT_TEXT_TOKEN_BUDGET.outputTokens,
   };
+}
+
+function settingString(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function settingNumber(value: unknown): number | null {
+  const n = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
+  return Number.isFinite(n) && n > 0 ? Math.round(n) : null;
+}
+
+/** Env defaults with AppSetting overrides (never overrides TEXT_API_KEY). */
+export async function resolveTextInterviewConfig(env: {
+  TEXT_API_KEY?: string;
+  TEXT_API_BASE?: string;
+  TEXT_MODEL?: string;
+  TEXT_FALLBACK_MODEL?: string;
+  TEXT_BUDGET_INPUT_TOKENS?: number;
+  TEXT_BUDGET_OUTPUT_TOKENS?: number;
+}): Promise<TextInterviewConfig> {
+  const base = textInterviewConfig(env);
+  const stored = await getAppSettings(Object.values(INTERVIEW_SETTING_KEYS));
+  return {
+    ...base,
+    apiBase: settingString(stored[INTERVIEW_SETTING_KEYS.textApiBase]) ?? base.apiBase,
+    model: settingString(stored[INTERVIEW_SETTING_KEYS.textModel]) ?? base.model,
+    fallbackModel: settingString(stored[INTERVIEW_SETTING_KEYS.textFallbackModel]) ?? base.fallbackModel,
+    budgetInputTokens: settingNumber(stored[INTERVIEW_SETTING_KEYS.budgetInputTokens]) ?? base.budgetInputTokens,
+    budgetOutputTokens: settingNumber(stored[INTERVIEW_SETTING_KEYS.budgetOutputTokens]) ?? base.budgetOutputTokens,
+  };
+}
+
+export async function saveInterviewSettings(
+  ctx: Actor,
+  input: {
+    textApiBase: string;
+    textModel: string;
+    textFallbackModel: string;
+    budgetInputTokens: number;
+    budgetOutputTokens: number;
+  },
+) {
+  assertTenantContext(ctx);
+  if (ctx.role !== "admin") throw new Error("Only admin can change interview settings.");
+  await setAppSetting(ctx, INTERVIEW_SETTING_KEYS.textApiBase, input.textApiBase.trim() || DEFAULT_TEXT_API_BASE);
+  await setAppSetting(ctx, INTERVIEW_SETTING_KEYS.textModel, input.textModel.trim() || DEFAULT_TEXT_MODEL);
+  await setAppSetting(ctx, INTERVIEW_SETTING_KEYS.textFallbackModel, input.textFallbackModel.trim());
+  await setAppSetting(ctx, INTERVIEW_SETTING_KEYS.budgetInputTokens, input.budgetInputTokens);
+  await setAppSetting(ctx, INTERVIEW_SETTING_KEYS.budgetOutputTokens, input.budgetOutputTokens);
 }
 
 export function textPlatformFor(config: TextInterviewConfig): TextPlatform | null {

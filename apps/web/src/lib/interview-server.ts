@@ -6,6 +6,7 @@ import {
   discardInterviewSession,
   finishInterviewSession,
   postInterviewMessage,
+  resolveTextInterviewConfig,
   startInterviewSession,
   textInterviewConfig,
   textPlatformFor,
@@ -30,8 +31,8 @@ function rethrowRedirect(error: unknown): void {
   }
 }
 
-function configAndText() {
-  const config = textInterviewConfig(getEnv());
+async function configAndText() {
+  const config = await resolveTextInterviewConfig(getEnv());
   const text = textPlatformFor(config);
   if (!config.enabled || !text) {
     throw new Error("The interview assistant is not configured.");
@@ -42,7 +43,7 @@ function configAndText() {
 export async function ensureInterviewSession(actor: Actor, clientId: string, industry?: string | null) {
   const existing = await activeInterviewForClient(actor, clientId);
   if (existing) return existing;
-  const { config, text } = configAndText();
+  const { config, text } = await configAndText();
   return startInterviewSession(actor, { clientId, industry, text, model: config.model });
 }
 
@@ -52,7 +53,7 @@ export async function sendInterviewMessageAction(
   message: string,
 ): Promise<InterviewActionState> {
   try {
-    const { config, text } = configAndText();
+    const { config, text } = await configAndText();
     const result = await postInterviewMessage(actor, {
       sessionId,
       message,
