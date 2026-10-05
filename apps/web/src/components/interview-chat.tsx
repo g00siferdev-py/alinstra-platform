@@ -1,32 +1,36 @@
 "use client";
 
+import {
+  adminDiscardInterview,
+  adminFinishInterview,
+  adminSendInterviewMessage,
+} from "@/app/admin/clients/[id]/interview/actions";
+import {
+  ownerDiscardInterview,
+  ownerFinishInterview,
+  ownerSendInterviewMessage,
+} from "@/app/home/business/interview/actions";
 import { Button, ErrorText } from "@/components/ui";
 import { useState, useTransition } from "react";
 
 export type InterviewChatTurn = { role: "user" | "assistant"; content: string };
 
+export type InterviewChatAudience = "admin" | "owner";
+
 export function InterviewChat({
   sessionId,
+  clientId,
+  audience,
   initialTranscript,
   initialCaptured,
   initialDone,
-  sendAction,
-  finishAction,
-  discardAction,
 }: {
   sessionId: string;
+  clientId: string;
+  audience: InterviewChatAudience;
   initialTranscript: InterviewChatTurn[];
   initialCaptured: Record<string, unknown>;
   initialDone: boolean;
-  sendAction: (
-    sessionId: string,
-    message: string,
-  ) => Promise<
-    | { ok: true; reply?: string; done?: boolean; captured?: Record<string, unknown> }
-    | { ok: false; error: string }
-  >;
-  finishAction: (sessionId: string) => Promise<{ ok?: boolean; error?: string } | null | void>;
-  discardAction: (sessionId: string) => Promise<{ ok?: boolean; error?: string } | null | void>;
 }) {
   const [transcript, setTranscript] = useState(initialTranscript);
   const [captured, setCaptured] = useState(initialCaptured);
@@ -43,7 +47,10 @@ export function InterviewChat({
     setTranscript((rows) => [...rows, { role: "user", content: text }]);
     setMessage("");
     startTransition(async () => {
-      const result = await sendAction(sessionId, text);
+      const result =
+        audience === "admin"
+          ? await adminSendInterviewMessage(sessionId, text)
+          : await ownerSendInterviewMessage(sessionId, text);
       if (!result.ok) {
         setError(result.error);
         return;
@@ -100,7 +107,10 @@ export function InterviewChat({
             onClick={() => {
               setError(null);
               startTransition(async () => {
-                const result = await finishAction(sessionId);
+                const result =
+                  audience === "admin"
+                    ? await adminFinishInterview(sessionId, clientId)
+                    : await ownerFinishInterview(sessionId);
                 if (result && result.ok === false && result.error) setError(result.error);
               });
             }}
@@ -114,7 +124,10 @@ export function InterviewChat({
             onClick={() => {
               setError(null);
               startTransition(async () => {
-                const result = await discardAction(sessionId);
+                const result =
+                  audience === "admin"
+                    ? await adminDiscardInterview(sessionId, clientId)
+                    : await ownerDiscardInterview(sessionId);
                 if (result && result.ok === false && result.error) setError(result.error);
               });
             }}

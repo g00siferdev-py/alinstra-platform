@@ -5,7 +5,6 @@ import { requireAdmin } from "@/lib/session";
 import { clients, type Actor } from "@alinstra/db";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { adminDiscardInterview, adminFinishInterview, adminSendInterviewMessage } from "./actions";
 
 export default async function AdminInterviewPage({ params }: { params: Promise<{ id: string }> }) {
   if (!interviewEnabled()) notFound();
@@ -32,13 +31,12 @@ export default async function AdminInterviewPage({ params }: { params: Promise<{
         Chat through the setup. Finish writes answers into the wizard draft without overwriting fields you already filled.
       </p>
       <InterviewChat
+        audience="admin"
+        clientId={id}
         sessionId={interview.id}
         initialTranscript={state.transcript ?? []}
         initialCaptured={state.collected ?? {}}
         initialDone={interview.status !== "active" || state.done === true}
-        sendAction={adminSendInterviewMessage}
-        finishAction={(sessionId) => adminFinishInterview(sessionId, id)}
-        discardAction={(sessionId) => adminDiscardInterview(sessionId, id)}
       />
     </main>
   );

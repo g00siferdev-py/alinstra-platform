@@ -5,7 +5,6 @@ import { requireUser } from "@/lib/session";
 import { clients, type Actor } from "@alinstra/db";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ownerDiscardInterview, ownerFinishInterview, ownerSendInterviewMessage } from "./actions";
 
 export default async function OwnerInterviewPage() {
   if (!interviewEnabled()) notFound();
@@ -34,13 +33,12 @@ export default async function OwnerInterviewPage() {
         Answer a few short questions. You can review and edit everything in the form before anything goes live.
       </p>
       <InterviewChat
+        audience="owner"
+        clientId={session.user.clientId}
         sessionId={interview.id}
         initialTranscript={state.transcript ?? []}
         initialCaptured={state.collected ?? {}}
         initialDone={interview.status !== "active" || state.done === true}
-        sendAction={ownerSendInterviewMessage}
-        finishAction={ownerFinishInterview}
-        discardAction={ownerDiscardInterview}
       />
     </main>
   );
