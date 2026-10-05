@@ -7,8 +7,6 @@ import {
 } from "@alinstra/db";
 import Link from "next/link";
 
-export const revalidate = 3600;
-
 export const metadata = marketingMetadata({
   title: "Pricing",
   description: "Simple plans. No per-call surprises. Setup, a dedicated number, messages, transcripts, and the owner portal.",

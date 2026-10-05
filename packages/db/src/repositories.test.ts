@@ -105,6 +105,8 @@ describe("repository contract", () => {
         if (
           match[1] === "seedPlans" ||
           match[1] === "publicPlans" ||
+          match[1] === "publicPlansFromSeeds" ||
+          match[1] === "resetPublicPlansCache" ||
           match[1] === "formatPlanCents" ||
           match[1] === "formatOveragePerMinute" ||
           match[1] === "formatIncludedChanges"

@@ -2,8 +2,6 @@ import { MARKETING_AUDIENCE_COMING, MARKETING_AUDIENCES } from "@/lib/marketing-
 import { marketingMetadata } from "@/lib/marketing-seo";
 import Link from "next/link";
 
-export const revalidate = 3600;
-
 export const metadata = marketingMetadata({
   title: "Who it's for",
   description:

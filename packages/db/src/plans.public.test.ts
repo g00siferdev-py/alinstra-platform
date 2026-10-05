@@ -1,16 +1,25 @@
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { prisma } from "./client";
 import {
   formatIncludedChanges,
   formatOveragePerMinute,
   formatPlanCents,
   publicPlans,
+  publicPlansFromSeeds,
+  resetPublicPlansCache,
   seedPlans,
 } from "./plans";
 import { resetTestDatabase } from "./reset-test-database";
 
 describe("publicPlans", () => {
-  beforeEach(() => resetTestDatabase());
+  beforeEach(() => {
+    resetPublicPlansCache();
+    return resetTestDatabase();
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+    resetPublicPlansCache();
+  });
   afterAll(async () => {
     await prisma.$disconnect();
   });
@@ -49,5 +58,15 @@ describe("publicPlans", () => {
     expect(formatOveragePerMinute(35)).toBe("$0.35/min");
     expect(formatIncludedChanges(1)).toBe("1");
     expect(formatIncludedChanges(null)).toBe("Unlimited");
+  });
+
+  it("returns PLAN_SEEDS when Prisma throws", async () => {
+    vi.spyOn(prisma.plan, "findMany").mockRejectedValueOnce(new Error("Can't reach database server at postgres"));
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const plans = await publicPlans();
+    expect(plans).toEqual(publicPlansFromSeeds());
+    expect(plans.map((plan) => plan.id)).toEqual(["starter", "professional", "premium"]);
+    expect(plans.every((plan) => plan.recallMonthlyCents === 0 && plan.recallPerBookingCents === 0)).toBe(true);
+    expect(warn).toHaveBeenCalledOnce();
   });
 });

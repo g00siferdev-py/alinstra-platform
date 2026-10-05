@@ -5,8 +5,6 @@ import { HOME_DESCRIPTION, marketingMetadata } from "@/lib/marketing-seo";
 import { publicSiteConfig } from "@alinstra/db";
 import Link from "next/link";
 
-export const revalidate = 3600;
-
 export const metadata = marketingMetadata({
   title: "Alinstra",
   description: HOME_DESCRIPTION,

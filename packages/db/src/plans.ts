@@ -81,25 +81,70 @@ export type PublicPlan = {
   sortOrder: number;
 };
 
-/** Tenant-free active plans for the marketing pricing table, ordered by sortOrder. */
+const CACHE_MS = 60 * 60 * 1000;
+let cachedPlans: { at: number; value: PublicPlan[] } | null = null;
+let warnedPlansDbFailure = false;
+
+/** Test helper — clears the in-process publicPlans cache. */
+export function resetPublicPlansCache(): void {
+  cachedPlans = null;
+  warnedPlansDbFailure = false;
+}
+
+/** Seed catalog shaped as PublicPlan[] for marketing when the DB is unreachable. */
+export function publicPlansFromSeeds(): PublicPlan[] {
+  return PLAN_SEEDS.map((plan) => ({
+    id: plan.code,
+    code: plan.code,
+    name: plan.name,
+    monthlyPriceCents: plan.monthlyPriceCents,
+    includedMinutes: plan.includedMinutes,
+    overagePerMinuteCents: plan.overagePerMinuteCents,
+    setupFeeCents: plan.setupFeeCents,
+    includedChangesPerMonth: plan.includedChangesPerMonth,
+    recallMonthlyCents: 0,
+    recallPerBookingCents: 0,
+    sortOrder: plan.sortOrder,
+  }));
+}
+
+/**
+ * Tenant-free active plans for the marketing pricing table, ordered by sortOrder.
+ * Cached in-process for one hour. On database failure, returns PLAN_SEEDS (ids = codes).
+ */
 export async function publicPlans(): Promise<PublicPlan[]> {
-  return prisma.plan.findMany({
-    where: { active: true },
-    select: {
-      id: true,
-      code: true,
-      name: true,
-      monthlyPriceCents: true,
-      includedMinutes: true,
-      overagePerMinuteCents: true,
-      setupFeeCents: true,
-      includedChangesPerMonth: true,
-      recallMonthlyCents: true,
-      recallPerBookingCents: true,
-      sortOrder: true,
-    },
-    orderBy: { sortOrder: "asc" },
-  });
+  const now = Date.now();
+  if (cachedPlans && now - cachedPlans.at < CACHE_MS) return cachedPlans.value;
+
+  try {
+    const value = await prisma.plan.findMany({
+      where: { active: true },
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        monthlyPriceCents: true,
+        includedMinutes: true,
+        overagePerMinuteCents: true,
+        setupFeeCents: true,
+        includedChangesPerMonth: true,
+        recallMonthlyCents: true,
+        recallPerBookingCents: true,
+        sortOrder: true,
+      },
+      orderBy: { sortOrder: "asc" },
+    });
+    cachedPlans = { at: now, value };
+    return value;
+  } catch (error) {
+    if (!warnedPlansDbFailure) {
+      warnedPlansDbFailure = true;
+      console.warn("[publicPlans] database unavailable; using PLAN_SEEDS fallback", error);
+    }
+    const value = publicPlansFromSeeds();
+    cachedPlans = { at: now, value };
+    return value;
+  }
 }
 
 /** "$199" from 19900; whole dollars drop the cents. */

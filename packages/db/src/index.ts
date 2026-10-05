@@ -7,6 +7,8 @@ export {
   formatPlanCents,
   plans,
   publicPlans,
+  publicPlansFromSeeds,
+  resetPublicPlansCache,
   seedPlans,
   updatePlan,
   type PublicPlan,
