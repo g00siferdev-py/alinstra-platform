@@ -2,9 +2,9 @@ import {
   adminOverview,
   callLinksFor,
   clientMessages,
-  clients,
   formatLocalTime,
-  plans,
+  listCalls,
+  ownerOverview,
   type Actor,
   type TenantContext,
 } from "@alinstra/db";
@@ -211,34 +211,10 @@ export default async function HomePage() {
     );
   }
 
-  let messages: Array<{ id: string; callerName: string; body: string; createdAt: Date; retellCallId: string | null }> =
-    [];
-  let callLinks = new Map<string, string>();
-  let clientName: string | null = null;
-  let clientTimezone = "America/New_York";
-  let planName: string | null = null;
-  let minutes = 0;
-  if (clientId && (role === "client_owner" || role === "client_staff")) {
-    const ctx: TenantContext = { role, clientId };
-    const [client, messageRows] = await Promise.all([
-      clients(ctx).getById(clientId),
-      clientMessages(ctx).list(clientId),
-    ]);
-    messages = messageRows;
-    const viewer = callViewerFor(session.user);
-    if (viewer) callLinks = await callLinksFor(viewer, clientId, messageRows.map((row) => row.retellCallId));
-    const plan = client?.planId ? await plans(ctx).getById(client.planId) : null;
-    clientName = client?.name ?? null;
-    clientTimezone = client?.timezone ?? clientTimezone;
-    planName = plan?.name ?? null;
-    minutes = client?.overrideIncludedMinutes ?? plan?.includedMinutes ?? 0;
-  }
-
-  return (
-    <main className="grid gap-6">
-      <PageHeader title={`Hi ${greetingName}`} description={formatDateLine(now)} />
-
-      {needsTwoFactor ? (
+  if (needsTwoFactor) {
+    return (
+      <main className="grid gap-6">
+        <PageHeader title={`Hi ${greetingName}`} description={formatDateLine(now)} />
         <Card className="grid gap-3">
           <h2 className="text-lg font-extrabold">Two-factor authentication is required</h2>
           <p className="text-sm text-[var(--muted)]">
@@ -248,43 +224,162 @@ export default async function HomePage() {
             <Button>Set up two-factor</Button>
           </Link>
         </Card>
-      ) : null}
+      </main>
+    );
+  }
 
-      {clientName ? (
-        <Card className="grid gap-3">
-          <h2 className="text-lg font-extrabold">{clientName}</h2>
-          <p className="text-sm text-[var(--muted)]">{planName ?? "No plan yet"}</p>
-          <p className="text-sm">Minutes included: {minutes}</p>
-          <div className="text-sm" id="messages">
-            <p className="font-bold">Messages</p>
-            {messages.length === 0 ? <p className="text-[var(--muted)]">No messages yet.</p> : null}
-            <ul className="grid gap-1">
-              {messages.map((message) => {
+  if (clientId && (role === "client_owner" || role === "client_staff")) {
+    const ctx: TenantContext = { role, clientId };
+    const canViewCalls = role === "client_owner" || session.user.canViewCalls === true;
+    const viewer = callViewerFor(session.user);
+    const [overview, messageRows, callPage] = await Promise.all([
+      ownerOverview(ctx, clientId, now),
+      clientMessages(ctx).list(clientId),
+      canViewCalls && viewer ? listCalls(viewer, clientId, { limit: 6 }) : Promise.resolve({ rows: [], nextCursor: null }),
+    ]);
+    const recentMessages = messageRows.slice(0, 6);
+    const callLinks =
+      viewer && recentMessages.length > 0
+        ? await callLinksFor(
+            viewer,
+            clientId,
+            recentMessages.map((row) => row.retellCallId),
+          )
+        : new Map<string, string>();
+
+    return (
+      <main className="grid gap-6">
+        <PageHeader
+          eyebrow={formatDateLine(now)}
+          title={`Hi ${greetingName}, here's today`}
+          description={overview.clientName}
+          actions={
+            role === "client_owner" ? (
+              <Link href="/home/business">
+                <Button variant="secondary">Edit my business</Button>
+              </Link>
+            ) : null
+          }
+        />
+
+        <section className={`grid gap-3 sm:grid-cols-2 ${canViewCalls ? "xl:grid-cols-3" : ""}`}>
+          {canViewCalls ? (
+            <StatCard
+              icon={<Phone className="h-5 w-5 text-[var(--primary)]" />}
+              value={overview.callsThisWeek}
+              label="Calls this week"
+            />
+          ) : null}
+          <StatCard
+            icon={<MessageSquare className="h-5 w-5 text-[var(--primary)]" />}
+            value={overview.messagesThisWeek}
+            label="Messages this week"
+          />
+          <Card className="grid gap-3">
+            <div className="flex items-center gap-3">
+              <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--primary-soft)]">
+                <Clock3 className="h-5 w-5 text-[var(--primary)]" />
+              </span>
+              <div>
+                <p className="text-[28px] font-extrabold tabular-nums tracking-tight text-[var(--ink)]">
+                  {overview.minutesUsed}
+                  <span className="text-base font-bold text-[var(--muted)]"> / {overview.minutesIncluded}</span>
+                </p>
+                <p className="text-[13px] font-semibold text-[var(--muted)]">
+                  Minutes used · {overview.planName ?? "No plan"}
+                </p>
+              </div>
+            </div>
+            <ProgressBar value={overview.minutesUsed} max={overview.minutesIncluded || 1} />
+          </Card>
+        </section>
+
+        <div className={`grid gap-6 ${canViewCalls ? "lg:grid-cols-2" : ""}`}>
+          {canViewCalls ? (
+            <SectionCard
+              title="Latest calls"
+              action={
+                <Link className="text-sm font-bold no-underline" href="/home/calls">
+                  See all
+                </Link>
+              }
+            >
+              {callPage.rows.length === 0 ? (
+                <EmptyState title="No calls yet" description="When Ava answers, they show up here." />
+              ) : (
+                callPage.rows.map((call) => (
+                  <Link
+                    key={call.id}
+                    href={`/home/calls/${call.id}`}
+                    className="grid grid-cols-[5rem_minmax(0,1fr)_auto_4rem] items-center gap-3 px-5 py-3 text-sm text-[var(--ink)] no-underline hover:bg-[var(--surface-subtle)]"
+                  >
+                    <span className="text-[var(--muted)]">{formatTime(call.startedAt)}</span>
+                    <span className="truncate font-semibold">{call.caller}</span>
+                    <Pill tone="neutral">{call.outcome?.replaceAll("_", " ") ?? "No action"}</Pill>
+                    <span className="text-right tabular-nums text-[var(--muted)]">
+                      {formatDuration(call.durationSeconds)}
+                    </span>
+                  </Link>
+                ))
+              )}
+            </SectionCard>
+          ) : null}
+
+          <SectionCard title="Recent messages">
+            {recentMessages.length === 0 ? (
+              <EmptyState title="No messages yet" description="Taken messages will land here." />
+            ) : (
+              recentMessages.map((message) => {
                 const callId = message.retellCallId ? callLinks.get(message.retellCallId) : undefined;
                 return (
-                  <li key={message.id}>
-                    {formatLocalTime(message.createdAt, clientTimezone)} · {message.callerName}: {message.body}
-                    {callId ? (
-                      <>
-                        {" "}
-                        · <Link href={`/home/calls/${callId}`}>View call</Link>
-                      </>
-                    ) : null}
-                  </li>
+                  <div key={message.id} className="grid gap-1 px-5 py-4 text-sm" id={message.id === recentMessages[0]?.id ? "messages" : undefined}>
+                    <p className="font-bold text-[var(--ink)]">{message.callerName}</p>
+                    <p className="text-[var(--body)]">{message.body}</p>
+                    <p className="text-[var(--muted)]">
+                      {formatLocalTime(message.createdAt, overview.timezone)}
+                      {callId && canViewCalls ? (
+                        <>
+                          {" "}
+                          · <Link href={`/home/calls/${callId}`}>View call</Link>
+                        </>
+                      ) : null}
+                    </p>
+                  </div>
                 );
-              })}
-            </ul>
-          </div>
-          <div className="flex flex-wrap gap-3 text-sm">
-            <Link href="/home/business">My business</Link>
-            {session.user.role === "client_owner" || session.user.canViewCalls === true ? (
-              <Link href="/home/calls">Calls</Link>
+              })
+            )}
+          </SectionCard>
+        </div>
+
+        <Card className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+          <div className="grid gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-lg font-extrabold text-[var(--ink)]">Your receptionist</h2>
+              {overview.agentLive ? <Pill tone="live">On a call</Pill> : <Pill tone="success">Ready</Pill>}
+            </div>
+            <p className="text-sm text-[var(--muted)]">
+              {overview.publicPhone ? `Public number · ${overview.publicPhone}` : "No public number yet."}
+            </p>
+            {overview.agentLive && overview.liveCallId && canViewCalls ? (
+              <Link className="text-sm font-bold" href={`/home/calls/${overview.liveCallId}`}>
+                View live call
+              </Link>
             ) : null}
-            {session.user.role === "client_owner" ? <Link href="/home/changes">Change requests</Link> : null}
-            {session.user.role === "client_owner" ? <Link href="/home/team">Team</Link> : null}
           </div>
+          {role === "client_owner" ? (
+            <Link href="/home/business">
+              <Button variant="secondary">Edit my business</Button>
+            </Link>
+          ) : null}
         </Card>
-      ) : null}
+      </main>
+    );
+  }
+
+  return (
+    <main className="grid gap-6">
+      <PageHeader title={`Hi ${greetingName}`} description={formatDateLine(now)} />
+      <EmptyState title="Nothing here yet" description="Ask an admin to attach your account to a client." />
     </main>
   );
 }

@@ -214,4 +214,5 @@ export {
   type AdminTodoItem,
   type LiveCallRow,
 } from "./admin-overview";
+export { ownerOverview, type OwnerOverview } from "./owner-overview";
 export { INTERVIEW_SYSTEM_PROMPT, listLoadedBanks } from "@alinstra/agent";
