@@ -2,51 +2,195 @@
 
 :root {
   color-scheme: light;
-  --bg: #fafaf9;
-  --ink: #171717;
-  --muted: #525252;
-  --card: #ffffff;
-  --line: #e5e5e5;
-  --accent: #0f3d2e;
-  --accent-ink: #f5f5f4;
-  --danger: #9f1239;
+
+  --ground: #f3f6fa;
+  --surface: #ffffff;
+  --surface-subtle: #f7f9fc;
+  --line: #e3e9f1;
+  --divider: #eef2f7;
+  --ink: #0f1b2d;
+  --body: #3b4760;
+  --muted: #55627a;
+  --primary: #2453d6;
+  --primary-soft: #e7eefd;
+  --primary-text: #1d3fa8;
+  --success-soft: #e3f6ea;
+  --success-text: #146c3a;
+  --warning-soft: #fff4e8;
+  --warning-pill: #fff0e2;
+  --warning-text: #9a4a0b;
+  --danger-soft: #fde8e8;
+  --danger-text: #a3261e;
+  --purple-soft: #f1ecfd;
+  --purple-text: #5b34b8;
+  --neutral-soft: #eef2f7;
+  --neutral-text: #3b4760;
+  --live-strong: #14a38b;
+  --live-soft: #e9f8f4;
+  --live-border: #bcebdd;
+  --live-text: #0e6e5c;
+  --badge-orange: #b4560f;
+  --secondary-border: #c9d6f5;
+  --silence: #f3c89a;
+  --shadow-card: 0 1px 2px rgba(15, 27, 45, 0.06);
+
+  /* Primary button — one place to swap blue ↔ teal.
+     Teal option: --btn-primary: #34d3b5; --btn-primary-ink: #04221c; --btn-halo: rgba(52, 211, 181, 0.22); */
+  --btn-primary: #2453d6;
+  --btn-primary-ink: #ffffff;
+  --btn-halo: rgba(36, 83, 214, 0.18);
+
+  /* Back-compat aliases used by pages not yet migrated */
+  --bg: var(--ground);
+  --card: var(--surface);
+  --accent: var(--primary);
+  --accent-ink: var(--btn-primary-ink);
+  --danger: var(--danger-text);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    color-scheme: dark;
-    --bg: #0a0a0a;
-    --ink: #f5f5f5;
-    --muted: #a3a3a3;
-    --card: #171717;
-    --line: #262626;
-    --accent: #6ee7b7;
-    --accent-ink: #052e1f;
-    --danger: #fb7185;
-  }
+@theme {
+  --color-ground: var(--ground);
+  --color-surface: var(--surface);
+  --color-surface-subtle: var(--surface-subtle);
+  --color-line: var(--line);
+  --color-divider: var(--divider);
+  --color-ink: var(--ink);
+  --color-body: var(--body);
+  --color-muted: var(--muted);
+  --color-primary: var(--primary);
+  --color-primary-soft: var(--primary-soft);
+  --color-primary-text: var(--primary-text);
+  --font-sans: var(--font-plus-jakarta), ui-sans-serif, system-ui, sans-serif;
 }
 
 body {
   margin: 0;
   min-height: 100vh;
-  background: var(--bg);
+  background: var(--ground);
   color: var(--ink);
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-family: var(--font-plus-jakarta), ui-sans-serif, system-ui, sans-serif;
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.55;
   -webkit-font-smoothing: antialiased;
 }
 
-@layer base {
-  a {
-    color: var(--accent);
+a {
+  color: var(--primary);
+}
+
+button,
+input[type="file"],
+input[type="file"]::file-selector-button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.app-shell-main {
+  width: 100%;
+  max-width: 1160px;
+  margin-inline: auto;
+  padding: 24px 28px 40px;
+}
+
+@keyframes interview-dot-pulse {
+  0%,
+  80%,
+  100% {
+    opacity: 0.35;
+    transform: translateY(0);
+  }
+  40% {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
+}
+
+.interview-thinking-dots {
+  display: inline-flex;
+  gap: 0.3rem;
+  align-items: center;
+}
+
+.interview-thinking-dots > span {
+  width: 0.35rem;
+  height: 0.35rem;
+  border-radius: 9999px;
+  background: currentColor;
+  opacity: 0.35;
+  animation: interview-dot-pulse 1.2s ease-in-out infinite;
+}
+
+.interview-thinking-dots > span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.interview-thinking-dots > span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes live-wave {
+  0%,
+  100% {
+    transform: scaleY(0.35);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+
+.live-waveform {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 28px;
+}
+
+.live-waveform > span {
+  display: block;
+  width: 4px;
+  height: 100%;
+  border-radius: 9999px;
+  background: var(--live-strong);
+  transform-origin: center;
+  animation: live-wave 1s ease-in-out infinite;
+}
+
+.live-waveform > span:nth-child(2) {
+  animation-delay: 0.1s;
+}
+.live-waveform > span:nth-child(3) {
+  animation-delay: 0.2s;
+}
+.live-waveform > span:nth-child(4) {
+  animation-delay: 0.3s;
+}
+.live-waveform > span:nth-child(5) {
+  animation-delay: 0.15s;
+}
+.live-waveform > span:nth-child(6) {
+  animation-delay: 0.25s;
+}
+.live-waveform > span:nth-child(7) {
+  animation-delay: 0.05s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .interview-thinking-dots > span {
+    animation: none;
+    opacity: 0.7;
   }
 
-  button,
-  input[type="file"],
-  input[type="file"]::file-selector-button {
-    cursor: pointer;
-  }
-
-  button:disabled {
-    cursor: not-allowed;
+  .live-waveform > span {
+    animation: none;
+    transform: scaleY(0.55);
   }
 }
