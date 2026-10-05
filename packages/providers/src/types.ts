@@ -183,6 +183,8 @@ export type TextCompleteResult = {
   inputTokens: number;
   outputTokens: number;
   model: string;
+  /** Provider finish_reason when available (e.g. stop, length). */
+  finishReason?: string | null;
 };
 
 export interface TextPlatform {

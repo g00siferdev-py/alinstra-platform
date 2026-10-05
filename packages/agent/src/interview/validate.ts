@@ -4,115 +4,385 @@ import type { InterviewCollected, ModelTurnJson } from "./types";
 const optionalText = z.string().max(10_000).optional();
 const shortText = z.string().max(500).optional();
 
-/** Soft schemas aligned with packages/db/src/domain.ts — interview updates only. */
-const interviewCollectedSchema = z
+const MULTILINE_STRING_FIELDS = new Set(["faqs", "policies", "staff"]);
+
+const businessFields = z
   .object({
-    business: z
-      .object({
-        name: shortText,
-        industry: shortText,
-        contactName: shortText,
-        contactEmail: z.string().email().max(200).optional().or(z.literal("")),
-        contactPhone: shortText,
-        timezone: shortText,
-        websiteUrl: z.string().url().max(500).optional().or(z.literal("")),
-        namePronunciation: shortText,
-        publicPhone: shortText,
-        publicEmail: z.string().email().max(200).optional().or(z.literal("")),
-      })
-      .partial()
-      .optional(),
-    knowledge: z
-      .object({
-        hours: optionalText,
-        services: optionalText,
-        faqs: optionalText,
-        policies: optionalText,
-        staff: optionalText,
-      })
-      .partial()
-      .optional(),
-    coverage: z
-      .object({
-        lunchHours: shortText,
-        afterHours: shortText,
-        weekends: shortText,
-        holidays: shortText,
-        holdOverflow: shortText,
-        unansweredAfterRings: z.number().int().min(1).max(20).optional(),
-      })
-      .partial()
-      .optional(),
-    features: z
-      .object({
-        messages: shortText,
-        messageRecipients: shortText,
-        weeklyHoursText: optionalText,
-        transferTargetsText: optionalText,
-        bookingMode: z.enum(["direct_calendar", "request_only"]).optional(),
-        liveTransfer: z.boolean().optional(),
-        emergencyHandling: optionalText,
-        textConfirmations: z.boolean().optional(),
-        textReminders: z.boolean().optional(),
-      })
-      .partial()
-      .optional(),
-    voice: z
-      .object({
-        voiceId: z.enum(["voice_1", "voice_2", "voice_3", "voice_4"]).optional(),
-        greeting: shortText,
-        assistantName: z.string().max(40).optional(),
-        disclosureMode: z.enum(["on_request", "upfront"]).optional(),
-        tone: shortText,
-        languages: shortText,
-      })
-      .partial()
-      .optional(),
-    compliance: z
-      .object({
-        healthcareSensitive: z.boolean().optional(),
-        healthcareTouched: z.boolean().optional(),
-      })
-      .partial()
-      .optional(),
+    name: shortText,
+    industry: shortText,
+    contactName: shortText,
+    contactEmail: z.string().email().max(200).optional().or(z.literal("")),
+    contactPhone: shortText,
+    timezone: shortText,
+    websiteUrl: z.string().url().max(500).optional().or(z.literal("")),
+    namePronunciation: shortText,
+    publicPhone: shortText,
+    publicEmail: z.string().email().max(200).optional().or(z.literal("")),
+  })
+  .partial();
+const knowledgeFields = z
+  .object({
+    hours: optionalText,
+    services: optionalText,
+    faqs: optionalText,
+    policies: optionalText,
+    staff: optionalText,
+  })
+  .partial();
+const coverageFields = z
+  .object({
+    lunchHours: shortText,
+    afterHours: shortText,
+    weekends: shortText,
+    holidays: shortText,
+    holdOverflow: shortText,
+    unansweredAfterRings: z.number().int().min(1).max(20).optional(),
+  })
+  .partial();
+const featuresFields = z
+  .object({
+    messages: shortText,
+    messageRecipients: shortText,
+    weeklyHoursText: optionalText,
+    transferTargetsText: optionalText,
+    bookingMode: z.enum(["direct_calendar", "request_only"]).optional(),
+    liveTransfer: z.boolean().optional(),
+    emergencyHandling: optionalText,
+    textConfirmations: z.boolean().optional(),
+    textReminders: z.boolean().optional(),
+  })
+  .partial();
+const voiceFields = z
+  .object({
+    voiceId: z.enum(["voice_1", "voice_2", "voice_3", "voice_4"]).optional(),
+    greeting: shortText,
+    assistantName: z.string().max(40).optional(),
+    disclosureMode: z.enum(["on_request", "upfront"]).optional(),
+    tone: shortText,
+    languages: shortText,
+  })
+  .partial();
+const complianceFields = z
+  .object({
+    healthcareSensitive: z.boolean().optional(),
+    healthcareTouched: z.boolean().optional(),
+  })
+  .partial();
+
+/** Soft schemas aligned with packages/db/src/domain.ts — interview updates only. */
+export const interviewCollectedSchema = z
+  .object({
+    business: businessFields.optional(),
+    knowledge: knowledgeFields.optional(),
+    coverage: coverageFields.optional(),
+    features: featuresFields.optional(),
+    voice: voiceFields.optional(),
+    compliance: complianceFields.optional(),
   })
   .strict();
 
-const modelTurnSchema = z.object({
-  reply: z.string().min(1).max(4000),
-  updates: interviewCollectedSchema.default({}),
-  askedId: z.string().max(80).nullable().default(null),
-  done: z.boolean().default(false),
-});
+/** Hand-kept next to the schema so the model sees exact field names and types. */
+export const INTERVIEW_UPDATES_SHAPE = `{
+  "business": {
+    "name": "string",
+    "industry": "string",
+    "contactName": "string",
+    "contactEmail": "string (email)",
+    "contactPhone": "string",
+    "timezone": "string",
+    "websiteUrl": "string (url)",
+    "namePronunciation": "string",
+    "publicPhone": "string",
+    "publicEmail": "string (email)"
+  },
+  "knowledge": {
+    "hours": "string",
+    "services": "string (lists as one comma- or newline-separated string)",
+    "faqs": "string (multi-line ok)",
+    "policies": "string (multi-line ok)",
+    "staff": "string (names/roles only; multi-line ok)"
+  },
+  "coverage": {
+    "lunchHours": "string",
+    "afterHours": "string",
+    "weekends": "string",
+    "holidays": "string",
+    "holdOverflow": "string",
+    "unansweredAfterRings": "number 1-20"
+  },
+  "features": {
+    "messages": "string",
+    "messageRecipients": "string",
+    "weeklyHoursText": "string",
+    "transferTargetsText": "string (labels/situations only, no phone numbers)",
+    "bookingMode": "direct_calendar | request_only",
+    "liveTransfer": "boolean",
+    "emergencyHandling": "string",
+    "textConfirmations": "boolean",
+    "textReminders": "boolean"
+  },
+  "voice": {
+    "voiceId": "voice_1 | voice_2 | voice_3 | voice_4",
+    "greeting": "string",
+    "assistantName": "string",
+    "disclosureMode": "on_request | upfront",
+    "tone": "string",
+    "languages": "string"
+  },
+  "compliance": {
+    "healthcareSensitive": "boolean",
+    "healthcareTouched": "boolean"
+  }
+}`;
+
+const SECTION_SCHEMAS = {
+  business: businessFields,
+  knowledge: knowledgeFields,
+  coverage: coverageFields,
+  features: featuresFields,
+  voice: voiceFields,
+  compliance: complianceFields,
+} as const;
+
+type SectionName = keyof typeof SECTION_SCHEMAS;
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function objectToReadableLines(value: Record<string, unknown>): string {
+  return Object.entries(value)
+    .map(([key, entry]) => {
+      if (entry === undefined || entry === null) return `${key}:`;
+      if (typeof entry === "string" || typeof entry === "number" || typeof entry === "boolean") {
+        return `${key}: ${entry}`;
+      }
+      return `${key}: ${JSON.stringify(entry)}`;
+    })
+    .join("\n");
+}
+
+function coerceToString(value: unknown, field: string): string | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (Array.isArray(value)) {
+    const parts = value
+      .map((item) => {
+        if (typeof item === "string") return item.trim();
+        if (typeof item === "number" || typeof item === "boolean") return String(item);
+        if (isPlainObject(item)) return objectToReadableLines(item);
+        return "";
+      })
+      .filter(Boolean);
+    if (parts.length === 0) return undefined;
+    return parts.join(MULTILINE_STRING_FIELDS.has(field) ? "\n" : ", ");
+  }
+  if (isPlainObject(value)) return objectToReadableLines(value);
+  return undefined;
+}
+
+function coerceToBoolean(value: unknown): boolean | undefined {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === "true" || normalized === "yes") return true;
+    if (normalized === "false" || normalized === "no") return false;
+  }
+  if (typeof value === "number") {
+    if (value === 1) return true;
+    if (value === 0) return false;
+  }
+  return undefined;
+}
+
+function coerceToNumber(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    const n = Number(value.trim());
+    if (Number.isFinite(n)) return n;
+  }
+  return undefined;
+}
+
+function coerceFieldValue(section: SectionName, field: string, value: unknown): unknown {
+  if (field === "unansweredAfterRings") return coerceToNumber(value);
+  if (
+    field === "liveTransfer" ||
+    field === "textConfirmations" ||
+    field === "textReminders" ||
+    field === "healthcareSensitive" ||
+    field === "healthcareTouched"
+  ) {
+    return coerceToBoolean(value);
+  }
+  if (field === "bookingMode" || field === "voiceId" || field === "disclosureMode") {
+    return typeof value === "string" ? value.trim() : typeof value === "number" ? String(value) : undefined;
+  }
+  return coerceToString(value, field);
+}
+
+export type ForgivingUpdatesResult = {
+  value: InterviewCollected;
+  droppedPaths: string[];
+};
+
+/**
+ * Coerce common model mistakes, then keep every field that validates independently.
+ * Unknown keys and invalid values are dropped (never fail the whole turn).
+ */
+export function forgiveInterviewUpdates(raw: unknown): ForgivingUpdatesResult {
+  const droppedPaths: string[] = [];
+  const out: InterviewCollected = {};
+  if (raw === undefined || raw === null) return { value: out, droppedPaths };
+  if (!isPlainObject(raw)) {
+    droppedPaths.push("updates");
+    return { value: out, droppedPaths };
+  }
+
+  for (const [sectionKey, sectionValue] of Object.entries(raw)) {
+    if (!(sectionKey in SECTION_SCHEMAS)) {
+      droppedPaths.push(sectionKey);
+      continue;
+    }
+    const section = sectionKey as SectionName;
+    if (sectionValue === undefined || sectionValue === null) continue;
+    if (!isPlainObject(sectionValue)) {
+      droppedPaths.push(section);
+      continue;
+    }
+
+    const kept: Record<string, unknown> = {};
+    const fieldSchema = SECTION_SCHEMAS[section];
+    const shape = fieldSchema.shape as Record<string, z.ZodTypeAny>;
+    for (const [field, fieldValue] of Object.entries(sectionValue)) {
+      const path = `${section}.${field}`;
+      const zodField = shape[field];
+      if (!zodField) {
+        droppedPaths.push(path);
+        continue;
+      }
+      if (fieldValue === undefined) continue;
+      const coerced = coerceFieldValue(section, field, fieldValue);
+      if (coerced === undefined) {
+        droppedPaths.push(path);
+        continue;
+      }
+      const single = zodField.safeParse(coerced);
+      if (!single.success) {
+        droppedPaths.push(path);
+        continue;
+      }
+      kept[field] = single.data;
+    }
+
+    if (Object.keys(kept).length > 0) {
+      (out as Record<string, unknown>)[section] = kept;
+    }
+  }
+
+  return { value: out, droppedPaths };
+}
 
 export type ValidateUpdatesResult =
   | { ok: true; value: InterviewCollected }
   | { ok: false; error: string };
 
 export function validateInterviewUpdates(raw: unknown): ValidateUpdatesResult {
-  const parsed = interviewCollectedSchema.safeParse(raw ?? {});
+  const forgiven = forgiveInterviewUpdates(raw);
+  // Strict path still available for callers that want all-or-nothing; prefer forgive in the engine.
+  const parsed = interviewCollectedSchema.safeParse(forgiven.value);
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues.map((issue) => issue.message).join("; ") };
   }
   return { ok: true, value: parsed.data };
 }
 
+export type ForgivingTurnResult = {
+  /** Non-empty spoken reply when present. */
+  reply: string | null;
+  updates: InterviewCollected;
+  askedId: string | null;
+  done: boolean;
+  droppedPaths: string[];
+  /** True when a usable reply was recovered (updates may still be partial). */
+  parseOk: boolean;
+  error?: string;
+};
+
+function readAskedId(raw: unknown): string | null {
+  if (raw === null || raw === undefined) return null;
+  if (typeof raw !== "string") return null;
+  const trimmed = raw.trim();
+  if (!trimmed || trimmed.length > 80) return null;
+  return trimmed;
+}
+
+/**
+ * Parse envelope fields independently so a bad `updates` never discards `reply`.
+ */
+export function parseModelTurnForgiving(raw: unknown): ForgivingTurnResult {
+  if (!isPlainObject(raw)) {
+    return {
+      reply: null,
+      updates: {},
+      askedId: null,
+      done: false,
+      droppedPaths: [],
+      parseOk: false,
+      error: "Model output was not a JSON object",
+    };
+  }
+
+  const replyRaw = raw.reply;
+  const reply =
+    typeof replyRaw === "string" && replyRaw.trim().length > 0
+      ? replyRaw.trim().slice(0, 4000)
+      : null;
+
+  const done = raw.done === true;
+  const askedId = readAskedId(raw.askedId);
+  const forgiven = forgiveInterviewUpdates(raw.updates ?? {});
+
+  if (!reply) {
+    return {
+      reply: null,
+      updates: forgiven.value,
+      askedId,
+      done,
+      droppedPaths: forgiven.droppedPaths,
+      parseOk: false,
+      error: typeof replyRaw === "string" ? "reply was empty" : "reply missing or not a string",
+    };
+  }
+
+  return {
+    reply,
+    updates: forgiven.value,
+    askedId,
+    done,
+    droppedPaths: forgiven.droppedPaths,
+    parseOk: true,
+  };
+}
+
 export type ParseTurnResult =
   | { ok: true; value: ModelTurnJson }
   | { ok: false; error: string };
 
+/** Strict parse kept for tests/callers; engine uses parseModelTurnForgiving. */
 export function parseModelTurn(raw: unknown): ParseTurnResult {
-  const parsed = modelTurnSchema.safeParse(raw ?? {});
-  if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`).join("; ") };
+  const forgiven = parseModelTurnForgiving(raw);
+  if (!forgiven.parseOk || !forgiven.reply) {
+    return { ok: false, error: forgiven.error ?? "invalid turn" };
   }
   return {
     ok: true,
     value: {
-      reply: parsed.data.reply,
-      updates: parsed.data.updates,
-      askedId: parsed.data.askedId,
-      done: parsed.data.done,
+      reply: forgiven.reply,
+      updates: forgiven.updates,
+      askedId: forgiven.askedId,
+      done: forgiven.done,
     },
   };
 }

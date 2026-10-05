@@ -8,11 +8,12 @@ export {
 } from "./engine";
 export { contradictionQuestion, isEmptyField, mergeCollected, mergeIntoDraft } from "./merge";
 export { INTERVIEW_SYSTEM_PROMPT, buildInterviewUserPayload } from "./prompt";
-export { parseModelTurn, validateInterviewUpdates } from "./validate";
+export { parseModelTurn, parseModelTurnForgiving, forgiveInterviewUpdates, validateInterviewUpdates, INTERVIEW_UPDATES_SHAPE } from "./validate";
 export type {
   InterviewCollected,
   InterviewIndustry,
   InterviewState,
+  InterviewTurnLogEntry,
   InterviewTurnResult,
   ModelTurnJson,
   TokenUsage,

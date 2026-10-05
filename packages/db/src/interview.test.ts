@@ -111,6 +111,7 @@ describe("interview persistence", () => {
       textFallbackModel: "fallback/model",
       budgetInputTokens: 12_000,
       budgetOutputTokens: 3_000,
+      reasoningEffort: "low",
     });
     const resolved = await resolveTextInterviewConfig({
       TEXT_API_KEY: "sk-env-only",
@@ -122,5 +123,6 @@ describe("interview persistence", () => {
     expect(resolved.model).toBe("override/model");
     expect(resolved.fallbackModel).toBe("fallback/model");
     expect(resolved.budgetInputTokens).toBe(12_000);
+    expect(resolved.reasoningEffort).toBe("low");
   });
 });

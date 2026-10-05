@@ -148,6 +148,107 @@ describe("httpText", () => {
     expect(hits).toBe(1);
   });
 
+  it("retries once with double max_tokens when finish_reason is length", async () => {
+    const bodies: Array<Record<string, unknown>> = [];
+    const text = httpText({
+      apiKey: "key-12345678",
+      baseUrl: "https://api.openai.com/v1",
+      model: "gpt-test",
+      sleep: async () => undefined,
+      fetchImpl: async (_url, init) => {
+        const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+        bodies.push(body);
+        if (bodies.length === 1) {
+          return new Response(
+            JSON.stringify({
+              choices: [{ message: { content: '{"reply":"cut off' }, finish_reason: "length" }],
+              usage: { prompt_tokens: 4, completion_tokens: 8 },
+            }),
+            { status: 200 },
+          );
+        }
+        return new Response(
+          JSON.stringify({
+            choices: [
+              {
+                message: { content: '{"reply":"complete","updates":{},"done":false}' },
+                finish_reason: "stop",
+              },
+            ],
+            usage: { prompt_tokens: 4, completion_tokens: 12 },
+          }),
+          { status: 200 },
+        );
+      },
+    });
+    const result = await text.complete({
+      system: "json please",
+      messages: [{ role: "user", content: "hi" }],
+      maxTokens: 100,
+      json: true,
+    });
+    expect(bodies).toHaveLength(2);
+    expect(bodies[0]?.max_tokens).toBe(100);
+    expect(bodies[1]?.max_tokens).toBe(200);
+    expect(result.finishReason).toBe("stop");
+    expect(parseJsonObject(result.text)).toMatchObject({ reply: "complete" });
+  });
+
+  it("sends OpenRouter reasoning.effort=low when configured", async () => {
+    const bodies: Array<Record<string, unknown>> = [];
+    const text = httpText({
+      apiKey: "or-key-12345678",
+      baseUrl: "https://openrouter.ai/api/v1",
+      model: "moonshotai/kimi-k2.5",
+      reasoningEffort: "low",
+      fetchImpl: async (_url, init) => {
+        bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+        return new Response(
+          JSON.stringify({
+            choices: [{ message: { content: '{"reply":"ok","updates":{},"done":false}', reasoning: "thoughts" }, finish_reason: "stop" }],
+            usage: { prompt_tokens: 1, completion_tokens: 1 },
+          }),
+          { status: 200 },
+        );
+      },
+    });
+    const result = await text.complete({
+      system: "Be brief",
+      messages: [{ role: "user", content: "Hi" }],
+      maxTokens: 64,
+      json: true,
+    });
+    expect(bodies[0]?.reasoning).toEqual({ effort: "low" });
+    expect(parseJsonObject(result.text)).toMatchObject({ reply: "ok" });
+    expect(result.text).not.toContain("thoughts");
+  });
+
+  it("omits reasoning when effort is default", async () => {
+    const bodies: Array<Record<string, unknown>> = [];
+    const text = httpText({
+      apiKey: "or-key-12345678",
+      baseUrl: "https://openrouter.ai/api/v1",
+      reasoningEffort: "default",
+      fetchImpl: async (_url, init) => {
+        bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+        return new Response(
+          JSON.stringify({
+            choices: [{ message: { content: '{"reply":"hi","updates":{},"done":false}' }, finish_reason: "stop" }],
+            usage: { prompt_tokens: 1, completion_tokens: 1 },
+          }),
+          { status: 200 },
+        );
+      },
+    });
+    await text.complete({
+      system: "Be brief",
+      messages: [{ role: "user", content: "Hi" }],
+      maxTokens: 32,
+      json: true,
+    });
+    expect(bodies[0]?.reasoning).toBeUndefined();
+  });
+
   it("retries once without response_format when the provider returns 400 for json mode", async () => {
     const bodies: Array<Record<string, unknown>> = [];
     const text = httpText({

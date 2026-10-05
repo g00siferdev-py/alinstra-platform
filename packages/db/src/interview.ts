@@ -32,6 +32,7 @@ export const INTERVIEW_SETTING_KEYS = {
   textFallbackModel: "interview.textFallbackModel",
   budgetInputTokens: "interview.budgetInputTokens",
   budgetOutputTokens: "interview.budgetOutputTokens",
+  reasoningEffort: "interview.reasoningEffort",
 } as const;
 
 export const INTERVIEW_STATUS = {
@@ -48,6 +49,8 @@ export type TextInterviewConfig = {
   fallbackModel: string;
   budgetInputTokens: number;
   budgetOutputTokens: number;
+  /** OpenRouter reasoning. default = omit field. */
+  reasoningEffort: "off" | "low" | "default";
 };
 
 /** Env-backed defaults. API key is always env-only. */
@@ -68,6 +71,7 @@ export function textInterviewConfig(env: {
     fallbackModel: env.TEXT_FALLBACK_MODEL?.trim() || "",
     budgetInputTokens: env.TEXT_BUDGET_INPUT_TOKENS ?? DEFAULT_TEXT_TOKEN_BUDGET.inputTokens,
     budgetOutputTokens: env.TEXT_BUDGET_OUTPUT_TOKENS ?? DEFAULT_TEXT_TOKEN_BUDGET.outputTokens,
+    reasoningEffort: "default",
   };
 }
 
@@ -78,6 +82,11 @@ function settingString(value: unknown): string | null {
 function settingNumber(value: unknown): number | null {
   const n = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
   return Number.isFinite(n) && n > 0 ? Math.round(n) : null;
+}
+
+function settingReasoningEffort(value: unknown): "off" | "low" | "default" | null {
+  if (value === "off" || value === "low" || value === "default") return value;
+  return null;
 }
 
 /** Env defaults with AppSetting overrides (never overrides TEXT_API_KEY). */
@@ -98,6 +107,7 @@ export async function resolveTextInterviewConfig(env: {
     fallbackModel: settingString(stored[INTERVIEW_SETTING_KEYS.textFallbackModel]) ?? base.fallbackModel,
     budgetInputTokens: settingNumber(stored[INTERVIEW_SETTING_KEYS.budgetInputTokens]) ?? base.budgetInputTokens,
     budgetOutputTokens: settingNumber(stored[INTERVIEW_SETTING_KEYS.budgetOutputTokens]) ?? base.budgetOutputTokens,
+    reasoningEffort: settingReasoningEffort(stored[INTERVIEW_SETTING_KEYS.reasoningEffort]) ?? base.reasoningEffort,
   };
 }
 
@@ -109,6 +119,7 @@ export async function saveInterviewSettings(
     textFallbackModel: string;
     budgetInputTokens: number;
     budgetOutputTokens: number;
+    reasoningEffort: "off" | "low" | "default";
   },
 ) {
   assertTenantContext(ctx);
@@ -118,6 +129,8 @@ export async function saveInterviewSettings(
   await setAppSetting(ctx, INTERVIEW_SETTING_KEYS.textFallbackModel, input.textFallbackModel.trim());
   await setAppSetting(ctx, INTERVIEW_SETTING_KEYS.budgetInputTokens, input.budgetInputTokens);
   await setAppSetting(ctx, INTERVIEW_SETTING_KEYS.budgetOutputTokens, input.budgetOutputTokens);
+  const effort = settingReasoningEffort(input.reasoningEffort) ?? "default";
+  await setAppSetting(ctx, INTERVIEW_SETTING_KEYS.reasoningEffort, effort);
 }
 
 export function textPlatformFor(config: TextInterviewConfig): TextPlatform | null {
@@ -127,6 +140,7 @@ export function textPlatformFor(config: TextInterviewConfig): TextPlatform | nul
     baseUrl: config.apiBase,
     model: config.model,
     fallbackModel: config.fallbackModel || undefined,
+    reasoningEffort: config.reasoningEffort,
   });
 }
 

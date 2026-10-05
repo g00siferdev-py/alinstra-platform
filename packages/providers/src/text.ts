@@ -18,6 +18,11 @@ export type HttpTextOptions = {
   baseUrl?: string;
   model?: string;
   fallbackModel?: string;
+  /**
+   * OpenRouter reasoning effort. `default` omits the field; `low` / `off` send
+   * `reasoning: { effort: "low" | "none" }`. Ignored for non-OpenRouter bases.
+   */
+  reasoningEffort?: "off" | "low" | "default";
   fetchImpl?: FetchLike;
   /** Injected for tests; defaults to real wall clock. */
   sleep?: (ms: number) => Promise<void>;
@@ -112,6 +117,7 @@ function choiceText(body: Record<string, unknown>): string {
   if (!Array.isArray(choices) || choices.length === 0) return "";
   const first = choices[0] as Record<string, unknown> | undefined;
   const message = first?.message as Record<string, unknown> | undefined;
+  // Only message.content — never a sibling reasoning field.
   const content = message?.content;
   if (typeof content === "string") return content;
   if (Array.isArray(content)) {
@@ -128,6 +134,13 @@ function choiceText(body: Record<string, unknown>): string {
   return "";
 }
 
+function choiceFinishReason(body: Record<string, unknown>): string | null {
+  const choices = body.choices;
+  if (!Array.isArray(choices) || choices.length === 0) return null;
+  const first = choices[0] as Record<string, unknown> | undefined;
+  return typeof first?.finish_reason === "string" ? first.finish_reason : null;
+}
+
 async function defaultSleep(ms: number): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -142,6 +155,7 @@ export function httpText(options: HttpTextOptions): TextPlatform {
   const baseUrl = normalizeBase(options.baseUrl?.trim() || DEFAULT_TEXT_API_BASE);
   const primaryModel = options.model?.trim() || DEFAULT_TEXT_MODEL;
   const fallbackModel = options.fallbackModel?.trim() || "";
+  const reasoningEffort = options.reasoningEffort ?? "default";
   const fetchImpl = options.fetchImpl ?? fetch;
   const sleep = options.sleep ?? defaultSleep;
   const openRouter = isOpenRouter(baseUrl);
@@ -155,6 +169,7 @@ export function httpText(options: HttpTextOptions): TextPlatform {
     const url = `${baseUrl}/chat/completions`;
     let lastError: Error | null = null;
     let omitResponseFormat = false;
+    let tokensBudget = maxTokens;
 
     for (let attempt = 0; attempt < MAX_RETRIES; attempt += 1) {
       const controller = new AbortController();
@@ -172,10 +187,12 @@ export function httpText(options: HttpTextOptions): TextPlatform {
         const body: Record<string, unknown> = {
           model,
           messages,
-          max_tokens: maxTokens,
+          max_tokens: tokensBudget,
           temperature: 0.4,
         };
         if (json && !omitResponseFormat) body.response_format = { type: "json_object" };
+        if (openRouter && reasoningEffort === "low") body.reasoning = { effort: "low" };
+        if (openRouter && reasoningEffort === "off") body.reasoning = { effort: "none" };
 
         const response = await fetchImpl(url, {
           method: "POST",
@@ -209,8 +226,22 @@ export function httpText(options: HttpTextOptions): TextPlatform {
         }
 
         const content = choiceText(parsed ?? {});
+        const finishReason = choiceFinishReason(parsed ?? {});
         const tokens = usageTokens(parsed ?? {});
-        return { text: content, inputTokens: tokens.inputTokens, outputTokens: tokens.outputTokens, model };
+
+        // Truncated JSON: retry once with double max_tokens (cap 4000).
+        if (finishReason === "length" && tokensBudget < 4000 && tokensBudget === maxTokens) {
+          tokensBudget = Math.min(maxTokens * 2, 4000);
+          continue;
+        }
+
+        return {
+          text: content,
+          inputTokens: tokens.inputTokens,
+          outputTokens: tokens.outputTokens,
+          model,
+          finishReason,
+        };
       } catch (error) {
         if (error instanceof ProviderRequestError) throw error;
         lastError = error instanceof Error ? error : new Error(String(error));
@@ -239,6 +270,7 @@ export function httpText(options: HttpTextOptions): TextPlatform {
     let totalIn = 0;
     let totalOut = 0;
     let lastText = "";
+    let lastFinish: string | null | undefined;
     let invalidStreak = 0;
 
     for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -246,8 +278,15 @@ export function httpText(options: HttpTextOptions): TextPlatform {
       totalIn += result.inputTokens;
       totalOut += result.outputTokens;
       lastText = result.text;
+      lastFinish = result.finishReason;
       if (parseJsonObject(result.text)) {
-        return { text: result.text, inputTokens: totalIn, outputTokens: totalOut, model };
+        return {
+          text: result.text,
+          inputTokens: totalIn,
+          outputTokens: totalOut,
+          model,
+          finishReason: result.finishReason,
+        };
       }
       invalidStreak += 1;
       chat = [
@@ -262,13 +301,25 @@ export function httpText(options: HttpTextOptions): TextPlatform {
       totalIn += result.inputTokens;
       totalOut += result.outputTokens;
       if (parseJsonObject(result.text)) {
-        return { text: result.text, inputTokens: totalIn, outputTokens: totalOut, model: fallbackModel };
+        return {
+          text: result.text,
+          inputTokens: totalIn,
+          outputTokens: totalOut,
+          model: fallbackModel,
+          finishReason: result.finishReason,
+        };
       }
       lastText = result.text;
-      return { text: lastText, inputTokens: totalIn, outputTokens: totalOut, model: fallbackModel };
+      return {
+        text: lastText,
+        inputTokens: totalIn,
+        outputTokens: totalOut,
+        model: fallbackModel,
+        finishReason: result.finishReason,
+      };
     }
 
-    return { text: lastText, inputTokens: totalIn, outputTokens: totalOut, model };
+    return { text: lastText, inputTokens: totalIn, outputTokens: totalOut, model, finishReason: lastFinish };
   }
 
   return {

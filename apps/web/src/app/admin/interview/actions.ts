@@ -27,6 +27,10 @@ export async function saveInterviewSettingsAction(
       textFallbackModel: String(formData.get("textFallbackModel") ?? ""),
       budgetInputTokens: Math.round(budgetIn),
       budgetOutputTokens: Math.round(budgetOut),
+      reasoningEffort: (() => {
+        const raw = String(formData.get("reasoningEffort") ?? "default");
+        return raw === "off" || raw === "low" || raw === "default" ? raw : "default";
+      })(),
     });
     revalidatePath("/admin/interview");
     return { ok: true };

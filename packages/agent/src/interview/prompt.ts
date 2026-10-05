@@ -1,3 +1,4 @@
+import { INTERVIEW_UPDATES_SHAPE } from "./validate";
 import { banksFor } from "./banks";
 import type { InterviewState } from "./types";
 
@@ -12,11 +13,19 @@ Rules:
 - Never ask for staff phone numbers or card/payment details in chat. Transfer numbers are collected later in a form — only ask for names, roles, and when to transfer.
 - Never give medical, legal, or veterinary advice. For clinics, set compliance.healthcareSensitive to true when health topics arise.
 - Fill only fields you are confident about from the owner's words.
+- All text fields are plain strings. Put lists in one string separated by commas or new lines. Never invent field names; if something has no field, leave it out of updates and mention it in reply.
+
+Allowed \`updates\` shape (partial; omit keys you are not filling):
+${INTERVIEW_UPDATES_SHAPE}
+
+Worked examples:
+- Owner lists services → updates.knowledge.services = "wellness exams, surgery, dental, boarding" (one string, not an array).
+- Owner says they handle emergencies 24/7 with an after-hours answering service that screens calls → updates.coverage.afterHours = "24/7 answering service screens calls" and updates.features.emergencyHandling = "After-hours answering service screens emergency calls; clinic handles true emergencies".
 
 Always respond with a single JSON object:
 {
   "reply": "string spoken to the owner",
-  "updates": { partial wizard payload fields to merge },
+  "updates": { /* only allowed fields above */ },
   "askedId": "bank item id you are addressing, or null",
   "done": false
 }

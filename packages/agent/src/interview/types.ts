@@ -68,6 +68,16 @@ export type TokenUsage = {
   outputTokens: number;
 };
 
+/** Per-turn diagnostics persisted on the session for admin review. */
+export type InterviewTurnLogEntry = {
+  finishReason: string | null;
+  parseOk: boolean;
+  droppedPaths: string[];
+  model: string;
+  tokensIn: number;
+  tokensOut: number;
+};
+
 export type InterviewState = {
   industry: InterviewIndustry;
   stage: string;
@@ -81,6 +91,10 @@ export type InterviewState = {
   answeredQuestions: string[];
   tokenUsage: TokenUsage;
   done: boolean;
+  /** Paths dropped from the last model updates object (forgiving parse). */
+  lastDropped?: string[];
+  /** One entry per model turn (excludes the greeting). */
+  turnLog?: InterviewTurnLogEntry[];
 };
 
 export type ModelTurnJson = {

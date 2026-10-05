@@ -45,8 +45,10 @@ export { diffFields, diffLines, type FieldDiff, type LineDiff } from "./diff";
 export { formatLocalTime, formatPhone } from "./format";
 export {
   INTERVIEW_SYSTEM_PROMPT,
+  INTERVIEW_UPDATES_SHAPE,
   banksFor,
   contradictionQuestion,
+  forgiveInterviewUpdates,
   initialInterviewState,
   interviewGreeting,
   interviewTurn,
@@ -55,6 +57,7 @@ export {
   mergeCollected,
   mergeIntoDraft,
   parseModelTurn,
+  parseModelTurnForgiving,
   resolveInterviewIndustry,
   validateInterviewUpdates,
   type BankItem,
@@ -62,5 +65,6 @@ export {
   type InterviewCollected,
   type InterviewIndustry,
   type InterviewState,
+  type InterviewTurnLogEntry,
   type InterviewTurnResult,
 } from "./interview";

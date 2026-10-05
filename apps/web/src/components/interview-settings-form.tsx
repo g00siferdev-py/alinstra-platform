@@ -13,6 +13,7 @@ export function InterviewSettingsForm({
     textFallbackModel: string;
     budgetInputTokens: number;
     budgetOutputTokens: number;
+    reasoningEffort: "off" | "low" | "default";
   };
 }) {
   const [state, action, pending] = useActionState(saveInterviewSettingsAction, null as InterviewSettingsState);
@@ -41,6 +42,20 @@ export function InterviewSettingsForm({
         min={500}
         defaultValue={defaults.budgetOutputTokens}
       />
+      <Label htmlFor="reasoningEffort">Reasoning effort</Label>
+      <select
+        id="reasoningEffort"
+        name="reasoningEffort"
+        defaultValue={defaults.reasoningEffort}
+        className="rounded-md border border-[var(--line)] bg-transparent px-3 py-2 text-sm"
+      >
+        <option value="default">default (omit)</option>
+        <option value="low">low</option>
+        <option value="off">off</option>
+      </select>
+      <p className="text-xs text-[var(--muted)]">
+        OpenRouter only. Default omits the field; low sends reasoning.effort=low; off sends effort=none.
+      </p>
       {state?.error ? <ErrorText>{state.error}</ErrorText> : null}
       {state?.ok ? <p className="text-sm text-[var(--muted)]">Saved.</p> : null}
       <Button disabled={pending} type="submit">
