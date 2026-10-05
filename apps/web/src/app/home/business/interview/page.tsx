@@ -1,5 +1,7 @@
 import { InterviewChat } from "@/components/interview-chat";
+import { Button, PageHeader } from "@/components/ui";
 import { interviewEnabled } from "@/lib/interview-config";
+import { buildInterviewChecklist } from "@/lib/interview-checklist";
 import { ensureInterviewSession } from "@/lib/interview-server";
 import { requireUser } from "@/lib/session";
 import { clients, type Actor } from "@alinstra/db";
@@ -21,17 +23,31 @@ export default async function OwnerInterviewPage() {
     transcript?: Array<{ role: "user" | "assistant"; content: string }>;
     collected?: Record<string, unknown>;
     done?: boolean;
+    answeredQuestions?: string[];
+    openQuestions?: string[];
+    skippedQuestions?: string[];
+    industry?: string;
   };
+  const checklist = buildInterviewChecklist({
+    industry: state.industry ?? client.industry,
+    answeredQuestions: state.answeredQuestions,
+    openQuestions: state.openQuestions,
+    skippedQuestions: state.skippedQuestions,
+  });
+  const exitHref = "/home/business";
 
   return (
-    <main className="mx-auto grid max-w-4xl gap-4 p-6">
-      <Link className="text-sm text-[var(--muted)]" href="/home/business">
-        My business
-      </Link>
-      <h1 className="text-2xl font-semibold">Set up your receptionist</h1>
-      <p className="text-sm text-[var(--muted)]">
-        Answer a few short questions. You can review and edit everything in the form before anything goes live.
-      </p>
+    <main className="grid gap-6">
+      <PageHeader
+        eyebrow="Setup interview"
+        title={client.name}
+        description="Answer a few short questions. You can review and edit everything in the form before anything goes live."
+        actions={
+          <Link href={exitHref}>
+            <Button variant="secondary">Save and exit</Button>
+          </Link>
+        }
+      />
       <InterviewChat
         audience="owner"
         clientId={session.user.clientId}
@@ -39,6 +55,8 @@ export default async function OwnerInterviewPage() {
         initialTranscript={state.transcript ?? []}
         initialCaptured={state.collected ?? {}}
         initialDone={interview.status !== "active" || state.done === true}
+        checklist={checklist}
+        exitHref={exitHref}
       />
     </main>
   );

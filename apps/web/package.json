@@ -29,9 +29,13 @@
   "devDependencies": {
     "@alinstra/tsconfig": "workspace:*",
     "@tailwindcss/postcss": "4.3.3",
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.3",
     "@types/node": "22.19.1",
     "@types/react": "19.2.2",
     "@types/react-dom": "19.2.2",
+    "@vitejs/plugin-react": "^6.1.2",
+    "jsdom": "^30.1.2",
     "tailwindcss": "4.3.3",
     "typescript": "5.9.3",
     "vitest": "4.1.0"

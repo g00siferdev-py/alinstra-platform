@@ -224,4 +224,9 @@ export {
   type CallFlag,
 } from "./call-flags";
 export { callTimeline, timelineBarHeight, type TimelineSegment } from "./call-timeline";
-export { INTERVIEW_SYSTEM_PROMPT, listLoadedBanks } from "@alinstra/agent";
+export {
+  banksFor,
+  INTERVIEW_SYSTEM_PROMPT,
+  listLoadedBanks,
+  resolveInterviewIndustry,
+} from "@alinstra/agent";
