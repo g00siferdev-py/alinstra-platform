@@ -1,5 +1,6 @@
 import { MarketingAuthLink } from "@/components/marketing/auth-link";
-import { WaveformMark } from "@/components/marketing/waveform-mark";
+import { btnPrimary } from "@/components/marketing/button-classes";
+import { WaveformMark } from "@/components/ui";
 import { ASSISTANT_NAME, MARKETING_EMAIL, MARKETING_LOCATION } from "@/lib/brand";
 import { marketingPhoneDisplay, marketingTelHref } from "@/lib/marketing-phone";
 import Link from "next/link";
@@ -15,13 +16,15 @@ export function MarketingHeader({ phone }: { phone: string | null }) {
   const display = marketingPhoneDisplay(phone);
   const tel = marketingTelHref(phone);
   return (
-    <header className="border-b border-[var(--line)]">
-      <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-6 gap-y-3 px-6 py-4">
-        <Link className="flex items-center gap-2 text-[var(--ink)] no-underline" href="/">
-          <WaveformMark className="h-7 w-7 text-[var(--accent)]" />
-          <span className="text-lg font-semibold tracking-tight">Alinstra</span>
+    <header className="border-b border-[var(--line)] bg-[var(--surface)]">
+      <div className="mx-auto flex max-w-[1160px] flex-wrap items-center gap-x-6 gap-y-3 px-7 py-4">
+        <Link className="inline-flex items-center gap-2.5 text-[var(--ink)] no-underline" href="/">
+          <span className="inline-flex h-[34px] w-[34px] items-center justify-center rounded-[10px] bg-[var(--primary)]">
+            <WaveformMark />
+          </span>
+          <span className="text-lg font-extrabold tracking-[-0.02em]">Alinstra</span>
         </Link>
-        <nav className="flex flex-wrap items-center gap-4 text-sm">
+        <nav className="flex flex-wrap items-center gap-4 text-sm font-semibold">
           {NAV.map((item) => (
             <Link key={item.href} className="text-[var(--ink)] no-underline" href={item.href}>
               {item.label}
@@ -31,17 +34,11 @@ export function MarketingHeader({ phone }: { phone: string | null }) {
         <div className="ml-auto flex flex-wrap items-center gap-3">
           <MarketingAuthLink />
           {tel && display ? (
-            <a
-              className="inline-block rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-[var(--accent-ink)] no-underline"
-              href={tel}
-            >
+            <a className={btnPrimary} href={tel}>
               Call {ASSISTANT_NAME}
             </a>
           ) : (
-            <Link
-              className="inline-block rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-[var(--accent-ink)] no-underline"
-              href="/start"
-            >
+            <Link className={btnPrimary} href="/start">
               Get started
             </Link>
           )}
@@ -53,20 +50,22 @@ export function MarketingHeader({ phone }: { phone: string | null }) {
 
 export function MarketingFooter({ email }: { email: string }) {
   return (
-    <footer className="mt-16 border-t border-[var(--line)]">
-      <div className="mx-auto grid max-w-5xl gap-4 px-6 py-10 text-sm text-[var(--muted)]">
-        <div className="flex flex-wrap items-center gap-2 text-[var(--ink)]">
-          <WaveformMark className="h-5 w-5 text-[var(--accent)]" />
-          <span className="font-medium">Alinstra</span>
+    <footer className="mt-16 border-t border-[var(--line)] bg-[var(--surface)]">
+      <div className="mx-auto grid max-w-[1160px] gap-4 px-7 py-10 text-sm text-[var(--muted)]">
+        <div className="flex flex-wrap items-center gap-2.5 text-[var(--ink)]">
+          <span className="inline-flex h-8 w-8 items-center justify-center rounded-[10px] bg-[var(--primary)]">
+            <WaveformMark />
+          </span>
+          <span className="font-extrabold">Alinstra</span>
         </div>
         <p>
-          <a className="text-[var(--ink)]" href={`mailto:${email}`}>
+          <a className="font-semibold text-[var(--ink)]" href={`mailto:${email}`}>
             {email || MARKETING_EMAIL}
           </a>
           {" · "}
           {MARKETING_LOCATION.replace(", Tennessee", " TN")}
         </p>
-        <nav className="flex flex-wrap gap-4">
+        <nav className="flex flex-wrap gap-4 font-semibold">
           <Link href="/legal#privacy">Privacy</Link>
           <Link href="/legal#terms">Terms</Link>
           <Link href="/legal#ai-disclosure">AI disclosure</Link>

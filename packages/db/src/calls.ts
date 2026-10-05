@@ -113,7 +113,7 @@ export async function applyRetellCall(payload: RetellCallEvent): Promise<{ recor
     const mergedDuration = existing?.durationSeconds ?? durationSeconds;
     const mergedSentiment = normalizeSentiment(analysis?.user_sentiment) ?? existing?.sentiment ?? null;
     const mergedEndReason = (ended ? call.disconnection_reason : undefined) ?? existing?.endReason ?? null;
-    const shouldFlag = !purged && (ended || event === "call_analyzed") && (turns.length > 0 || Boolean(mergedSentiment));
+    const shouldFlag = !purged && ended && (turns.length > 0 || Boolean(mergedSentiment));
     const computedFlags: CallFlag[] = shouldFlag
       ? callFlags(turns, {
           durationSeconds: mergedDuration,

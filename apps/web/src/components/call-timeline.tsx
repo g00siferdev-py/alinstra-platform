@@ -1,7 +1,16 @@
-"use client";
-
-import { timelineBarHeight, type TimelineSegment } from "@alinstra/db";
 import { formatOffset } from "@/lib/call-view";
+
+export type TimelineSegment = {
+  kind: "agent" | "caller" | "silence";
+  startSeconds: number;
+  endSeconds: number;
+};
+
+function timelineBarHeight(callId: string, index: number): number {
+  let hash = index * 31;
+  for (let i = 0; i < callId.length; i += 1) hash = (hash * 33 + callId.charCodeAt(i)) % 10_000;
+  return 28 + (hash % 73);
+}
 
 const colors = {
   agent: "var(--live-strong)",

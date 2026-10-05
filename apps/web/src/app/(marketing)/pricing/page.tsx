@@ -18,9 +18,9 @@ export default async function PricingPage() {
   const recallSample = plans.find((plan) => plan.recallMonthlyCents > 0 || plan.recallPerBookingCents > 0);
 
   return (
-    <main className="mx-auto grid max-w-5xl gap-10 px-6 py-16">
+    <main className="mx-auto grid max-w-[1160px] gap-10 px-7 py-16">
       <div className="grid gap-3">
-        <h1 className="text-4xl font-semibold tracking-tight">Simple plans. No per-call surprises.</h1>
+        <h1 className="text-[40px] font-extrabold tracking-[-0.03em] md:text-5xl">Simple plans. No per-call surprises.</h1>
         <p className="max-w-2xl text-[var(--muted)]">
           Every plan includes setup by our team, a dedicated local number (or use your own), instant message delivery, transcripts
           and recordings, and the owner portal.
