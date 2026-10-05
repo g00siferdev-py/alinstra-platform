@@ -35,6 +35,13 @@ const envSchema = z.object({
   RETELL_DEFAULT_TOLL_FREE: z.string().default("false"),
   /** Optional E.164 fallback for marketing "Call Ava" when client zero has no public phone yet. */
   MARKETING_PHONE: z.string().default(""),
+  /** OpenAI-compatible text API for the interview wizard. Feature off when TEXT_API_KEY is empty. */
+  TEXT_API_BASE: z.string().default("https://openrouter.ai/api/v1"),
+  TEXT_API_KEY: z.string().default(""),
+  TEXT_MODEL: z.string().default("moonshotai/kimi-k2.5"),
+  TEXT_FALLBACK_MODEL: z.string().default(""),
+  TEXT_BUDGET_INPUT_TOKENS: z.coerce.number().int().positive().default(60_000),
+  TEXT_BUDGET_OUTPUT_TOKENS: z.coerce.number().int().positive().default(12_000),
 });
 
 export type Env = z.infer<typeof envSchema>;

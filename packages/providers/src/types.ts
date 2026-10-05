@@ -168,3 +168,35 @@ export class ProviderRequestError extends Error {
     this.name = "ProviderRequestError";
   }
 }
+
+/** OpenAI-compatible chat completion (OpenRouter, Ollama Cloud, OpenAI, Anthropic compatible, etc.). */
+export type TextCompleteInput = {
+  system: string;
+  messages: { role: "user" | "assistant"; content: string }[];
+  maxTokens: number;
+  /** When true, request JSON and retry/extract until the response parses as an object. */
+  json?: boolean;
+};
+
+export type TextCompleteResult = {
+  text: string;
+  inputTokens: number;
+  outputTokens: number;
+  model: string;
+};
+
+export interface TextPlatform {
+  complete(input: TextCompleteInput): Promise<TextCompleteResult>;
+}
+
+/** Default per-interview token budgets. Interview engine enforces these. */
+export const DEFAULT_TEXT_TOKEN_BUDGET = {
+  inputTokens: 60_000,
+  outputTokens: 12_000,
+} as const;
+
+export const DEFAULT_TEXT_API_BASE = "https://openrouter.ai/api/v1";
+export const DEFAULT_TEXT_MODEL = "moonshotai/kimi-k2.5";
+
+export const TEXT_BUDGET_EXCEEDED_MESSAGE =
+  "We've hit the interview's usage limit for now. Finish with what's captured, or ask an admin to raise the budget.";

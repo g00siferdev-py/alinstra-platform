@@ -103,4 +103,30 @@ describe("production secret guard", () => {
     });
     expect(getEnv().MARKETING_PHONE).toBe("");
   });
+
+  it("defaults text interview env and accepts overrides", () => {
+    useEnv({
+      NODE_ENV: "development",
+      BETTER_AUTH_SECRET: realSecret,
+      ENCRYPTION_KEY: realKey,
+    });
+    const defaults = getEnv();
+    expect(defaults.TEXT_API_KEY).toBe("");
+    expect(defaults.TEXT_API_BASE).toBe("https://openrouter.ai/api/v1");
+    expect(defaults.TEXT_MODEL).toBe("moonshotai/kimi-k2.5");
+    expect(defaults.TEXT_BUDGET_INPUT_TOKENS).toBe(60_000);
+    expect(defaults.TEXT_BUDGET_OUTPUT_TOKENS).toBe(12_000);
+
+    useEnv({
+      NODE_ENV: "development",
+      BETTER_AUTH_SECRET: realSecret,
+      ENCRYPTION_KEY: realKey,
+      TEXT_API_KEY: "sk-test",
+      TEXT_MODEL: "custom/model",
+      TEXT_BUDGET_INPUT_TOKENS: "1000",
+    });
+    expect(getEnv().TEXT_API_KEY).toBe("sk-test");
+    expect(getEnv().TEXT_MODEL).toBe("custom/model");
+    expect(getEnv().TEXT_BUDGET_INPUT_TOKENS).toBe(1000);
+  });
 });
