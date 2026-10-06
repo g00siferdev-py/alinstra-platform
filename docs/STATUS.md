@@ -2,6 +2,18 @@
 
 Phase 2 is merged into `main`. Staging deploy readiness (navigation, port, worker thread, production-image rehearsal) is on `main` with it. `staging` points at `main`.
 
+## Phase B (branch `phase-b-billing`, not merged)
+
+Parts 1–5 are committed on this branch (UsageRecord ledger, self-serve signup/Checkout, Stripe meter + report-usage, billing lifecycle/pause/owner billing, owner and admin monthly reports).
+
+### Part 6 (website, copy, Postgres 18, docs)
+
+- Plan cards on Home and `/pricing` CTA to `/signup?plan=<code>`; Enterprise and general "Get started" / "Ask about pricing" stay on `/start`. `/start` copy: questions / Enterprise / unsure → reply within one business day.
+- Solo/Starter plan-card bullets updated; "Every plan includes" still says a person reviews Ava before she goes live. Pricing footnote: billed monthly, cancel anytime through paid month end, sales tax where required.
+- Postgres **18** locally and in CI: `docker-compose.yml` (`postgres:18-alpine`, volume `alinstra_pg18_data`), worker Dockerfile `ARG PG_MAJOR=18`, CI service + `postgresql-client-18` from PGDG. README notes the new volume leaves old 16 data alone.
+- Docs: `SECURITY.md` inventory adds UsageRecord; `STATUS.md`, `DECISIONS.md`, `docs/marketing-copy.md` updated.
+- Full-flow integration test against `MemoryBilling`: `packages/db/src/phase-b-flow.test.ts` (signup → checkout line items → paid → interview → submit blocked until verified → UsageRecord meter once → past_due/pause/inbound → resume → cancel_scheduled).
+
 ## Phase S Part 1 (branch `phase-s-security`, not merged)
 
 - Key versioning in `@alinstra/crypto`: keyring from `ENCRYPTION_KEY` (k1), `ENCRYPTION_KEY_V<N>`, and `ENCRYPTION_ACTIVE_KEY`. New writes are `v2.<keyId>…`; v1 and v2 are readable forever. `getEnv()` fails fast in production on a bad keyring.
@@ -37,10 +49,10 @@ Phase 2 is merged into `main`. Staging deploy readiness (navigation, port, worke
 - File format in `@alinstra/crypto` (`createBackupEncryptStream` / `createBackupDecryptStream`): `ALBK1` + salt(16) + iv(12) + ciphertext + tag(16). Key is scrypt(`BACKUP_PASSPHRASE`, N=2^15, r=8, p=1) with a random salt per file; the header is authenticated as GCM AAD. Tests cover round trip, chunk boundaries, wrong passphrase, a flipped byte anywhere (header, body, tag), truncation, trailing bytes, and non-backup input.
 - Config: `BACKUP_PASSPHRASE` (worker only, at least 16 characters), `BACKUP_S3_BUCKET` (optional, defaults to `S3_BUCKET` under `backups/`), `APP_ENV` (names the key prefix; blank means `staging`, so **set `APP_ENV=production` on the production worker**). With no passphrase the job records `not_configured`, logs a warning, queues one "Backups are not configured" admin notice per 24 hours (Redis `SET NX`), and never throws.
 - Failure: any error records `failed`, queues a "Nightly backup failed" admin notice, and rethrows so the existing worker failed-job handler reports it to Sentry. Messages are sanitised (URLs, DB password, and passphrase stripped; pg_dump stderr capped). pg_dump gets credentials through `PG*` environment variables, not argv.
-- Version guard: the job compares `pg_dump --version` with `SHOW server_version_num` and fails before dumping if the client major is older than the server. `apps/worker/Dockerfile` installs `postgresql-client-${PG_MAJOR}` (default 16) from the PGDG apt repo, because Debian bookworm's own client is 15.
+- Version guard: the job compares `pg_dump --version` with `SHOW server_version_num` and fails before dumping if the client major is older than the server. `apps/worker/Dockerfile` installs `postgresql-client-${PG_MAJOR}` (default 18) from the PGDG apt repo, because Debian bookworm's own client is 15.
 - Services page: a Backups card (last success, size, last attempt and status, last error). It turns red when the last success is more than 36 hours old or there has never been one; a later failed attempt cannot hide an old success.
 - CLI: `pnpm --filter @alinstra/worker exec tsx scripts/backup-decrypt.ts <in.enc> <out.dump>`; passphrase from `BACKUP_PASSPHRASE` or a hidden prompt. It deletes the output file if verification fails. Runbook: `docs/RESTORE.md`.
-- Drill: `apps/worker/src/jobs/backup.integration.test.ts` creates a scratch source database, runs the real job (real `pg_dump`), decrypts, `pg_restore`s into a second scratch database, and compares row counts and a content checksum. It skips itself without `pg_dump`, `pg_restore`, and `psql`; CI now installs `postgresql-client`. It passed here inside the real worker image against the local Postgres 16.15 container.
+- Drill: `apps/worker/src/jobs/backup.integration.test.ts` creates a scratch source database, runs the real job (real `pg_dump`), decrypts, `pg_restore`s into a second scratch database, and compares row counts and a content checksum. It skips itself without `pg_dump`, `pg_restore`, and `psql`; CI installs `postgresql-client-18` from PGDG. It passed here inside the real worker image against a local Postgres container.
 - Storage additions: `StoredObject.putFile` and `list`, `getBackupStorage()`, and `backups/` keys accepted next to `clients/`.
 - Not verified: an actual upload to R2 (no credentials here), and the Railway Postgres major version (see the report and `docs/DEPLOYMENT.md`). Parts 5 to 7 are not started.
 
@@ -80,7 +92,7 @@ Phase 2 is merged into `main`. Staging deploy readiness (navigation, port, worke
 - Production env guard still rejects placeholder secrets. Staging and production also require R2 (`STORAGE_DRIVER=s3`)
 
 ## CI
-- GitHub Actions runs install, prisma generate, migrate deploy, lint, typecheck, and test against Postgres 16 and Redis 7 service containers. Fixed 2026-10-01: Turborepo strict env mode hid DATABASE_URL from tasks, and CI had no Redis.
+- GitHub Actions runs install, prisma generate, migrate deploy, lint, typecheck, and test against Postgres 18 and Redis 7 service containers. Fixed 2026-10-01: Turborepo strict env mode hid DATABASE_URL from tasks, and CI had no Redis.
 - Phase 3 is on branch `phase-3` only. It is not merged. The 3 October review fixes (tool parameters, phone-number binding, inbound webhook shape, sync enqueue, Stripe item periods, checkout expiry, NANP transfer limits) are on this branch. Provisioning stays on fakes until keys are set. See `docs/phase-3-plan.md`.
 - Remote GitHub Actions is unverified. `gh` is not installed. Lint, typecheck, and 84 tests passed locally against `alinstra_test` on this review. A fresh clone of the earlier `phase-3` commit `d093a73` had passed 72 tests; this review was not cloned to a second directory.
 

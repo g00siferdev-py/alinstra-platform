@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:16-alpine
+        image: postgres:18-alpine
         env:
           POSTGRES_USER: alinstra
           POSTGRES_PASSWORD: alinstra
@@ -55,11 +55,19 @@ jobs:
           echo "BETTER_AUTH_SECRET=$(node -e "console.log(require('crypto').randomBytes(32).toString('base64'))")" >> "$GITHUB_ENV"
           echo "ENCRYPTION_KEY=$(node -e "console.log(require('crypto').randomBytes(32).toString('base64'))")" >> "$GITHUB_ENV"
       # pg_dump, pg_restore and psql for the backup restore drill (apps/worker backup.integration.test.ts), which
-      # skips itself when they are missing. The client must be >= the postgres service major (16).
+      # skips itself when they are missing. The client must be >= the postgres service major (18). Install from
+      # the PGDG apt repo — Ubuntu's postgresql-client package is older than 18.
       - name: Install PostgreSQL client
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends postgresql-client
+          sudo apt-get install -y --no-install-recommends curl ca-certificates
+          sudo install -d /usr/share/postgresql-common/pgdg
+          curl -fsSL -o /tmp/apt.postgresql.org.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          sudo mv /tmp/apt.postgresql.org.asc /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc
+          . /etc/os-release
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends postgresql-client-18
           pg_dump --version
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @alinstra/db generate

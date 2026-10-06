@@ -36,6 +36,8 @@ pnpm dev:worker
 
 Web: http://localhost:3000. Health: http://localhost:3000/api/health.
 
+Local Postgres is **18** (`postgres:18-alpine` in `docker-compose.yml`). The compose volume is named `alinstra_pg18_data` so an older Postgres 16 volume (`alinstra_pg_data`) is left alone — you get a fresh empty database on first start after this change. Re-run migrate and seed. To remove the unused 16 volume later: `docker volume rm alinstra-platform_alinstra_pg_data` (confirm the name with `docker volume ls`).
+
 `pnpm dev` runs both through Turborepo. Email in local development is printed to the worker log (`EMAIL_TRANSPORT=console`).
 
 Tests use their own database. `pnpm test` reads `DATABASE_URL_TEST` when it is set. Otherwise it takes `DATABASE_URL` and changes the database name so it ends in `_test` (`alinstra` becomes `alinstra_test`). The suite creates that database if it does not exist, then migrates it. Reset refuses to `TRUNCATE` unless the connected database name ends in `_test`, so a test run cannot wipe the dev database. CI uses a Postgres service database named `alinstra_test` as well.

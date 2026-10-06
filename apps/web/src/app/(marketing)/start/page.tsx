@@ -7,7 +7,8 @@ export const dynamic = "force-dynamic";
 
 export const metadata = marketingMetadata({
   title: "Get started",
-  description: "Let's get you set up. Tell us about your business and we'll call within one business day.",
+  description:
+    "Questions, Enterprise, or not sure which plan? Tell us about your business and we'll get back to you within one business day.",
   path: "/start",
 });
 
@@ -22,9 +23,10 @@ export default async function StartPage({
 
   return (
     <main className="mx-auto grid max-w-xl gap-6 px-7 py-16">
-      <h1 className="text-[40px] font-extrabold tracking-[-0.03em]">Let&apos;s get you set up.</h1>
+      <h1 className="text-[40px] font-extrabold tracking-[-0.03em]">Get in touch.</h1>
       <p className="text-[var(--muted)]">
-        Tell us about your business and we&apos;ll call you within one business day to walk through setup.
+        Questions, Enterprise, or not sure which plan? Tell us about your business and we&apos;ll get back to you within
+        one business day.
       </p>
       {planInterest ? (
         <Pill tone="info" className="w-fit">

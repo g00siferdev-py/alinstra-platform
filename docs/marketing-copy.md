@@ -75,18 +75,20 @@ Founding pill: Founding offer: setup fee waived on Starter, Professional, and Pr
 
 Cards (see PRICING below for numbers):
 - **Solo** (pill: Self-serve) — For owner-operators who want to sound like a real business. CTA [Start Solo]
-  Answers 24/7 in two rings · Messages and appointment requests by email · Urgent transfers during business hours · Set it up yourself with a guided 20-minute chat · 1 update to Ava's info each month · $0.40 a minute after 150
+  Answers 24/7 in two rings · Messages and appointment requests by email · Urgent transfers during business hours · Guided 20-minute setup chat · 1 update to Ava's info each month · $0.40 a minute after 150
 - **Starter** — For one location missing a handful of calls a week. CTA [Get started]
-  **Everything in Solo** · Setup done with you by our team · 1 update to Ava's info each month · $0.35 a minute after 300
+  **Everything in Solo** · Hands-on setup review, plus a setup call if you want one · 1 update to Ava's info each month · $0.35 a minute after 300
 - **Professional** (badge: Recommended) — For busy offices and after-hours emergencies. CTA [Get started] (primary)
   **Everything in Starter** · Calendar booking once your calendar is connected · 2 updates to Ava's info each month · $0.30 a minute after 1,000
 - **Premium** — For high call volume and frequent changes. CTA [Get started]
   **Everything in Professional** · Unlimited updates to Ava's info · Our lowest rate: $0.25 a minute after 2,500
-Each card also shows "N minutes included / About X to Y typical calls" (2–3 minutes per call) and the setup line ("Setup $99 one time" on Solo; struck-through fee + "Waived" pill on the others while the founding offer is on).
+Each card also shows "N minutes included / About X to Y typical calls" (2–3 minutes per call) and the setup line ("Setup $99 one time" on Solo; struck-through fee + "Waived" pill on the others while the founding offer is on). Plan CTAs go to `/signup?plan=<code>`.
 
-Enterprise card (dark): **Enterprise** (pill: Custom pricing) — Several locations, heavy call volume, or special requirements? We'll build a plan around you. [Contact us]
+Enterprise card (dark): **Enterprise** (pill: Custom pricing) — Several locations, heavy call volume, or special requirements? We'll build a plan around you. [Contact us] → `/start?plan=enterprise`
 
 Every plan includes: A person reviews Ava before she goes live · A local number, or keep yours · Transcripts and recordings · The owner portal · [Compare plans →]
+
+Pricing footnote: Billed monthly. Cancel anytime; service runs to the end of your paid month. Sales tax added where required.
 
 Add-ons:
 - **Follow-up calls** (Add-on) — Ava calls your recall list when service is due and books the next visit. Never charged for calls that don't connect. [Ask about pricing →]
@@ -151,6 +153,7 @@ Start on your own with Solo, or let our team set you up. Every plan includes a p
 **Founding offer:** setup fee waived on Starter, Professional, and Premium for the first ten businesses. Solo keeps its $99 setup. [Start]
 Not sure which plan? Just you and your truck? Solo. Most single-location businesses that miss 5 to 15 calls a week fit Starter. A busy clinic or a company with after-hours emergencies usually wants Professional.
 Minutes count only while Ava is on the line. A typical message takes two to three minutes.
+Billed monthly. Cancel anytime; service runs to the end of your paid month. Sales tax added where required.
 
 **Enterprise:** Several locations, heavy call volume, or special requirements? We'll build a plan around you. [Contact us]
 
@@ -181,13 +184,13 @@ We don't cold call, we don't make AI robocalls, and we tell callers the truth wh
 
 ---
 
-## START (before Stripe is live)
+## START (lead form for questions and Enterprise)
 
-**Let's get you set up.**
+**Get in touch.**
+Questions, Enterprise, or not sure which plan? Tell us about your business and we'll get back to you within one business day.
 Fields: business name, your name, phone, email, industry, roughly how many calls you miss a week.
-When the visitor arrives from a plan button (`/start?plan=solo`, `starter`, `professional`, `premium`, `enterprise`), show a small chip "Plan: Solo" (etc.) above the form and save it on the lead.
+Plan CTAs on Home and `/pricing` go to `/signup?plan=<code>`. General "Get started" / "Ask about pricing" and Enterprise go to `/start` (Enterprise may include `?plan=enterprise`). When the visitor arrives with a plan chip (`/start?plan=…`), show "Plan: Solo" (etc.) above the form and save it on the lead.
 After submit: "Thanks. We'll call you within one business day to walk through setup, and you'll be live within 24 hours of that call."
-(Phase 5b replaces this with Stripe checkout + the AI interview wizard; Solo goes straight to self-serve checkout then.)
 
 ---
 

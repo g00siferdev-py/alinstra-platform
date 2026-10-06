@@ -143,7 +143,7 @@ Auth and database tests share one Postgres database and both truncate it. `@alin
 `packages/db/prisma.config.ts` only sets `datasource.url` when DATABASE_URL exists. `prisma generate` works in Docker image builds without secrets. `prisma migrate deploy` still fails clearly when the URL is missing.
 
 ### CI services
-CI starts Postgres 16 and Redis 7 service containers, matching docker-compose.yml. The worker isolation test needs a real Redis for BullMQ.
+CI starts Postgres 18 and Redis 7 service containers, matching docker-compose.yml. The worker isolation test needs a real Redis for BullMQ. The backup restore drill installs `postgresql-client-18` from the PGDG apt repo (Ubuntu's `postgresql-client` package is older than 18).
 
 ## 2026-10-01 — Phase 2
 
@@ -246,7 +246,7 @@ Writes: only ciphertext (and the mask); the old plaintext columns are set to nul
 
 **Two AppSetting rows.** `backup.last` is the last attempt of any outcome (`success`, `failed`, `not_configured`), exactly the `{ at, bytes, key, status, error? }` shape in the plan. `backup.lastSuccess` is added so the Services card can go red from the age of the last real backup; otherwise one failed run (or a daily "not configured" run) would overwrite the time of the last good one. These are written straight to `AppSetting` with `updatedBy` null, not through `setAppSetting`: it is system bookkeeping, not an admin edit, and a ChangeLog row per night would be noise.
 
-**pg_dump version.** Debian bookworm ships client 15, which cannot dump a 16+ server, so the worker image adds the PGDG apt repo and installs `postgresql-client-${PG_MAJOR}` (build arg, default 16 to match local, CI, and the prod-smoke stack). The job also checks at run time (`pg_dump --version` against `SHOW server_version_num`) and refuses to dump with an older client, with a message that names the Dockerfile arg. A newer client than the server is allowed. If Railway's Postgres is newer than 16, set `PG_MAJOR` on the worker service before relying on backups.
+**pg_dump version.** Debian bookworm ships client 15, which cannot dump a 16+ server, so the worker image adds the PGDG apt repo and installs `postgresql-client-${PG_MAJOR}` (build arg, default **18** to match Railway, local docker-compose, and CI). The job also checks at run time (`pg_dump --version` against `SHOW server_version_num`) and refuses to dump with an older client, with a message that names the Dockerfile arg. A newer client than the server is allowed. Override `PG_MAJOR` on the worker service only if the server major drifts.
 
 **Credentials never in argv or logs.** `DATABASE_URL` is split into `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`, `PGDATABASE` (+ `PGSSLMODE`) for the child process, which also drops Prisma's `?schema=` parameter that libpq rejects. The child gets a minimal environment (no `BACKUP_PASSPHRASE`). Error text has URLs and the password removed before it is logged, recorded, emailed, or thrown to Sentry.
 
@@ -285,6 +285,12 @@ Writes: only ciphertext (and the mask); the old plaintext columns are set to nul
 **Gitleaks: pinned binary, own config.** Version and SHA-256 are pinned in `ci.yml`, with `fetch-depth: 0`. `.gitleaks.toml` extends the default rules and allowlists exact fake values (not whole files), so a real secret next to them is still caught. No history was rewritten.
 
 **Separate CI jobs** for `audit` and `secrets` so they need no Postgres or Redis and fail independently of the main `check` job.
+
+## 2026-10-06 — Phase B Part 6: marketing CTAs and Postgres 18
+
+**Self-serve vs lead form.** Paid plan cards on Home and `/pricing` link to `/signup?plan=<code>`. Enterprise and undifferentiated "Get started" / "Ask about pricing" keep `/start`, whose copy is for questions, Enterprise, and plan uncertainty (one business day reply). The founding-offer and "Every plan includes" review line stay as written.
+
+**Postgres 18.** Railway runs 18. Local compose, CI, and the worker image default to 18 (`ARG PG_MAJOR=18`). Compose uses a new volume name (`alinstra_pg18_data`) so an existing Postgres 16 data directory is not mounted into 18 (major upgrades are not in-place). CI installs `postgresql-client-18` from PGDG rather than Ubuntu's older `postgresql-client` metapackage.
 
 ## Needs Daniel's review
 

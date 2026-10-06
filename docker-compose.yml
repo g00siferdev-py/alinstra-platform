@@ -14,7 +14,7 @@
 
 services:
   postgres:
-    image: postgres:16-alpine
+    image: postgres:18-alpine
     container_name: alinstra-postgres
     restart: unless-stopped
     ports:
@@ -24,7 +24,8 @@ services:
       POSTGRES_PASSWORD: alinstra
       POSTGRES_DB: alinstra
     volumes:
-      - alinstra_pg_data:/var/lib/postgresql/data
+      # New volume name so a leftover Postgres 16 data dir is left alone (see README).
+      - alinstra_pg18_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U alinstra -d alinstra"]
       interval: 5s
@@ -91,14 +92,14 @@ services:
   # docker compose --profile prod-smoke up -d --build postgres-smoke redis-smoke s3 s3-init web-prod worker-prod
   postgres-smoke:
     profiles: ["prod-smoke"]
-    image: postgres:16-alpine
+    image: postgres:18-alpine
     restart: unless-stopped
     environment:
       POSTGRES_USER: alinstra
       POSTGRES_PASSWORD: alinstra
       POSTGRES_DB: alinstra
     volumes:
-      - alinstra_smoke_pg:/var/lib/postgresql/data
+      - alinstra_smoke_pg18:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U alinstra -d alinstra"]
       interval: 5s
@@ -219,8 +220,8 @@ services:
         condition: service_completed_successfully
 
 volumes:
-  alinstra_pg_data:
+  alinstra_pg18_data:
   alinstra_redis_data:
-  alinstra_smoke_pg:
+  alinstra_smoke_pg18:
   alinstra_smoke_redis:
   alinstra_smoke_s3:

@@ -424,6 +424,9 @@ export default async function MarketingHomePage() {
           ) : null}
         </div>
         <PlanCards plans={plans} />
+        <p className="mt-6 text-center text-sm text-[var(--muted)]">
+          Billed monthly. Cancel anytime; service runs to the end of your paid month. Sales tax added where required.
+        </p>
         <div className="mt-8 flex flex-wrap items-center justify-between gap-3 rounded-[16px] border border-[var(--line)] px-5 py-4 text-sm">
           <p className="text-[var(--body)]">
             Every plan includes: A person reviews {ASSISTANT_NAME} before she goes live · A local number, or keep yours ·

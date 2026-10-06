@@ -30,5 +30,8 @@ describe("marketing pricing route", () => {
     expect(source).not.toContain("recallMonthlyCents");
     expect(source).not.toContain("recallPerBookingCents");
     expect(source).toContain("Ask about pricing");
+    expect(source).toContain(
+      "Billed monthly. Cancel anytime; service runs to the end of your paid month. Sales tax added where required.",
+    );
   });
 });

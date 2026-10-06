@@ -43,6 +43,7 @@ Alinstra answers a client's phone calls with an AI receptionist. The sensitive m
 | Owner quick updates and change requests | `quick_update.payload`, `change_request.description` | No; phone numbers masked in `payload`. `description` is free text the owner typed | Until the client is deleted | Admin; owner |
 | Agent configuration and prompt text | `agent_config` | No. The prompt is what the receptionist is told | Versions kept until the client is deleted | Admin; owner (summary) |
 | Onboarding interview | `interview_session.state` | No. Admin-run; business details, not caller data | Until the client is deleted | Admin only |
+| Billable call minutes (ledger for Stripe meter and reports) | `usage_record` | No. Ids, timestamps, duration, billable minutes, cost cents, meter report state — **no transcript or caller content** | **400 days**, or longer if accounting requires it (**confirm with accountant**). Nightly purge not wired yet | Admin; owner (aggregated on billing/reports); never decrypted content |
 | Sales leads | `lead` (business, name, phone, email, notes) | No | **No automatic purge** (see section 8) | Admin only |
 | Stripe webhook ids | `stripe_event` | No | Indefinite; ids only | Admin (database level) |
 | Settings, backup status | `app_setting` | No; no secrets | Indefinite | Admin |

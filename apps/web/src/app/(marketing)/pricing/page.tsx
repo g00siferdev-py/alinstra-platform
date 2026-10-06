@@ -48,6 +48,10 @@ export default async function PricingPage() {
 
         <PlanCards plans={plans} />
 
+        <p className="text-center text-sm text-[var(--muted)]">
+          Billed monthly. Cancel anytime; service runs to the end of your paid month. Sales tax added where required.
+        </p>
+
         <section className="grid gap-6">
           <h2 className="text-[28px] font-extrabold tracking-[-0.02em]">Compare plans in detail.</h2>
           <div className="overflow-x-auto">

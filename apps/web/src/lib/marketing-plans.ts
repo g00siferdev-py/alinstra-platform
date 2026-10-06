@@ -33,7 +33,7 @@ export const PLAN_MARKETING: Record<string, PlanMarketing> = {
       "Answers 24/7 in two rings",
       "Messages and appointment requests by email",
       "Urgent transfers during business hours",
-      "Set it up yourself with a guided 20-minute chat",
+      "Guided 20-minute setup chat",
     ],
   },
   starter: {
@@ -43,7 +43,7 @@ export const PLAN_MARKETING: Record<string, PlanMarketing> = {
     ctaLabel: "Get started",
     foundingWaiver: true,
     everythingIn: "Solo",
-    staticFeatures: ["Setup done with you by our team"],
+    staticFeatures: ["Hands-on setup review, plus a setup call if you want one"],
   },
   professional: {
     tagline: "For busy offices and after-hours emergencies.",

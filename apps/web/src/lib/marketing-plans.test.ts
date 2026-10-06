@@ -42,6 +42,10 @@ describe("marketing-plans helpers", () => {
     });
     expect(planMarketingFor("solo").foundingWaiver).toBe(false);
     expect(planMarketingFor("solo").badge).toBe("Self-serve");
+    expect(planMarketingFor("solo").staticFeatures).toContain("Guided 20-minute setup chat");
+    expect(planMarketingFor("starter").staticFeatures).toContain(
+      "Hands-on setup review, plus a setup call if you want one",
+    );
     expect(planMarketingFor("professional").recommended).toBe(true);
   });
 });

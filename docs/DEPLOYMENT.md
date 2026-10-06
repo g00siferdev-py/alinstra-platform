@@ -193,13 +193,14 @@ Do not set `ADMIN_INITIAL_PASSWORD` on the worker.
 
 #### Backups and the Postgres client version
 
-The worker image installs `postgresql-client-16` (build arg `PG_MAJOR`, default `16`). `pg_dump` must be the same major as the Railway Postgres server or newer. Check the server once, in the Railway Postgres service's Data tab or with `railway connect Postgres` and then:
+The worker image installs `postgresql-client-18` (build arg `PG_MAJOR`, default `18`). `pg_dump` must be the same major as the Railway Postgres server or newer. Check the server once, in the Railway Postgres service's Data tab or with `railway connect Postgres` and then:
+
 
 ```sql
 SHOW server_version;
 ```
 
-If the major is not 16, add a **service variable** `PG_MAJOR=<major>` on the worker (Railway passes service variables to Docker builds as build args) and redeploy. The job also checks at run time and fails with a clear message (`pg_dump 16 is older than the database server 17`) and an admin email if they ever drift, for example after Railway upgrades Postgres.
+If the major is not 18, add a **service variable** `PG_MAJOR=<major>` on the worker (Railway passes service variables to Docker builds as build args) and redeploy. The job also checks at run time and fails with a clear message (`pg_dump 18 is older than the database server 19`) and an admin email if they ever drift, for example after Railway upgrades Postgres.
 
 The job runs daily at 03:30 America/New_York. To try it without waiting, run it once from the worker's Railway shell: `cd /app/apps/worker && pnpm exec tsx scripts/backup-now.ts`. Then check Admin → Services → Backups and the object in R2. Restore steps: `docs/RESTORE.md`.
 
