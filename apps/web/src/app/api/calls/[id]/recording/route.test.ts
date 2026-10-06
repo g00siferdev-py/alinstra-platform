@@ -10,6 +10,7 @@ const state = vi.hoisted(() => ({
 
 const BYTES = Buffer.from("0123456789abcdef");
 
+vi.mock("@alinstra/config", () => ({ getEnv: () => ({ NODE_ENV: "test", TRUSTED_PROXY_HOPS: 1 }), log: vi.fn() }));
 vi.mock("@/lib/session", () => ({ getSession: async () => (state.user ? { user: state.user } : null) }));
 vi.mock("@/lib/access-log", () => ({
   logRecordingStream: async (user: { id: string }, call: { id: string; clientId: string }, request: Request) => {
@@ -39,6 +40,7 @@ vi.mock("@alinstra/storage", () => ({
   }),
 }));
 
+import { resetMemoryCounter } from "@alinstra/auth/rate-limit";
 import { GET } from "./route";
 
 function get(id: string, range?: string) {
@@ -61,6 +63,30 @@ describe("recording playback route", () => {
     state.user = null;
     state.rangeCalls.length = 0;
     state.logged.length = 0;
+    resetMemoryCounter();
+  });
+
+  it("allows 120 requests per 10 minutes per user (Range included), then 429 with Retry-After", async () => {
+    state.user = roles.owner;
+    for (let index = 0; index < 120; index += 1) {
+      const response = await get("call_1", index % 2 === 0 ? "bytes=4-7" : undefined);
+      expect(response.status).toBe(index % 2 === 0 ? 206 : 200);
+    }
+    const limited = await get("call_1", "bytes=4-7");
+    expect(limited.status).toBe(429);
+    const retryAfter = Number(limited.headers.get("retry-after"));
+    expect(retryAfter).toBeGreaterThan(0);
+    expect(retryAfter).toBeLessThanOrEqual(600);
+    // Nothing is served or audited for a limited request, and the limit is per user.
+    expect(state.logged).toHaveLength(120);
+    state.user = roles.admin;
+    expect((await get("call_1")).status).toBe(200);
+  });
+
+  it("does not count requests that have no valid session", async () => {
+    for (let index = 0; index < 130; index += 1) expect((await get("call_1")).status).toBe(401);
+    state.user = roles.owner;
+    expect((await get("call_1")).status).toBe(200);
   });
 
   it("requires a session", async () => {

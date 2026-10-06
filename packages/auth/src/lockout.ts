@@ -75,6 +75,12 @@ export async function passwordResetLimited(email: string): Promise<boolean> {
   return count >= PASSWORD_RESET_LIMIT.maxRequests;
 }
 
+/** Seconds until the short reset window frees up; used for `Retry-After`. */
+export async function passwordResetRetryAfter(email: string): Promise<number> {
+  const ttl = await getCounter().ttl(resetKey(email));
+  return ttl > 0 ? ttl : PASSWORD_RESET_LIMIT.windowSeconds;
+}
+
 export async function recordPasswordResetRequest(email: string): Promise<void> {
   await getCounter().increment(resetKey(email), PASSWORD_RESET_LIMIT.windowSeconds);
 }

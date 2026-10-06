@@ -55,7 +55,8 @@ Better Auth has one global `session.expiresIn` (set to 7 days). Admin sessions a
 | Action | Limit |
 | --- | --- |
 | Login failures | 5 failed password attempts per normalized email + trusted client IP, fixed 15-minute window. A second counter locks the account after 20 failures in an hour, regardless of IP. A successful password (including a 2FA challenge) clears both counters. Lockout returns 429. |
-| Password reset requests | 3 requests per email per 15 minutes. The response stays generic. |
+| Password reset requests | 3 requests per email per 15 minutes. The response stays generic. Phase S part 5 adds 5 per email and 20 per IP per hour. |
+| Other Phase S part 5 limits | See the Phase S Part 5 section below. All return 429 with `Retry-After` on routes. |
 
 `POST /sign-in/email` must include an email in a JSON or form body. If the email cannot be read, the handler returns 400 and does not call Better Auth, so the attempt cannot skip the counters.
 
@@ -252,6 +253,20 @@ Writes: only ciphertext (and the mask); the old plaintext columns are set to nul
 **Failure goes out twice by design:** an admin notice from inside the job (so it is sent even if Sentry is off) and a thrown `BackupFailedError` that the worker's existing failed-job handler sends to Sentry. The job has `attempts: 1`: a retry would repeat a multi-minute dump, and tomorrow's run is the retry. "Not configured" does not throw (the worker must keep running); its notice is limited to once per 24 hours with a Redis key.
 
 **Not configured is loud on the Services page.** With no backup ever, the card is red ("No successful backup yet"), so a missing passphrase is visible without email.
+
+## 2026-10-06 — Phase S Part 5: rate limits
+
+**Fail open.** `consumeRateLimit` counts with `getCounter()` and, if Redis errors or does not answer within 1.5 s, allows the request and logs the limiter name and error name only. The Redis client queues commands forever while disconnected, so without the timeout a dead store would hang Retell calls, playback and password reset. These are abuse brakes; the existing login lockout is unchanged and still the hard gate. Subjects (emails, IPs) appear only in counter keys, never in logs.
+
+**Fixed windows, and refused requests still count.** The counter sets expiry on the first hit, so a caller who keeps hammering stays limited until the window ends. `Retry-After` is the key's remaining TTL (window length if the TTL is missing). `Counter.ttl()` was added for this.
+
+**Retell: limit first, then signature.** The IP limit needs no body, so it runs before `request.text()`; unsigned traffic therefore cannot cause body, JSON or DB work either. Cost: junk from an IP spends that IP's 300/min. All four routes share one bucket per IP. Behind Railway the IP is `X-Real-IP`; if it were missing everyone would share the `local` bucket (same behaviour as login lockout).
+
+**Password reset stacks on the old key.** Order: existing 3 per 15 minutes (per email), then 5/hour per email and 20/hour per IP. Requests refused by the first check do not spend the hourly counters.
+
+**Invites are limited in `createInvite`**, after authorization and the client lookup, per client. There is no separate resend action; admin "send portal invite" is a second `createInvite`, so it shares the 10/hour. Server actions cannot return an HTTP status, so they surface a message with the wait time (and `retryAfterSeconds` for owner edits).
+
+**Owner edits** means `applyQuickUpdateAction` and `submitChangeRequestAction`, one bucket per user. `previewQuickUpdateAction` (no write) and the owner wizard-step edit, retention and call-access actions are not limited, because Part 5 names only quick updates and change requests.
 
 ## Needs Daniel's review
 

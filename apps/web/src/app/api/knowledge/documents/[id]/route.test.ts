@@ -9,6 +9,7 @@ const state = vi.hoisted(() => ({
 
 const DOCUMENT = { id: "doc_1", clientId: "client_1", storageKey: "clients/client_1/knowledge/doc_1", originalFilename: "price list.pdf", contentType: "application/pdf" };
 
+vi.mock("@alinstra/config", () => ({ getEnv: () => ({ NODE_ENV: "test", TRUSTED_PROXY_HOPS: 1 }), log: vi.fn() }));
 vi.mock("@/lib/session", () => ({ getSession: async () => (state.user ? { user: state.user } : null) }));
 vi.mock("@/lib/access-log", () => ({
   logDocumentDownload: async (user: { id: string }, document: { id: string; clientId: string }) => {
@@ -26,6 +27,7 @@ vi.mock("@alinstra/storage", () => ({
   getStorage: () => ({ presignGet: async () => null, get: async () => Buffer.from("pdf bytes") }),
 }));
 
+import { resetMemoryCounter } from "@alinstra/auth/rate-limit";
 import { GET } from "./route";
 
 const get = (id: string) => GET(new Request(`http://localhost/api/knowledge/documents/${id}`), { params: Promise.resolve({ id }) });
@@ -34,6 +36,27 @@ describe("knowledge document download route", () => {
   beforeEach(() => {
     state.user = null;
     state.logged.length = 0;
+    resetMemoryCounter();
+  });
+
+  it("allows 60 downloads per 10 minutes per user, then 429 with Retry-After", async () => {
+    state.user = { id: "owner_1", role: "client_owner", clientId: "client_1" };
+    for (let index = 0; index < 60; index += 1) expect((await get("doc_1")).status).toBe(200);
+    const limited = await get("doc_1");
+    expect(limited.status).toBe(429);
+    const retryAfter = Number(limited.headers.get("retry-after"));
+    expect(retryAfter).toBeGreaterThan(0);
+    expect(retryAfter).toBeLessThanOrEqual(600);
+    // A limited request is not served or audited, and another user is unaffected.
+    expect(state.logged).toHaveLength(60);
+    state.user = { id: "staff_1", role: "client_staff", clientId: "client_1" };
+    expect((await get("doc_1")).status).toBe(200);
+  });
+
+  it("does not count requests without a session", async () => {
+    for (let index = 0; index < 70; index += 1) expect((await get("doc_1")).status).toBe(401);
+    state.user = { id: "owner_1", role: "client_owner", clientId: "client_1" };
+    expect((await get("doc_1")).status).toBe(200);
   });
 
   it("logs a download for the document's client, for admins and the owning client's users", async () => {

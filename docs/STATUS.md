@@ -44,6 +44,17 @@ Phase 2 is merged into `main`. Staging deploy readiness (navigation, port, worke
 - Storage additions: `StoredObject.putFile` and `list`, `getBackupStorage()`, and `backups/` keys accepted next to `clients/`.
 - Not verified: an actual upload to R2 (no credentials here), and the Railway Postgres major version (see the report and `docs/DEPLOYMENT.md`). Parts 5 to 7 are not started.
 
+## Phase S Part 5 (branch `phase-s-security`, not merged, not committed)
+
+- Rate limits through `getCounter()`, all in `packages/auth/src/rate-limit.ts` (web imports it as `@alinstra/auth/rate-limit`, which pulls in no database or Better Auth code). Limits are in `RATE_LIMITS` (`constants.ts`). `Counter` gained `ttl()` so `Retry-After` is the real time left in the window.
+  - Retell routes (`webhook`, `inbound`, `tools/transfer`, `tools/take-message`): 300/min per IP, one shared bucket. Order confirmed and commented in each route: limit (counter only), then signature over the raw body, then `JSON.parse` and DB work.
+  - Password reset: 5/hour per email and 20/hour per IP, after the existing 3 per 15 minutes check (that 429 now sends `Retry-After` too). Refused requests do not spend the hourly counters.
+  - Invites: 10/hour per client inside `createInvite`, so admin resend, admin invite and owner staff invite all share it. Refused callers are rejected first and cannot burn the allowance. Throws `RateLimitError` (an `AuthError`, with `retryAfterSeconds`); the actions show its message.
+  - Owner edits: 30/hour per user, one bucket for `applyQuickUpdateAction` and `submitChangeRequestAction` (staff are refused before counting). Returns `{ error, retryAfterSeconds }`.
+  - Recording route: 120 per 10 minutes per user, Range requests included. Knowledge document download: 60 per 10 minutes per user. Both run right after the session check, before any lookup; limited requests are not served or audited.
+- Tests: `packages/auth/src/rate-limit.test.ts`, `rate-limit-store.test.ts`, `invite-rate-limit.test.ts`; `apps/web/src/app/api/retell/rate-limit.test.ts`; added cases in the recording route, knowledge document route and `home/actions` tests. Lint, typecheck, `turbo run test --force` (417 passed, 5 skipped) and the no-database production build pass.
+- Not done: Parts 6 and 7. No new env vars.
+
 ## Verified locally
 
 - Phase 2: `pnpm test` passed 60 tests (prompt rendering, admin two-factor, allowance, isolation, plus the Phase 0–1 suites). `pnpm lint` and `pnpm typecheck` were run after the navigation and deploy-readiness changes.

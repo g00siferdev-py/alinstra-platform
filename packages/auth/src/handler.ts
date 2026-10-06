@@ -5,9 +5,11 @@ import {
   loginLocked,
   normalizeEmail,
   passwordResetLimited,
+  passwordResetRetryAfter,
   recordLoginFailure,
   recordPasswordResetRequest,
 } from "./lockout";
+import { consumePasswordResetHourly } from "./rate-limit";
 import { ARCHIVED_CLIENT_MESSAGE, sessionBlockedForUser } from "./client-access";
 import { prisma } from "@alinstra/db";
 import { reenrollAdminTwoFactor, sessionRole } from "./two-factor-admin";
@@ -71,8 +73,9 @@ async function findSignInUser(email: string): Promise<SignInUser> {
   }
 }
 
-function tooMany(): Response {
-  return Response.json({ message: "Too many attempts. Try again later." }, { status: 429 });
+function tooMany(retryAfterSeconds?: number): Response {
+  const headers = retryAfterSeconds ? { "Retry-After": String(Math.max(1, Math.ceil(retryAfterSeconds))) } : undefined;
+  return Response.json({ message: "Too many attempts. Try again later." }, { status: 429, headers });
 }
 
 export async function handleAuthRequest(request: Request): Promise<Response> {
@@ -108,7 +111,10 @@ export async function handleAuthRequest(request: Request): Promise<Response> {
   }
 
   if ((path === "/request-password-reset" || path === "/forget-password") && email) {
-    if (await passwordResetLimited(email)) return tooMany();
+    if (await passwordResetLimited(email)) return tooMany(await passwordResetRetryAfter(email));
+    // Phase S part 5: hourly caps per email (5) and per IP (20), on top of the short lockout key above.
+    const hourly = await consumePasswordResetHourly(email, ip);
+    if (hourly.limited) return tooMany(hourly.retryAfterSeconds);
     await recordPasswordResetRequest(email);
   }
 

@@ -1,3 +1,4 @@
+import { retellRateLimitResponse } from "@alinstra/auth/rate-limit";
 import { getEnv, log } from "@alinstra/config";
 import { clientIdForRetellAgent, decideTransfer, TRANSFER_UNAVAILABLE } from "@alinstra/db";
 import { verifyRetell } from "@alinstra/providers";
@@ -11,6 +12,9 @@ const UNAVAILABLE = { allowed: false, reason: TRANSFER_UNAVAILABLE };
  * labels, and is matched against saved targets. The response never contains a phone number.
  */
 export async function POST(request: Request): Promise<Response> {
+  // Order matters: IP rate limit (counter only), then the signature over the raw body, then JSON parsing and DB work.
+  const limited = await retellRateLimitResponse(request);
+  if (limited) return limited;
   const env = getEnv();
   const raw = await request.text();
   if (!verifyRetell(raw, request.headers.get("x-retell-signature"), env.RETELL_API_KEY)) {

@@ -3,7 +3,16 @@ import { encryptString } from "@alinstra/crypto";
 import { prisma, type Role, type TenantContext } from "@alinstra/db";
 import { enqueueSendInvite } from "@alinstra/queue";
 import { INVITE_TTL_MS } from "./constants";
+import { consumeInviteLimit, retryAfterText } from "./rate-limit";
 import { AuthError, createCredentialUser } from "./users";
+
+/** Thrown when a client has sent too many invites this hour. The message is safe to show. */
+export class RateLimitError extends AuthError {
+  constructor(readonly retryAfterSeconds: number) {
+    super(`Too many invites sent. Try again in ${retryAfterText(retryAfterSeconds)}.`);
+    this.name = "RateLimitError";
+  }
+}
 
 export function hashInviteToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
@@ -33,6 +42,11 @@ export async function createInvite(input: {
 
   const client = await prisma.client.findUnique({ where: { id: input.clientId }, select: { id: true } });
   if (!client) throw new AuthError("Client not found.");
+
+  // Phase S part 5: 10 invites per hour per client, resends included (a resend is another createInvite).
+  // Checked after authorization so a refused caller cannot burn a client's allowance.
+  const limit = await consumeInviteLimit(input.clientId);
+  if (limit.limited) throw new RateLimitError(limit.retryAfterSeconds);
 
   const token = randomBytes(32).toString("base64url");
   const invite = await prisma.invite.create({

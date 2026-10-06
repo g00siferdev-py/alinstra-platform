@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@alinstra/config", () => ({
-  getEnv: () => ({ RETELL_API_KEY: "key" }),
+  getEnv: () => ({ RETELL_API_KEY: "key", NODE_ENV: "test", TRUSTED_PROXY_HOPS: 1 }),
 }));
 vi.mock("@alinstra/providers", () => ({ verifyRetell: () => true }));
 vi.mock("@alinstra/db", () => ({

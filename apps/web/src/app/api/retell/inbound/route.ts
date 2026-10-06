@@ -1,3 +1,4 @@
+import { retellRateLimitResponse } from "@alinstra/auth/rate-limit";
 import { getEnv } from "@alinstra/config";
 import { inboundCallPayload } from "@alinstra/db";
 import { verifyRetell } from "@alinstra/providers";
@@ -7,6 +8,9 @@ export const dynamic = "force-dynamic";
 const UNKNOWN = { call_inbound: { dynamic_variables: { office_open: "unknown", allowed_targets: "" } } };
 
 export async function POST(request: Request): Promise<Response> {
+  // Order matters: IP rate limit (counter only), then the signature over the raw body, then JSON parsing and DB work.
+  const limited = await retellRateLimitResponse(request);
+  if (limited) return limited;
   const env = getEnv();
   const raw = await request.text();
   if (!verifyRetell(raw, request.headers.get("x-retell-signature"), env.RETELL_API_KEY)) {

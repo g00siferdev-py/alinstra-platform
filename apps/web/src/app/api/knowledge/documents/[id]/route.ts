@@ -1,3 +1,4 @@
+import { documentDownloadRateLimitResponse } from "@alinstra/auth/rate-limit";
 import { knowledgeDocuments, type TenantContext } from "@alinstra/db";
 import { attachmentDisposition, getStorage } from "@alinstra/storage";
 import { logDocumentDownload } from "@/lib/access-log";
@@ -17,6 +18,9 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
   if (ctx.role !== "admin" && !ctx.clientId) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   }
+  // 60 downloads per 10 minutes per user, before the document lookup.
+  const limited = await documentDownloadRateLimitResponse(session.user.id);
+  if (limited) return limited;
   const { id } = await context.params;
   const document = await knowledgeDocuments(ctx).getById(id);
   if (!document) return NextResponse.json({ message: "Document not found." }, { status: 404 });

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@alinstra/config", () => ({
-  getEnv: () => ({ RETELL_API_KEY: "key", ADMIN_EMAIL: "daniel@alinstra.com" }),
+  getEnv: () => ({ RETELL_API_KEY: "key", ADMIN_EMAIL: "daniel@alinstra.com", NODE_ENV: "test", TRUSTED_PROXY_HOPS: 1 }),
   log: vi.fn(),
 }));
 vi.mock("@alinstra/providers", () => ({ verifyRetell: () => true }));

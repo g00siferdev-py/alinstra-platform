@@ -7,7 +7,7 @@ const { applied, queued, reset, enqueueImpl } = vi.hoisted(() => ({
   enqueueImpl: { fail: false },
 }));
 
-vi.mock("@alinstra/config", () => ({ getEnv: () => ({ RETELL_API_KEY: "key" }), log: vi.fn() }));
+vi.mock("@alinstra/config", () => ({ getEnv: () => ({ RETELL_API_KEY: "key", NODE_ENV: "test", TRUSTED_PROXY_HOPS: 1 }), log: vi.fn() }));
 vi.mock("@alinstra/providers", () => ({ verifyRetell: (_raw: string, signature: string | null) => signature === "good" }));
 vi.mock("@alinstra/db", () => ({
   // Fake of the idempotent applier: the first event that carries a recording queues it, nothing else does.

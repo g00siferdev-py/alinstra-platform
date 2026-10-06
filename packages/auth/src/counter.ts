@@ -4,6 +4,8 @@ import { Redis } from "ioredis";
 export type Counter = {
   increment(key: string, windowSeconds: number): Promise<number>;
   get(key: string): Promise<number>;
+  /** Whole seconds until the key expires; 0 when the key is missing or has no expiry. */
+  ttl(key: string): Promise<number>;
   clear(key: string): Promise<void>;
 };
 
@@ -26,6 +28,11 @@ export function memoryCounter(): Counter {
       if (!existing || existing.resetAt <= Date.now()) return 0;
       return existing.count;
     },
+    async ttl(key) {
+      const existing = memoryBuckets.get(key);
+      if (!existing) return 0;
+      return Math.max(0, Math.ceil((existing.resetAt - Date.now()) / 1000));
+    },
     async clear(key) {
       memoryBuckets.delete(key);
     },
@@ -46,6 +53,10 @@ function redisBackedCounter(): Counter {
       async get(key) {
         const value = await redis.get(key);
         return value ? Number(value) : 0;
+      },
+      async ttl(key) {
+        const seconds = await redis.ttl(key);
+        return seconds > 0 ? seconds : 0;
       },
       async clear(key) {
         await redis.del(key);

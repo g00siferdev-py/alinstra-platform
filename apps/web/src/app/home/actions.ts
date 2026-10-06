@@ -1,6 +1,7 @@
 "use server";
 
 import type { EditStepResult } from "@/app/admin/actions";
+import { consumeOwnerEditLimit, retryAfterText } from "@alinstra/auth/rate-limit";
 import { log } from "@alinstra/config";
 import {
   applyQuickUpdate,
@@ -39,10 +40,20 @@ export async function previewQuickUpdateAction(input: QuickUpdateInput) {
   }
 }
 
+/** Quick updates and change requests share one bucket: 30 per hour per owner. Staff are refused before they count. */
+async function ownerEditLimited(actor: { id: string }): Promise<{ error: string; retryAfterSeconds: number } | null> {
+  const decision = await consumeOwnerEditLimit(actor.id);
+  if (!decision.limited) return null;
+  return { error: `Too many edits this hour. Try again in ${retryAfterText(decision.retryAfterSeconds)}.`, retryAfterSeconds: decision.retryAfterSeconds };
+}
+
 export async function applyQuickUpdateAction(input: QuickUpdateInput) {
   const session = await requireUser();
   try {
-    const result = await applyQuickUpdate(ownerActor(session), input);
+    const actor = ownerActor(session);
+    const limited = await ownerEditLimited(actor);
+    if (limited) return limited;
+    const result = await applyQuickUpdate(actor, input);
     if (result.sync) {
       try {
         await enqueueSyncAgent({ clientId: session.user.clientId ?? "" });
@@ -82,7 +93,10 @@ export async function allowanceAction() {
 export async function submitChangeRequestAction(input: { category: string; description: string; confirmFee: boolean }) {
   const session = await requireUser();
   try {
-    await submitChangeRequest(ownerActor(session), input);
+    const actor = ownerActor(session);
+    const limited = await ownerEditLimited(actor);
+    if (limited) return limited;
+    await submitChangeRequest(actor, input);
     revalidatePath("/home/changes");
     return { ok: true };
   } catch (error) {

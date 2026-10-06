@@ -57,6 +57,7 @@ function deps(overrides: Partial<AlertDeps> = {}): AlertDeps & { admin: Array<{ 
         return next;
       },
       get: async (key) => counts.get(key) ?? 0,
+      ttl: async () => 0,
       clear: async (key) => {
         counts.delete(key);
       },

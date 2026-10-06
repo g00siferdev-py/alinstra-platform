@@ -1,3 +1,4 @@
+import { recordingRateLimitResponse } from "@alinstra/auth/rate-limit";
 import { recordingForPlayback } from "@alinstra/db";
 import { getStorage } from "@alinstra/storage";
 import { logRecordingStream } from "@/lib/access-log";
@@ -18,6 +19,9 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
   if (!session) return new Response("Unauthorized", { status: 401 });
   const viewer = callViewerFor(session.user);
   if (!viewer) return new Response("Unauthorized", { status: 401 });
+  // 120 requests per 10 minutes per user; Range requests count. Runs before any database or storage work.
+  const limited = await recordingRateLimitResponse(session.user.id);
+  if (limited) return limited;
   const { id } = await context.params;
   const recording = await recordingForPlayback(viewer, id);
   if (!recording) return NOT_FOUND();

@@ -1,3 +1,4 @@
+import { retellRateLimitResponse } from "@alinstra/auth/rate-limit";
 import { getEnv, log } from "@alinstra/config";
 import { clientIdForRetellAgent, plainCallerName, recordTakenMessage } from "@alinstra/db";
 import { verifyRetell } from "@alinstra/providers";
@@ -15,6 +16,9 @@ export function missingMessageSentence(args: { callback_number?: string; message
 }
 
 export async function POST(request: Request): Promise<Response> {
+  // Order matters: IP rate limit (counter only), then the signature over the raw body, then JSON parsing and DB work.
+  const limited = await retellRateLimitResponse(request);
+  if (limited) return limited;
   const env = getEnv();
   const raw = await request.text();
   if (!verifyRetell(raw, request.headers.get("x-retell-signature"), env.RETELL_API_KEY)) {
