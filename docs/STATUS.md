@@ -62,7 +62,11 @@ Phase 2 is merged into `main`. Staging deploy readiness (navigation, port, worke
 - Verified locally: gitleaks passes on all 109 commits (8 findings before `.gitleaks.toml`, all fake `key-12345678` / `or-key-12345678` values in `packages/providers/src/text.test.ts`; no real secrets). The working-tree changes were scanned too and are clean. The audit script passes, and fails for an unlisted advisory and for an expired entry.
 - **The audit currently has 7 high/critical production advisories** (fast-xml-parser x4 via the AWS S3 client, deepmerge-ts and mysql2 via better-auth, braces via Sentry's build plugin). They are in `audit-allowlist.json` with reasons and expire **2026-11-05**. Upgrading or overriding them is the follow-up; CI goes red on that date otherwise.
 - `docs/SECURITY-CHECKLIST.md` (quarterly checklist) added. Remote CI is unverified (no `gh`).
-- Not done: Part 7.
+## Phase S Part 7 (branch `phase-s-security`, not merged)
+
+- Documents only; no code or env changes. `docs/SECURITY.md`: data inventory (Postgres, R2, Redis, vendors; encrypted or not, retention, who can see it), subprocessor list, access controls, and the breach runbook (contain, rotate keys, assess with `access_log` and `login_event`, notify clients within 72 hours of confirming, state deadlines marked "confirm with counsel", post-incident review). `docs/DPA-outline.md`: an outline for the lawyer (roles, subprocessors, security measures, breach notice, retention and deletion, recording consent, follow-up-calls attestation). Not legal text.
+- Gaps the inventory found and left open (SECURITY.md section 8): client messages and leads have no retention purge; the message email job puts caller name and body through Redis and Resend in plaintext; recordings and uploaded documents rely on R2's own encryption, not app encryption; vendor retention (Retell, Resend, Sentry, OpenRouter) is unconfirmed; `login_event` has no admin screen.
+- Needs Daniel and counsel: the open items above, the state breach-law table, and the DPA bracketed questions. The website Privacy and Terms pages still say "Coming soon".
 
 ## Verified locally
 

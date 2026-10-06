@@ -268,6 +268,14 @@ Writes: only ciphertext (and the mask); the old plaintext columns are set to nul
 
 **Owner edits** means `applyQuickUpdateAction` and `submitChangeRequestAction`, one bucket per user. `previewQuickUpdateAction` (no write) and the owner wizard-step edit, retention and call-access actions are not limited, because Part 5 names only quick updates and change requests.
 
+## 2026-10-06 — Phase S Part 7: security and DPA documents
+
+**The inventory states what the code does, including the gaps.** `SECURITY.md` lists message emails (caller name and body through Redis and Resend), unencrypted R2 objects, messages and leads without a purge, and unconfirmed vendor retention as open items rather than leaving them out. A client-facing promise should only be made from what this file says is true.
+
+**72 hours is our own commitment, counted from confirming a breach.** It is written as a target in the runbook and as a question for counsel in the DPA outline (confirming versus becoming aware). Statutory deadlines, Tennessee's included, are deliberately not quoted anywhere; both documents say to confirm them with counsel and ask for a state table before an incident.
+
+**The DPA is an outline with bracketed questions, not draft clauses.** It links to `SECURITY.md` as an annex so the technical detail can change without re-signing. It does not claim certifications, caller-rights tooling, do-not-call scrubbing, or product enforcement of calling rules that do not exist.
+
 ## 2026-10-06 — Phase S Part 6: supply chain
 
 **Audit gate is our own script.** `scripts/check-audit.mjs` runs `pnpm audit --prod --json`, ignores pnpm's exit code and decides itself: any high or critical advisory not in `audit-allowlist.json` fails, as does an entry with no reason, a bad date, or a past expiry. It also fails if pnpm returns no JSON (registry down), so a broken audit cannot pass silently. Entries are keyed by GHSA id. Stale entries only warn.
