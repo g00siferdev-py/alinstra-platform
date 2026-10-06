@@ -1,4 +1,4 @@
-import { retellRateLimitResponse } from "@alinstra/auth/rate-limit";
+import { readRetellRawBody, retellBadSignatureResponse } from "@alinstra/auth/rate-limit";
 import { getEnv, log } from "@alinstra/config";
 import { clientIdForRetellAgent, plainCallerName, recordTakenMessage } from "@alinstra/db";
 import { verifyRetell } from "@alinstra/providers";
@@ -15,14 +15,14 @@ export function missingMessageSentence(args: { callback_number?: string; message
   return null;
 }
 
+/** Order: body size cap → signature → only bad signatures are rate-limited → JSON/DB. */
 export async function POST(request: Request): Promise<Response> {
-  // Order matters: IP rate limit (counter only), then the signature over the raw body, then JSON parsing and DB work.
-  const limited = await retellRateLimitResponse(request);
-  if (limited) return limited;
   const env = getEnv();
-  const raw = await request.text();
+  const rawOrError = await readRetellRawBody(request);
+  if (rawOrError instanceof Response) return rawOrError;
+  const raw = rawOrError;
   if (!verifyRetell(raw, request.headers.get("x-retell-signature"), env.RETELL_API_KEY)) {
-    return new Response("Unauthorized", { status: 401 });
+    return retellBadSignatureResponse(request);
   }
   try {
     const body = JSON.parse(raw) as { call?: { agent_id?: string; call_id?: string }; args?: { caller_name?: string; callback_number?: string; message?: string } };

@@ -1,17 +1,17 @@
 import { log } from "@alinstra/config";
-import { RATE_LIMITS, type RateLimitRule } from "./constants";
+import { RATE_LIMITS, RETELL_MAX_BODY_BYTES, type RateLimitRule } from "./constants";
 import { getCounter, resetMemoryCounter } from "./counter";
 import { clientIp, normalizeEmail } from "./lockout";
 
 /**
- * Phase S part 5 rate limits. Fixed windows counted through `getCounter()` (Redis in production,
+ * Phase S part 5 / S.1 rate limits. Fixed windows counted through `getCounter()` (Redis in production,
  * memory in tests). This module imports no database or Better Auth code, so route handlers and their
  * tests can use it on its own via `@alinstra/auth/rate-limit`.
  *
  * Subjects can be emails or IPs, so they only ever appear in counter keys, never in logs.
  */
 
-export { RATE_LIMITS, resetMemoryCounter, clientIp };
+export { RATE_LIMITS, RETELL_MAX_BODY_BYTES, resetMemoryCounter, clientIp };
 export type { RateLimitRule };
 
 export type RateLimitDecision = { limited: false } | { limited: true; retryAfterSeconds: number };
@@ -81,10 +81,33 @@ export function rateLimitedResponse(retryAfterSeconds: number, message = "Too ma
   );
 }
 
-/** `/api/retell/*`: 300/min per IP. Call this first; it needs no body, so it runs before the signature check. */
-export async function retellRateLimitResponse(request: Request): Promise<Response | null> {
-  const decision = await consumeRateLimit("retell", clientIp(request), RATE_LIMITS.retellPerIp);
-  return decision.limited ? rateLimitedResponse(decision.retryAfterSeconds) : null;
+/**
+ * Reads the Retell raw body with a 1 MB cap. Check `Content-Length` first when present, then the
+ * decoded length, so unsigned floods cannot force us to hash huge bodies.
+ */
+export async function readRetellRawBody(request: Request): Promise<string | Response> {
+  const declared = request.headers.get("content-length");
+  if (declared !== null && declared !== "") {
+    const size = Number(declared);
+    if (!Number.isFinite(size) || size < 0 || size > RETELL_MAX_BODY_BYTES) {
+      return new Response("Payload Too Large", { status: 413 });
+    }
+  }
+  const raw = await request.text();
+  if (Buffer.byteLength(raw, "utf8") > RETELL_MAX_BODY_BYTES) {
+    return new Response("Payload Too Large", { status: 413 });
+  }
+  return raw;
+}
+
+/**
+ * Counts one bad-signature hit for `/api/retell/*`. Call only after signature verification fails.
+ * Returns 429 with Retry-After once the IP is over the limit; otherwise 401.
+ */
+export async function retellBadSignatureResponse(request: Request): Promise<Response> {
+  const decision = await consumeRateLimit("retell-bad-sig", clientIp(request), RATE_LIMITS.retellBadSignaturePerIp);
+  if (decision.limited) return rateLimitedResponse(decision.retryAfterSeconds);
+  return new Response("Unauthorized", { status: 401 });
 }
 
 /** Password reset requests: 5/hour per email and 20/hour per IP. Both counters always advance. */

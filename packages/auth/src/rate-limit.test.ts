@@ -10,7 +10,8 @@ import {
   documentDownloadRateLimitResponse,
   rateLimitedResponse,
   recordingRateLimitResponse,
-  retellRateLimitResponse,
+  retellBadSignatureResponse,
+  readRetellRawBody,
 } from "./rate-limit";
 
 beforeEach(() => {
@@ -30,9 +31,9 @@ function resetRequest(email: string, ip: string) {
 }
 
 describe("rate limit limits", () => {
-  it("matches the Phase S part 5 table", () => {
+  it("matches the Phase S part 5 / S.1 table", () => {
     expect(RATE_LIMITS).toEqual({
-      retellPerIp: { limit: 300, windowSeconds: 60 },
+      retellBadSignaturePerIp: { limit: 30, windowSeconds: 600 },
       passwordResetPerEmail: { limit: 5, windowSeconds: 3600 },
       passwordResetPerIp: { limit: 20, windowSeconds: 3600 },
       invitePerClient: { limit: 10, windowSeconds: 3600 },
@@ -163,10 +164,25 @@ describe("recording and document download limits", () => {
   });
 });
 
-describe("retell limit helper", () => {
+describe("retell bad-signature limit helper", () => {
   it("uses the trusted client IP and ignores a spoofed leftmost X-Forwarded-For", async () => {
     const make = (forwarded: string) => new Request("http://localhost/api/retell/webhook", { method: "POST", headers: { "x-forwarded-for": forwarded } });
-    for (let index = 0; index < 300; index += 1) expect(await retellRateLimitResponse(make(`10.0.0.${index % 250}, 203.0.113.99`))).toBeNull();
-    expect((await retellRateLimitResponse(make("10.9.9.9, 203.0.113.99")))?.status).toBe(429);
+    for (let index = 0; index < 30; index += 1) {
+      const response = await retellBadSignatureResponse(make(`10.0.0.${index % 250}, 203.0.113.99`));
+      expect(response.status).toBe(401);
+    }
+    expect((await retellBadSignatureResponse(make("10.9.9.9, 203.0.113.99"))).status).toBe(429);
+  });
+
+  it("rejects oversized Content-Length before reading the body", async () => {
+    const response = await readRetellRawBody(
+      new Request("http://localhost/api/retell/webhook", {
+        method: "POST",
+        headers: { "content-length": String(2_000_000) },
+        body: "tiny",
+      }),
+    );
+    expect(response).toBeInstanceOf(Response);
+    if (response instanceof Response) expect(response.status).toBe(413);
   });
 });

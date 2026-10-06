@@ -1,4 +1,4 @@
-import { retellRateLimitResponse } from "@alinstra/auth/rate-limit";
+import { readRetellRawBody, retellBadSignatureResponse } from "@alinstra/auth/rate-limit";
 import { getEnv, log } from "@alinstra/config";
 import { applyRetellCall, resetRecordingPending } from "@alinstra/db";
 import { verifyRetell } from "@alinstra/providers";
@@ -12,15 +12,16 @@ export const dynamic = "force-dynamic";
  * arrive out of order; `applyRetellCall` is idempotent by `call_id`. The recording copy is queued
  * exactly once, when the row first learns a recording exists; only the call id goes to Redis.
  * If enqueue fails, the row is rolled back to `none` so a later event can re-queue.
+ *
+ * Order: body size cap → signature → only bad signatures are rate-limited → JSON/DB.
  */
 export async function POST(request: Request): Promise<Response> {
-  // Order matters: IP rate limit (counter only), then the signature over the raw body, then JSON parsing and DB work.
-  const limited = await retellRateLimitResponse(request);
-  if (limited) return limited;
   const env = getEnv();
-  const raw = await request.text();
+  const rawOrError = await readRetellRawBody(request);
+  if (rawOrError instanceof Response) return rawOrError;
+  const raw = rawOrError;
   if (!verifyRetell(raw, request.headers.get("x-retell-signature"), env.RETELL_API_KEY)) {
-    return new Response("Unauthorized", { status: 401 });
+    return retellBadSignatureResponse(request);
   }
   const payload = JSON.parse(raw) as Parameters<typeof applyRetellCall>[0];
   const result = await applyRetellCall(payload);

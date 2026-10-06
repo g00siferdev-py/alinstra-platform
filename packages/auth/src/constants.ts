@@ -20,10 +20,13 @@ export const PASSWORD_RESET_LIMIT = {
 
 export type RateLimitRule = { readonly limit: number; readonly windowSeconds: number };
 
-/** Phase S part 5. Fixed windows, counted through `getCounter()`. */
+/** Phase S part 5 / S.1. Fixed windows, counted through `getCounter()`. */
 export const RATE_LIMITS = {
-  /** `/api/retell/*`, per client IP. */
-  retellPerIp: { limit: 300, windowSeconds: 60 },
+  /**
+   * `/api/retell/*` bad-signature attempts only, per client IP.
+   * Valid signed traffic is never counted (Retell shares a small IP pool across all clients).
+   */
+  retellBadSignaturePerIp: { limit: 30, windowSeconds: 10 * 60 },
   /** Password reset requests, on top of `PASSWORD_RESET_LIMIT`. */
   passwordResetPerEmail: { limit: 5, windowSeconds: 60 * 60 },
   passwordResetPerIp: { limit: 20, windowSeconds: 60 * 60 },
@@ -36,6 +39,9 @@ export const RATE_LIMITS = {
   /** Knowledge document download, per user. */
   documentDownloadPerUser: { limit: 60, windowSeconds: 10 * 60 },
 } as const satisfies Record<string, RateLimitRule>;
+
+/** Reject Retell bodies larger than this before hashing the signature (unsigned flood guard). */
+export const RETELL_MAX_BODY_BYTES = 1_048_576;
 
 export const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 export const MIN_PASSWORD_LENGTH = 12;
