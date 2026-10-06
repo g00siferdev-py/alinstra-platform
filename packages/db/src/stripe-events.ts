@@ -169,8 +169,11 @@ export async function applyStripeEvent(event: StripeEvent, now = new Date()): Pr
   const clientId = metadata.client_id ?? (typeof object.client_reference_id === "string" ? object.client_reference_id : "");
   let notify: StripeApplyResult["notify"];
   const ownerEmails: StripeOwnerEmail[] = [];
-  let pendingMail: PendingOwnerMail | null = null;
-  let pendingPeriod: PendingPeriod | null = null;
+  // Object box so assignments inside the transaction callback stay visible to the type checker.
+  const pending: { mail: PendingOwnerMail | null; period: PendingPeriod | null } = {
+    mail: null,
+    period: null,
+  };
   try {
     await prisma.$transaction(async (tx) => {
       await tx.stripeEvent.create({ data: { eventId, type: event.type ?? "unknown" } });
@@ -234,7 +237,7 @@ export async function applyStripeEvent(event: StripeEvent, now = new Date()): Pr
           subject: `Payment failed for ${client.name}`,
           text: `Stripe reported a failed invoice for ${client.name}. The client is past due.`,
         };
-        pendingMail = { clientId: client.id, portalOwnerEmail: client.portalOwnerEmail, kind: "payment_failed" };
+        pending.mail = { clientId: client.id, portalOwnerEmail: client.portalOwnerEmail, kind: "payment_failed" };
       }
       if (event.type === "invoice.paid") {
         const customer = stripeCustomerId(object);
@@ -258,7 +261,7 @@ export async function applyStripeEvent(event: StripeEvent, now = new Date()): Pr
             summary: wasPaused ? `Resumed ${client.name} after payment` : `Payment recovered for ${client.name}`,
             after: { billingStatus: "paid", pastDueSince: null },
           });
-          pendingMail = { clientId: client.id, portalOwnerEmail: client.portalOwnerEmail, kind: "resumed" };
+          pending.mail = { clientId: client.id, portalOwnerEmail: client.portalOwnerEmail, kind: "resumed" };
         }
       }
       if (event.type === "customer.subscription.updated") {
@@ -312,7 +315,7 @@ export async function applyStripeEvent(event: StripeEvent, now = new Date()): Pr
             after: { billingStatus: "paid", serviceEndsAt: null },
           });
         }
-        pendingPeriod = {
+        pending.period = {
           clientId: client.id,
           prevStart: client.stripeCurrentPeriodStart,
           nextStart: bounds?.start ?? null,
@@ -348,10 +351,10 @@ export async function applyStripeEvent(event: StripeEvent, now = new Date()): Pr
     throw error;
   }
 
-  if (pendingMail) {
-    const to = await resolveOwnerEmail(pendingMail.clientId, pendingMail.portalOwnerEmail);
+  if (pending.mail) {
+    const to = await resolveOwnerEmail(pending.mail.clientId, pending.mail.portalOwnerEmail);
     if (to) {
-      if (pendingMail.kind === "payment_failed") {
+      if (pending.mail.kind === "payment_failed") {
         ownerEmails.push({ to, ...paymentFailedOwnerEmail({ billingUrl: appBillingUrl() }) });
       } else {
         ownerEmails.push({ to, ...billingResumedOwnerEmail() });
@@ -359,8 +362,8 @@ export async function applyStripeEvent(event: StripeEvent, now = new Date()): Pr
     }
   }
 
-  if (pendingPeriod) {
-    await applyScheduledPlanChanges(pendingPeriod.clientId, pendingPeriod.prevStart, pendingPeriod.nextStart, now);
+  if (pending.period) {
+    await applyScheduledPlanChanges(pending.period.clientId, pending.period.prevStart, pending.period.nextStart, now);
   }
 
   return {
