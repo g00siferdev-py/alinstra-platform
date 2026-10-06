@@ -334,20 +334,32 @@ export function httpBilling(secretKey: string, fetchImpl: FetchLike = fetch): Bi
       return { priceId: String(body.id) };
     },
     async createCheckout(input) {
+      const lineItems: Array<{ price: string; quantity?: string }> = [
+        { price: input.recurringPriceId, quantity: "1" },
+      ];
+      if (input.meteredPriceId) {
+        // Metered prices have no quantity (usage reported later).
+        lineItems.push({ price: input.meteredPriceId });
+      }
+      if (input.setupPriceId) {
+        lineItems.push({ price: input.setupPriceId, quantity: "1" });
+      }
       const fields: Record<string, string | null> = {
         mode: "subscription",
         customer: input.customerId,
+        client_reference_id: input.clientId,
         success_url: input.successUrl,
         cancel_url: input.cancelUrl,
-        "line_items[0][price]": input.recurringPriceId,
-        "line_items[0][quantity]": "1",
+        "automatic_tax[enabled]": "true",
+        billing_address_collection: "required",
+        "tax_id_collection[enabled]": "true",
         "metadata[client_id]": input.clientId,
         "subscription_data[metadata][client_id]": input.clientId,
       };
-      if (input.setupPriceId) {
-        fields["line_items[1][price]"] = input.setupPriceId;
-        fields["line_items[1][quantity]"] = "1";
-      }
+      lineItems.forEach((item, index) => {
+        fields[`line_items[${index}][price]`] = item.price;
+        if (item.quantity) fields[`line_items[${index}][quantity]`] = item.quantity;
+      });
       const { body } = await send("/v1/checkout/sessions", {
         method: "POST",
         idempotencyKey: input.idempotencyKey,

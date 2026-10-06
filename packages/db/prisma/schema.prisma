@@ -19,6 +19,9 @@ model User {
   twoFactorEnabled Boolean?    @default(false)
   /// Staff only: whether this user may open calls, transcripts, and recordings. Owners and admins always can.
   canViewCalls     Boolean     @default(false)
+  /// Self-serve signup terms acceptance (Phase B). Null for invited/admin-created users.
+  termsAcceptedAt  DateTime?
+  termsVersion     String?
   createdAt        DateTime    @default(now())
   updatedAt        DateTime    @updatedAt
   client           Client?     @relation(fields: [clientId], references: [id], onDelete: Restrict)
@@ -148,6 +151,8 @@ model Client {
   overrideSetupFeeCents           Int?
   overrideIncludedChangesPerMonth Int?
   setupFeeWaived                  Boolean   @default(false)
+  /// Created through public /signup rather than the admin wizard.
+  selfServe                       Boolean   @default(false)
   internal                        Boolean   @default(false)
   coverage                        Json?
   features                        Json?

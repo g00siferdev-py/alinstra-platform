@@ -14,6 +14,11 @@ export type OwnerOverview = {
   publicPhone: string | null;
   agentLive: boolean;
   liveCallId: string | null;
+  billingStatus: string;
+  selfServe: boolean;
+  paidAt: Date | null;
+  wizardSubmittedAt: Date | null;
+  hasInterviewDraft: boolean;
 };
 
 function startOfWeek(now: Date): Date {
@@ -39,7 +44,7 @@ export async function ownerOverview(ctx: TenantContext, clientId: string, now = 
   const monthStart = startOfMonth(now);
   const liveSince = new Date(now.getTime() - LIVE_WINDOW_MS);
 
-  const [client, callsThisWeek, messagesThisWeek, minutesUsed, liveCall] = await Promise.all([
+  const [client, callsThisWeek, messagesThisWeek, minutesUsed, liveCall, activeInterview] = await Promise.all([
     prisma.client.findFirstOrThrow({
       where: { id: clientId, archivedAt: null },
       include: { plan: { select: { name: true, includedMinutes: true } } },
@@ -66,6 +71,10 @@ export async function ownerOverview(ctx: TenantContext, clientId: string, now = 
       orderBy: { startedAt: "desc" },
       select: { id: true },
     }),
+    prisma.interviewSession.findFirst({
+      where: { clientId, status: "active" },
+      select: { id: true },
+    }),
   ]);
 
   const minutesIncluded = client.overrideIncludedMinutes ?? client.plan?.includedMinutes ?? 0;
@@ -81,5 +90,10 @@ export async function ownerOverview(ctx: TenantContext, clientId: string, now = 
     publicPhone: client.publicPhone ?? client.phoneE164,
     agentLive: Boolean(liveCall),
     liveCallId: liveCall?.id ?? null,
+    billingStatus: client.billingStatus,
+    selfServe: client.selfServe,
+    paidAt: client.paidAt,
+    wizardSubmittedAt: client.wizardSubmittedAt,
+    hasInterviewDraft: Boolean(activeInterview) || Boolean(client.wizardSubmittedAt === null),
   };
 }

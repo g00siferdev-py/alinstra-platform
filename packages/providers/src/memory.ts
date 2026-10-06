@@ -1,4 +1,4 @@
-import { retellTiming, type AgentPublish, type BillingPlatform, type CallTiming, type PriceKind, type PublishedTool, type RecordingDownload, type RetellCallSnapshot, type RetellTiming, type VoicePlatform } from "./types";
+import { retellTiming, type AgentPublish, type BillingPlatform, type CallTiming, type CreateCheckoutInput, type PriceKind, type PublishedTool, type RecordingDownload, type RetellCallSnapshot, type RetellTiming, type VoicePlatform } from "./types";
 
 type StoredLlm = { clientId: string; prompt: string; tools: PublishedTool[]; beginMessage: string };
 /** Mirrors what httpVoice sends: the agent carries the clamped Retell timing fields. */
@@ -108,7 +108,15 @@ export class MemoryBilling implements BillingPlatform {
   customers = new Map<string, string>();
   prices = new Map<string, { priceId: string; amountCents: number; kind: PriceKind }>();
   checkouts = new Map<string, { url: string; subscriptionId: string }>();
-  lastCheckout: { successUrl: string; cancelUrl: string; idempotencyKey: string } | null = null;
+  lastCheckout: {
+    successUrl: string;
+    cancelUrl: string;
+    idempotencyKey: string;
+    recurringPriceId: string;
+    setupPriceId: string | null;
+    meteredPriceId: string | null;
+    clientId: string;
+  } | null = null;
   canceled = new Set<string>();
   periodEnd = new Map<string, Date>();
   creates = { customer: 0, price: 0, checkout: 0 };
@@ -135,16 +143,16 @@ export class MemoryBilling implements BillingPlatform {
     return { priceId };
   }
 
-  async createCheckout(input: {
-    clientId: string;
-    customerId: string;
-    recurringPriceId: string;
-    setupPriceId: string | null;
-    successUrl: string;
-    cancelUrl: string;
-    idempotencyKey: string;
-  }): Promise<{ sessionId: string; url: string; expiresAt: Date }> {
-    this.lastCheckout = { successUrl: input.successUrl, cancelUrl: input.cancelUrl, idempotencyKey: input.idempotencyKey };
+  async createCheckout(input: CreateCheckoutInput): Promise<{ sessionId: string; url: string; expiresAt: Date }> {
+    this.lastCheckout = {
+      successUrl: input.successUrl,
+      cancelUrl: input.cancelUrl,
+      idempotencyKey: input.idempotencyKey,
+      recurringPriceId: input.recurringPriceId,
+      setupPriceId: input.setupPriceId,
+      meteredPriceId: input.meteredPriceId ?? null,
+      clientId: input.clientId,
+    };
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
     const existing = this.checkouts.get(input.idempotencyKey);
     if (existing) return { sessionId: `cs_${input.clientId}`, url: existing.url, expiresAt };

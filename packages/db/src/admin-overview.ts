@@ -17,7 +17,7 @@ export type LiveCallRow = {
 
 export type AdminTodoItem = {
   id: string;
-  kind: "held_edit" | "failed_recording" | "flagged_call" | "lead" | "setup";
+  kind: "held_edit" | "failed_recording" | "flagged_call" | "lead" | "setup" | "self_serve_review";
   title: string;
   detail: string;
   href: string;
@@ -122,6 +122,7 @@ export async function adminOverview(ctx: Actor, now = new Date()): Promise<Admin
     failedRecordings,
     flaggedCalls,
     uncontactedLeads,
+    selfServeAwaitingReview,
     clients,
     latestCallRows,
     activeInterviews,
@@ -160,6 +161,17 @@ export async function adminOverview(ctx: Actor, now = new Date()): Promise<Admin
       where: { contactedAt: null },
       take: 10,
       orderBy: { createdAt: "desc" },
+    }),
+    prisma.client.findMany({
+      where: {
+        archivedAt: null,
+        selfServe: true,
+        wizardSubmittedAt: { not: null },
+        status: { notIn: ["live", "churned"] },
+      },
+      take: 10,
+      orderBy: { wizardSubmittedAt: "desc" },
+      select: { id: true, name: true },
     }),
     prisma.client.findMany({
       where: { archivedAt: null },
@@ -245,6 +257,15 @@ export async function adminOverview(ctx: Actor, now = new Date()): Promise<Admin
       title: "Call back a new lead",
       detail: `${lead.business || lead.name} has not been contacted yet.`,
       href: "/admin/leads",
+    });
+  }
+  for (const client of selfServeAwaitingReview) {
+    todos.push({
+      id: `ss-${client.id}`,
+      kind: "self_serve_review",
+      title: "New self-serve signup awaiting review",
+      detail: `${client.name} submitted their setup and is waiting for review.`,
+      href: `/admin/clients/${client.id}`,
     });
   }
   for (const client of clients) {

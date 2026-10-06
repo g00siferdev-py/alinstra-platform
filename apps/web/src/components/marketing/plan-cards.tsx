@@ -76,7 +76,7 @@ export function PlanCards({ plans }: { plans: PublicPlan[] }) {
                 )}
               </p>
               <Link
-                href={`/start?plan=${plan.code}`}
+                href={`/signup?plan=${plan.code}`}
                 className={`${recommended ? btnPrimary : btnSecondary} w-full justify-center`}
               >
                 {meta.ctaLabel}

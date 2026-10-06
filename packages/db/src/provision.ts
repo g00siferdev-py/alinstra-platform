@@ -21,6 +21,7 @@ import {
   retellPrompt,
   type WeeklyHours,
 } from "./domain";
+import { FOUNDING_OFFER, FOUNDING_WAIVER_PLAN_CODES, planHasFoundingWaiver } from "./founding";
 import { assertTenantContext, type TenantContext } from "./tenant";
 import { testDatabaseUrl } from "./test-database-url";
 
@@ -515,14 +516,81 @@ function setupCents(client: { setupFeeWaived: boolean; overrideSetupFeeCents: nu
   return client.overrideSetupFeeCents ?? plan.setupFeeCents;
 }
 
-async function openCheckout(clientId: string, deps: Phase3Deps, now = Date.now()): Promise<{ url: string; expiresAt: Date }> {
+export type CheckoutUrls = {
+  successUrl: string;
+  cancelUrl: string;
+};
+
+/** Admin provisioning uses /billing/*; self-serve signup uses /home and /signup/canceled. */
+export function checkoutUrlsFor(appUrl: string, mode: "admin" | "self_serve"): CheckoutUrls {
+  const base = origin(appUrl);
+  if (mode === "self_serve") {
+    return { successUrl: `${base}/home?welcome=1`, cancelUrl: `${base}/signup/canceled` };
+  }
+  return { successUrl: `${base}/billing/thanks`, cancelUrl: `${base}/billing/canceled` };
+}
+
+/**
+ * Count non-internal clients who already paid with a founding-waiver plan.
+ * Used at checkout creation to decide whether the setup fee is still waived.
+ */
+export async function countPaidFoundingWaivers(): Promise<number> {
+  if (!FOUNDING_OFFER.active) return FOUNDING_OFFER.maxPaidWaivers;
+  return prisma.client.count({
+    where: {
+      internal: false,
+      paidAt: { not: null },
+      setupFeeWaived: true,
+      plan: { code: { in: [...FOUNDING_WAIVER_PLAN_CODES] } },
+    },
+  });
+}
+
+/**
+ * Decide whether this checkout should waive the setup fee under the founding offer.
+ * Records `setupFeeWaived` on the client when the offer applies.
+ */
+export async function applyFoundingWaiverAtCheckout(clientId: string, planCode: string): Promise<boolean> {
+  const eligible = FOUNDING_OFFER.active && planHasFoundingWaiver(planCode);
+  if (!eligible) return false;
+  const paid = await countPaidFoundingWaivers();
+  if (paid >= FOUNDING_OFFER.maxPaidWaivers) return false;
+  await prisma.client.update({ where: { id: clientId }, data: { setupFeeWaived: true } });
+  return true;
+}
+
+/**
+ * Shared Checkout builder used by admin `stripe_checkout` and self-serve signup.
+ * Line items: base monthly + metered minutes (when a StripePrice exists; Part 3 creates them) + setup unless waived.
+ */
+export async function openCheckout(
+  clientId: string,
+  deps: Pick<Phase3Deps, "billing" | "appUrl">,
+  options: { urls?: CheckoutUrls; now?: number } = {},
+): Promise<{ url: string; expiresAt: Date }> {
+  const now = options.now ?? Date.now();
   const { client, plan } = await loadReady(clientId);
   if (client.internal) throw new Error("Client zero is not billed.");
   if (!plan) throw new Error("Choose a plan before billing.");
   if (!client.stripeCustomerId) throw new Error("Create the Stripe customer first.");
-  const recurringAmount = monthlyCents(client, plan);
-  const setupAmount = setupCents(client, plan);
-  const recurringKey = lookupKeyFor("monthly", plan.code, clientId, client.overrideMonthlyPriceCents != null);
+
+  // Founding waiver is evaluated at checkout creation (not at signup), then stored on the client.
+  if (!client.setupFeeWaived) {
+    await applyFoundingWaiverAtCheckout(clientId, plan.code);
+  }
+  const fresh = await prisma.client.findUniqueOrThrow({
+    where: { id: clientId },
+    select: {
+      setupFeeWaived: true,
+      overrideSetupFeeCents: true,
+      overrideMonthlyPriceCents: true,
+      stripeCustomerId: true,
+    },
+  });
+
+  const recurringAmount = monthlyCents(fresh, plan);
+  const setupAmount = setupCents(fresh, plan);
+  const recurringKey = lookupKeyFor("monthly", plan.code, clientId, fresh.overrideMonthlyPriceCents != null);
   const recurring = await deps.billing.ensurePrice({
     lookupKey: recurringKey,
     amountCents: recurringAmount,
@@ -531,9 +599,10 @@ async function openCheckout(clientId: string, deps: Phase3Deps, now = Date.now()
     idempotencyKey: `price_${recurringKey}_${recurringAmount}`,
   });
   await rememberPrice(recurringKey, recurring.priceId, plan.code, "recurring", recurringAmount);
+
   let setupPriceId: string | null = null;
-  if (setupAmount !== null) {
-    const setupKey = lookupKeyFor("setup", plan.code, clientId, client.overrideSetupFeeCents != null);
+  if (setupAmount !== null && setupAmount > 0) {
+    const setupKey = lookupKeyFor("setup", plan.code, clientId, fresh.overrideSetupFeeCents != null);
     const setup = await deps.billing.ensurePrice({
       lookupKey: setupKey,
       amountCents: setupAmount,
@@ -544,15 +613,22 @@ async function openCheckout(clientId: string, deps: Phase3Deps, now = Date.now()
     await rememberPrice(setupKey, setup.priceId, plan.code, "setup", setupAmount);
     setupPriceId = setup.priceId;
   }
-  const base = origin(deps.appUrl);
+
+  // Part 3 syncs metered_overage prices. Until then, look up an existing catalog row and skip if missing.
+  const meteredLookup = overageLookupKey(plan.code);
+  const meteredRow = await prisma.stripePrice.findUnique({ where: { lookupKey: meteredLookup } });
+  const meteredPriceId = meteredRow?.kind === "metered_overage" ? meteredRow.stripePriceId : null;
+
+  const urls = options.urls ?? checkoutUrlsFor(deps.appUrl, "admin");
   const session = await deps.billing.createCheckout({
     clientId,
-    customerId: client.stripeCustomerId,
+    customerId: fresh.stripeCustomerId!,
     recurringPriceId: recurring.priceId,
     setupPriceId,
-    successUrl: `${base}/billing/thanks`,
-    cancelUrl: `${base}/billing/canceled`,
-    idempotencyKey: `client_${clientId}_checkout_${recurring.priceId}_${now}`,
+    meteredPriceId,
+    successUrl: urls.successUrl,
+    cancelUrl: urls.cancelUrl,
+    idempotencyKey: `client_${clientId}_checkout_${recurring.priceId}_${setupPriceId ?? "none"}_${meteredPriceId ?? "none"}_${now}`,
   });
   await prisma.client.update({
     where: { id: clientId },
@@ -561,12 +637,48 @@ async function openCheckout(clientId: string, deps: Phase3Deps, now = Date.now()
   return { url: session.url, expiresAt: session.expiresAt };
 }
 
+/** Ensure Stripe customer + open Checkout for a self-serve (or unpaid) client. */
+export async function ensureSelfServeCheckout(
+  clientId: string,
+  deps: Pick<Phase3Deps, "billing" | "appUrl">,
+): Promise<{ url: string; expiresAt: Date }> {
+  const { client, plan } = await loadReady(clientId);
+  if (client.internal) throw new Error("Client zero is not billed.");
+  if (!plan) throw new Error("Choose a plan before billing.");
+  if (client.billingStatus === "paid") throw new Error("This client is already paid.");
+
+  if (!client.stripeCustomerId) {
+    const found = await deps.billing.findCustomerId(clientId);
+    const customerId =
+      found ??
+      (
+        await deps.billing.createCustomer({
+          clientId,
+          name: client.name,
+          email: client.contactEmail,
+          idempotencyKey: `client_${clientId}_customer`,
+        })
+      ).customerId;
+    await prisma.client.update({ where: { id: clientId }, data: { stripeCustomerId: customerId } });
+  }
+
+  const refreshed = await prisma.client.findUniqueOrThrow({
+    where: { id: clientId },
+    select: { stripeCheckoutUrl: true, stripeCheckoutExpiresAt: true },
+  });
+  if (checkoutStillFresh(refreshed.stripeCheckoutUrl, refreshed.stripeCheckoutExpiresAt)) {
+    return { url: refreshed.stripeCheckoutUrl!, expiresAt: refreshed.stripeCheckoutExpiresAt! };
+  }
+
+  return openCheckout(clientId, deps, { urls: checkoutUrlsFor(deps.appUrl, "self_serve") });
+}
+
 export async function refreshPaymentLink(ctx: Actor, clientId: string, deps: Phase3Deps): Promise<{ url: string }> {
   if (ctx.role !== "admin") throw new Error("Only an admin can send a payment link.");
   const { client } = await loadReady(clientId);
   if (client.internal) throw new Error("Client zero is not billed.");
   if (client.billingStatus === "paid") throw new Error("This client is already paid.");
-  const session = await openCheckout(clientId, deps);
+  const session = await openCheckout(clientId, deps, { urls: checkoutUrlsFor(deps.appUrl, "admin") });
   return { url: session.url };
 }
 
@@ -682,7 +794,7 @@ async function runProvisionStep(name: (typeof PROVISION_STEPS)[number], clientId
     if (client.internal) return "skipped";
     if (client.billingStatus === "paid") return client.stripeSubscriptionId ?? "paid";
     if (checkoutStillFresh(client.stripeCheckoutUrl, client.stripeCheckoutExpiresAt)) return client.stripeCheckoutUrl ?? "open";
-    const session = await openCheckout(clientId, deps);
+    const session = await openCheckout(clientId, deps, { urls: checkoutUrlsFor(deps.appUrl, "admin") });
     return session.url;
   }
   const published = await publishInput(clientId, deps);
@@ -1222,5 +1334,3 @@ export function weeklyHoursOf(value: unknown): WeeklyHours | null {
   if (!value || typeof value !== "object") return null;
   return value as WeeklyHours;
 }
-
-export { overageLookupKey };

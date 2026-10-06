@@ -26,7 +26,7 @@ export async function ownerSendInterviewMessage(sessionId: string, message: stri
 
 export async function ownerFinishInterview(sessionId: string) {
   const actor = await ownerActor();
-  return finishInterviewAction(actor, sessionId, "/home/business");
+  return finishInterviewAction(actor, sessionId, "/home/business/setup");
 }
 
 export async function ownerDiscardInterview(sessionId: string) {

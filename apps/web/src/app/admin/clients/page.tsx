@@ -41,6 +41,11 @@ export default async function ClientsPage() {
                     Wizard submitted
                   </Pill>
                 ) : null}
+                {client.selfServe ? (
+                  <Pill tone="warning" className="mt-2">
+                    Self-serve
+                  </Pill>
+                ) : null}
                 {!client.wizardSubmittedAt && client.wizardDraft && !client.wizardDraft.discardedAt ? (
                   <Link className="mt-1 block text-sm font-semibold" href={`/admin/clients/${client.id}/wizard`}>
                     Continue setup · step {client.wizardDraft.currentStep}

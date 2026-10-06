@@ -169,19 +169,27 @@ export const RECORDING_MAX_BYTES = 64 * 1024 * 1024;
 
 export type PriceKind = "recurring" | "setup" | "metered_overage";
 
+export type CreateCheckoutInput = {
+  clientId: string;
+  customerId: string;
+  recurringPriceId: string;
+  /** One-time setup fee price. Null when waived or $0. */
+  setupPriceId: string | null;
+  /**
+   * Metered minutes price (Phase B Part 3). When set, added as a subscription line item
+   * without quantity. Null until metered prices are synced.
+   */
+  meteredPriceId?: string | null;
+  successUrl: string;
+  cancelUrl: string;
+  idempotencyKey: string;
+};
+
 export interface BillingPlatform {
   findCustomerId(clientId: string): Promise<string | null>;
   createCustomer(input: { clientId: string; name: string; email: string | null; idempotencyKey: string }): Promise<{ customerId: string }>;
   ensurePrice(input: { lookupKey: string; amountCents: number; kind: PriceKind; productName: string; idempotencyKey: string }): Promise<{ priceId: string }>;
-  createCheckout(input: {
-    clientId: string;
-    customerId: string;
-    recurringPriceId: string;
-    setupPriceId: string | null;
-    successUrl: string;
-    cancelUrl: string;
-    idempotencyKey: string;
-  }): Promise<{ sessionId: string; url: string; expiresAt: Date }>;
+  createCheckout(input: CreateCheckoutInput): Promise<{ sessionId: string; url: string; expiresAt: Date }>;
   cancelAtPeriodEnd(subscriptionId: string): Promise<{ serviceEndsAt: Date }>;
   cancelNow(subscriptionId: string): Promise<"canceled" | "missing">;
 }

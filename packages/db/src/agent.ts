@@ -272,7 +272,14 @@ async function insertConfig(
 }
 
 export async function createDraftAgentConfig(ctx: Actor, tx: Prisma.TransactionClient, clientId: string) {
-  assertAdmin(ctx);
+  assertTenantContext(ctx);
+  if (ctx.role === "admin") {
+    // ok
+  } else if (ctx.role === "client_owner" && ctx.clientId === clientId) {
+    // Self-serve owners create the draft config when they submit for review.
+  } else {
+    throw new Error("Only an admin or the client owner can create a draft config.");
+  }
   const loaded = await load(tx, clientId);
   const config = await insertConfig(tx, {
     clientId,

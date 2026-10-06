@@ -9,6 +9,7 @@ import {
   type TenantContext,
 } from "@alinstra/db";
 import { LiveCallBanner } from "@/components/live-call-banner";
+import { ReopenCheckoutButton } from "@/components/reopen-checkout-button";
 import {
   Button,
   Card,
@@ -239,6 +240,34 @@ export default async function HomePage() {
       clientMessages(ctx).list(clientId),
       canViewCalls && viewer ? listCalls(viewer, clientId, { limit: 6 }) : Promise.resolve({ rows: [], nextCursor: null }),
     ]);
+
+    const unpaidSelfServe =
+      role === "client_owner" &&
+      overview.selfServe &&
+      !overview.paidAt &&
+      overview.billingStatus !== "paid";
+
+    if (unpaidSelfServe) {
+      return (
+        <main className="grid gap-6">
+          <PageHeader eyebrow={formatDateLine(now)} title={`Hi ${greetingName}`} description={overview.clientName} />
+          <Card className="grid max-w-lg gap-4">
+            <h2 className="text-lg font-extrabold text-[var(--ink)]">Finish checkout</h2>
+            <p className="text-sm text-[var(--muted)]">
+              Your account is saved. Complete payment to set up your receptionist and get a number.
+            </p>
+            <ReopenCheckoutButton />
+          </Card>
+        </main>
+      );
+    }
+
+    const showWelcome =
+      role === "client_owner" &&
+      overview.selfServe &&
+      Boolean(overview.paidAt || overview.billingStatus === "paid") &&
+      !overview.wizardSubmittedAt;
+
     const recentMessages = messageRows.slice(0, 6);
     // Audit trail: one row for the list, with how many messages were shown.
     await logMessageList(session.user, clientId, recentMessages.length);
@@ -265,6 +294,33 @@ export default async function HomePage() {
             ) : null
           }
         />
+
+        {showWelcome ? (
+          <SectionCard title="Welcome — three steps to go live">
+            <ol className="grid gap-0">
+              <li className="grid gap-1 border-b border-[var(--line)] px-5 py-4">
+                <p className="font-bold text-[var(--ink)]">1. Set up your receptionist</p>
+                <p className="text-sm text-[var(--muted)]">Answer a short AI chat about your business.</p>
+                <Link className="text-sm font-bold" href="/home/business/interview">
+                  Start the chat
+                </Link>
+              </li>
+              <li className="grid gap-1 border-b border-[var(--line)] px-5 py-4">
+                <p className="font-bold text-[var(--ink)]">2. Review and submit</p>
+                <p className="text-sm text-[var(--muted)]">Check the draft, then send it for our review.</p>
+                <Link className="text-sm font-bold" href="/home/business/setup">
+                  Review and submit
+                </Link>
+              </li>
+              <li className="grid gap-1 px-5 py-4">
+                <p className="font-bold text-[var(--ink)]">3. We review and connect your number</p>
+                <p className="text-sm text-[var(--muted)]">
+                  After you submit, we review your setup and connect your phone number.
+                </p>
+              </li>
+            </ol>
+          </SectionCard>
+        ) : null}
 
         <section className={`grid gap-3 sm:grid-cols-2 ${canViewCalls ? "xl:grid-cols-3" : ""}`}>
           {canViewCalls ? (

@@ -9,9 +9,11 @@ import {
   changeAllowance,
   editClientStep,
   previewQuickUpdate,
+  saveWizardDraft,
   setCallAccess,
   setCallRetention,
   submitChangeRequest,
+  submitWizard,
   type Actor,
   type QuickUpdateInput,
 } from "@alinstra/db";
@@ -171,5 +173,40 @@ export async function setCallRetentionAction(input: { days: number }) {
     return { ok: true };
   } catch (error) {
     return { error: message(error, "Could not update retention.") };
+  }
+}
+
+export async function ownerSaveWizardDraftAction(input: {
+  clientId: string;
+  payload: unknown;
+  currentStep: number;
+  updatedAt: string;
+}) {
+  const session = await requireUser();
+  try {
+    const actor = ownerActor(session);
+    if (input.clientId !== actor.clientId) throw new Error("Wrong client.");
+    const draft = await saveWizardDraft(actor, input);
+    return { ok: true as const, updatedAt: draft.updatedAt.toISOString() };
+  } catch (error) {
+    return { error: message(error, "Could not save the draft.") };
+  }
+}
+
+export async function ownerSubmitWizardAction(input: {
+  clientId: string;
+  payload: unknown;
+  updatedAt: string;
+}) {
+  const session = await requireUser();
+  try {
+    const actor = ownerActor(session);
+    if (input.clientId !== actor.clientId) throw new Error("Wrong client.");
+    await submitWizard(actor, input);
+    revalidatePath("/home");
+    revalidatePath("/home/business");
+    return { ok: true as const };
+  } catch (error) {
+    return { error: message(error, "Could not submit for review.") };
   }
 }

@@ -26,7 +26,7 @@ import {
 } from "@alinstra/db";
 import { Card, EmptyState, PageHeader, SectionCard } from "@/components/ui";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 
 function submittedStepSummary(step: number | undefined, payload: Record<string, unknown> | undefined): string {
   if (!step || !payload) return "";
@@ -49,6 +49,14 @@ export default async function MyBusinessPage() {
   const ctx = { role: session.user.role as "client_owner" | "client_staff", clientId: session.user.clientId };
   const client = await clients(ctx).getById(session.user.clientId);
   if (!client) notFound();
+  if (
+    session.user.role === "client_owner" &&
+    client.selfServe &&
+    !client.paidAt &&
+    client.billingStatus !== "paid"
+  ) {
+    redirect("/home");
+  }
   const viewer = callViewerFor(session.user);
   const showCalls = Boolean(viewer && canViewClientCalls(viewer, client.id));
   const [plan, knowledge, targets, updates, calls] = await Promise.all([
@@ -80,7 +88,11 @@ export default async function MyBusinessPage() {
             Set up your receptionist
           </Link>
           {" — "}
-          answer a short interview, then review the draft before anything goes live.
+          answer a short interview, then{" "}
+          <Link className="font-bold" href="/home/business/setup">
+            review and submit
+          </Link>{" "}
+          before anything goes live.
         </Card>
       ) : null}
       <Card className="text-sm">

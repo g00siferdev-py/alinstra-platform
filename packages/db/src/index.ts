@@ -77,15 +77,21 @@ export {
   advanceProvisioning,
   approveNumberPurchase,
   AWAITING_NUMBER_APPROVAL,
+  applyFoundingWaiverAtCheckout,
+  checkoutUrlsFor,
   clientIdForRetellAgent,
+  countPaidFoundingWaivers,
   createClientZero,
+  ensureSelfServeCheckout,
   latestProvisionFailure,
   NUMBER_PRICING,
   numberPurchaseFor,
+  openCheckout,
   PROVISION_STEP_LABELS,
   PROVISION_STEPS,
   provisionStepLabel,
   TEARDOWN_STEPS,
+  type CheckoutUrls,
   type ProvisionFailure,
   applyStripeEvent,
   callRecords,
@@ -110,6 +116,18 @@ export {
   type Phase3Deps,
   type TransferDecision,
 } from "./provision";
+export {
+  FOUNDING_OFFER,
+  FOUNDING_WAIVER_PLAN_CODES,
+  planHasFoundingWaiver,
+  TERMS_VERSION,
+} from "./founding";
+export {
+  abandonSelfServeClient,
+  attachSelfServeSignup,
+  createSelfServeClient,
+  type SelfServeClientInput,
+} from "./self-serve";
 export { clientEditPayload, editClientStep, type ClientEditResult } from "./wizard";
 export {
   BOOKING_HOLD_REASON,

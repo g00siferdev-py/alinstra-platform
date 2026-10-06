@@ -16,6 +16,10 @@ export async function createCredentialUser(input: {
   password: string;
   role: Role;
   clientId: string | null;
+  /** Defaults to true for invites and admin-created users. Self-serve signup passes false. */
+  emailVerified?: boolean;
+  termsAcceptedAt?: Date | null;
+  termsVersion?: string | null;
 }): Promise<{ id: string }> {
   if (input.password.length < MIN_PASSWORD_LENGTH) {
     throw new AuthError(`Password must be at least ${MIN_PASSWORD_LENGTH} characters.`);
@@ -27,6 +31,7 @@ export async function createCredentialUser(input: {
     throw new AuthError("Client users require a clientId.");
   }
 
+  const emailVerified = input.emailVerified ?? true;
   const ctx = await auth.$context;
   const password = await ctx.password.hash(input.password);
   const id = randomBytes(16).toString("hex");
@@ -35,7 +40,7 @@ export async function createCredentialUser(input: {
       id,
       email: input.email.toLowerCase(),
       name: input.name,
-      emailVerified: true,
+      emailVerified,
       role: input.role,
       clientId: input.clientId,
     },
@@ -53,7 +58,13 @@ export async function createCredentialUser(input: {
 
   await prisma.user.update({
     where: { id: created.id },
-    data: { role: input.role, clientId: input.clientId, emailVerified: true },
+    data: {
+      role: input.role,
+      clientId: input.clientId,
+      emailVerified,
+      termsAcceptedAt: input.termsAcceptedAt ?? null,
+      termsVersion: input.termsVersion ?? null,
+    },
   });
 
   return { id: created.id };

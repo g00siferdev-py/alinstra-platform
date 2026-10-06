@@ -56,7 +56,13 @@ export function wizardDrafts(ctx: TenantContext) {
   assertTenantContext(ctx);
   return {
     async getByClientId(clientId: string) {
-      if (ctx.role !== "admin") return null;
+      if (ctx.role === "admin") {
+        // ok
+      } else if (ctx.role === "client_owner" && ctx.clientId === clientId) {
+        // ok
+      } else {
+        return null;
+      }
       return prisma.wizardDraft.findFirst({
         where: { clientId, discardedAt: null, client: { archivedAt: null } },
       });
@@ -134,7 +140,13 @@ export async function saveWizardDraft(
   input: { clientId: string; payload: unknown; currentStep: number; updatedAt: string },
 ) {
   assertTenantContext(ctx);
-  if (ctx.role !== "admin") throw new Error("Only admin can edit a wizard");
+  if (ctx.role === "admin") {
+    // ok
+  } else if (ctx.role === "client_owner" && ctx.clientId === input.clientId) {
+    // Self-serve owners may edit their unsubmitted draft.
+  } else {
+    throw new Error("Only admin or the client owner can edit a wizard");
+  }
   const payload = asPayload(input.payload);
   const step = Math.min(11, Math.max(1, input.currentStep));
   return prisma.$transaction(async (tx) => {
@@ -298,7 +310,20 @@ export async function continueWizard(ctx: Actor, input: { clientId: string; step
 
 export async function submitWizard(ctx: Actor, input: { clientId: string; payload: unknown; updatedAt: string }) {
   assertTenantContext(ctx);
-  if (ctx.role !== "admin") throw new Error("Only admin can submit a wizard");
+  if (ctx.role === "admin") {
+    // ok
+  } else if (ctx.role === "client_owner" && ctx.clientId === input.clientId) {
+    const owner = await prisma.user.findFirst({
+      where: { id: ctx.id, clientId: input.clientId, role: "client_owner" },
+      select: { emailVerified: true },
+    });
+    if (!owner) throw new Error("Only the client owner can submit.");
+    if (!owner.emailVerified) {
+      throw new Error("Confirm your email to submit");
+    }
+  } else {
+    throw new Error("Only admin or the client owner can submit a wizard");
+  }
   const payload = asPayload(input.payload);
   businessSchema.parse({ timezone: "America/New_York", ...payload.business });
   planSelectionSchema.parse(payload.plan);

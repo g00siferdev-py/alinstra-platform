@@ -16,6 +16,9 @@ export default async function OwnerInterviewPage() {
   const ctx = { role: "client_owner" as const, clientId: session.user.clientId };
   const client = await clients(ctx).getById(session.user.clientId);
   if (!client || client.wizardSubmittedAt) notFound();
+  if (client.selfServe && !client.paidAt && client.billingStatus !== "paid") {
+    notFound();
+  }
 
   const actor: Actor = { id: session.user.id, role: "client_owner", clientId: session.user.clientId };
   const interview = await ensureInterviewSession(actor, session.user.clientId, client.industry);
@@ -34,7 +37,7 @@ export default async function OwnerInterviewPage() {
     openQuestions: state.openQuestions,
     skippedQuestions: state.skippedQuestions,
   });
-  const exitHref = "/home/business";
+  const exitHref = "/home/business/setup";
 
   return (
     <main className="grid gap-6">
