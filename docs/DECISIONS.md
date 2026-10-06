@@ -268,6 +268,16 @@ Writes: only ciphertext (and the mask); the old plaintext columns are set to nul
 
 **Owner edits** means `applyQuickUpdateAction` and `submitChangeRequestAction`, one bucket per user. `previewQuickUpdateAction` (no write) and the owner wizard-step edit, retention and call-access actions are not limited, because Part 5 names only quick updates and change requests.
 
+## 2026-10-06 — Phase S Part 6: supply chain
+
+**Audit gate is our own script.** `scripts/check-audit.mjs` runs `pnpm audit --prod --json`, ignores pnpm's exit code and decides itself: any high or critical advisory not in `audit-allowlist.json` fails, as does an entry with no reason, a bad date, or a past expiry. It also fails if pnpm returns no JSON (registry down), so a broken audit cannot pass silently. Entries are keyed by GHSA id. Stale entries only warn.
+
+**Seven exceptions allowed on day one, expiring 2026-11-05.** Real advisories exist today and upgrading dependencies was outside this part. Each entry says why it is not reachable (R2 XML responses only; Prisma/better-auth tooling or an unused MySQL adapter; a build-time watcher). One month is deliberately short.
+
+**Gitleaks: pinned binary, own config.** Version and SHA-256 are pinned in `ci.yml`, with `fetch-depth: 0`. `.gitleaks.toml` extends the default rules and allowlists exact fake values (not whole files), so a real secret next to them is still caught. No history was rewritten.
+
+**Separate CI jobs** for `audit` and `secrets` so they need no Postgres or Redis and fail independently of the main `check` job.
+
 ## Needs Daniel's review
 
 - Existing AgentConfig rows change `status` when a newer version becomes active. The prompt and settings on that row stay as written. Full immutability, including status, would need a separate "current" pointer.

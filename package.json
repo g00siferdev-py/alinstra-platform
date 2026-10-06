@@ -11,6 +11,7 @@
     "lint": "turbo run lint",
     "test": "turbo run test",
     "typecheck": "turbo run typecheck",
+    "audit:check": "node scripts/check-audit.mjs",
     "dev:web": "pnpm --filter @alinstra/web dev",
     "dev:worker": "pnpm --filter @alinstra/worker dev",
     "db:generate": "pnpm --filter @alinstra/db generate",

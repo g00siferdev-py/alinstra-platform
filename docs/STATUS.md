@@ -55,6 +55,15 @@ Phase 2 is merged into `main`. Staging deploy readiness (navigation, port, worke
 - Tests: `packages/auth/src/rate-limit.test.ts`, `rate-limit-store.test.ts`, `invite-rate-limit.test.ts`; `apps/web/src/app/api/retell/rate-limit.test.ts`; added cases in the recording route, knowledge document route and `home/actions` tests. Lint, typecheck, `turbo run test --force` (417 passed, 5 skipped) and the no-database production build pass.
 - Not done: Parts 6 and 7. No new env vars.
 
+## Phase S Part 6 (branch `phase-s-security`, not merged, not committed)
+
+- `.github/dependabot.yml`: npm weekly (minor and patch grouped), github-actions monthly, 5 open PRs per ecosystem.
+- CI has two new jobs, `audit` and `secrets`. `audit` runs `scripts/check-audit.mjs` (wraps `pnpm audit --prod --audit-level=high --json`); `secrets` downloads the gitleaks 8.30.1 release binary (SHA-256 checked), fetches full history and runs `gitleaks detect --redact --no-banner --config .gitleaks.toml`.
+- Verified locally: gitleaks passes on all 109 commits (8 findings before `.gitleaks.toml`, all fake `key-12345678` / `or-key-12345678` values in `packages/providers/src/text.test.ts`; no real secrets). The working-tree changes were scanned too and are clean. The audit script passes, and fails for an unlisted advisory and for an expired entry.
+- **The audit currently has 7 high/critical production advisories** (fast-xml-parser x4 via the AWS S3 client, deepmerge-ts and mysql2 via better-auth, braces via Sentry's build plugin). They are in `audit-allowlist.json` with reasons and expire **2026-11-05**. Upgrading or overriding them is the follow-up; CI goes red on that date otherwise.
+- `docs/SECURITY-CHECKLIST.md` (quarterly checklist) added. Remote CI is unverified (no `gh`).
+- Not done: Part 7.
+
 ## Verified locally
 
 - Phase 2: `pnpm test` passed 60 tests (prompt rendering, admin two-factor, allowance, isolation, plus the Phase 0–1 suites). `pnpm lint` and `pnpm typecheck` were run after the navigation and deploy-readiness changes.

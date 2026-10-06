@@ -1,0 +1,38 @@
+title = "alinstra-platform gitleaks config"
+
+[extend]
+useDefault = true
+
+# Only known-fake values are allowlisted, by exact value rather than by path, so a real secret
+# committed next to them is still caught. Do not add broad patterns here.
+[[allowlists]]
+description = "Known fake test/placeholder secrets"
+regexTarget = "match"
+regexes = [
+  # Resend placeholder used by the production-build smoke test.
+  '''re_build[A-Za-z0-9_-]*''',
+  # Hex test secrets: 0123456789abcdef repeated (HMAC/signature/encryption test fixtures).
+  '''(?:0123456789abcdef){1,8}''',
+  # Fake provider API keys in packages/providers/src/text.test.ts.
+  '''(?:or-)?key-12345678''',
+  # Non-secret placeholders from CI (ci.yml production-build env, Dockerfile build args).
+  '''build-time-placeholder[A-Za-z0-9_-]*''',
+  '''build-placeholder''',
+  '''ci-admin-password''',
+]
+
+[[allowlists]]
+description = "CI-generated secrets are created at run time and never committed"
+paths = [
+  '''\.github/workflows/.*\.ya?ml''',
+]
+regexes = [
+  '''(?:BETTER_AUTH_SECRET|ENCRYPTION_KEY)=\$\(node -e''',
+]
+
+[[allowlists]]
+description = "Dependency lockfile integrity hashes and local, git-ignored data"
+paths = [
+  '''pnpm-lock\.yaml''',
+  '''(^|/)\.data/''',
+]
