@@ -126,6 +126,7 @@ export {
   abandonSelfServeClient,
   attachSelfServeSignup,
   createSelfServeClient,
+  emailAlreadyRegistered,
   type SelfServeClientInput,
 } from "./self-serve";
 export { clientEditPayload, editClientStep, type ClientEditResult } from "./wizard";

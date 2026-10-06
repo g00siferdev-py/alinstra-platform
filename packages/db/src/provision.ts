@@ -20,7 +20,6 @@ import {
   callTimingOf,
   clientIsHealthcare,
   emptyWizardPayload,
-  formatTransferTargets,
   normalizeTransferNumber,
   officeOpen,
   parseRecipientEmails,

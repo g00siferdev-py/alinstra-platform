@@ -13,8 +13,8 @@ import {
   abandonSelfServeClient,
   attachSelfServeSignup,
   createSelfServeClient,
+  emailAlreadyRegistered,
   ensureSelfServeCheckout,
-  prisma,
   TERMS_VERSION,
 } from "@alinstra/db";
 import { platformsFor } from "@alinstra/providers";
@@ -82,23 +82,24 @@ export async function signupAction(_prev: SignupFormState, formData: FormData): 
       return { ok: false, error: "Too many signup attempts for this email. Try again tomorrow." };
     }
 
-    const existing = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+    const existing = await emailAlreadyRegistered(email);
     if (existing) {
       return { ok: false, error: "You already have an account. Sign in.", existingAccount: true };
     }
 
-    const plan = await prisma.plan.findFirst({ where: { id: planId, active: true } });
-    if (!plan) {
-      return { ok: false, error: "That plan is not available." };
+    let client;
+    let plan;
+    try {
+      ({ client, plan } = await createSelfServeClient({
+        businessName,
+        ownerName,
+        email,
+        mobilePhone,
+        planId,
+      }));
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : "Could not create your account. Try again." };
     }
-
-    const { client } = await createSelfServeClient({
-      businessName,
-      ownerName,
-      email,
-      mobilePhone,
-      planId: plan.id,
-    });
 
     let userId: string;
     try {

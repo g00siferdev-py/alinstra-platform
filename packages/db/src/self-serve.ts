@@ -15,6 +15,14 @@ export type SelfServeClientInput = {
   planId: string;
 };
 
+/** True when a user with this email already exists (friendly signup message). */
+export async function emailAlreadyRegistered(email: string): Promise<boolean> {
+  const normalized = email.trim().toLowerCase();
+  if (!normalized) return false;
+  const existing = await prisma.user.findUnique({ where: { email: normalized }, select: { id: true } });
+  return Boolean(existing);
+}
+
 /**
  * Creates the unpaid self-serve Client shell (status lead, billingStatus none).
  * Call createCredentialUser next with this clientId, then `attachSelfServeSignup`.
