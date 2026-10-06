@@ -41,7 +41,8 @@ describe("phase 1 tenancy", () => {
     });
 
     expect(await wizardDrafts(staffA).getByClientId(clientB.id)).toBeNull();
-    expect(await wizardDrafts({ role: "client_owner", clientId: clientA.id }).getByClientId(clientA.id)).toBeNull();
+    expect(await wizardDrafts({ role: "client_owner", clientId: clientA.id }).getByClientId(clientB.id)).toBeNull();
+    expect(await wizardDrafts({ role: "client_owner", clientId: clientA.id }).getByClientId(clientA.id)).not.toBeNull();
     expect(await knowledgeDocuments(staffA).getById(document.id)).toBeNull();
     const visibleDocs = await knowledgeDocuments(staffA).list(clientA.id);
     expect(visibleDocs.map((row) => row.id)).not.toContain(document.id);
