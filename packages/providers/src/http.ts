@@ -1,4 +1,4 @@
-import { ProviderRequestError, RECORDING_MAX_BYTES, retellTiming, STRIPE_API_VERSION, type AgentPublish, type BillingPlatform, type PriceKind, type PublishedTool, type RetellCallSnapshot, type VoicePlatform } from "./types";
+import { ProviderRequestError, RECORDING_MAX_BYTES, retellTiming, STRIPE_API_VERSION, type AgentPublish, type BillingPlatform, type EnsurePriceInput, type PublishedTool, type ReportMeterEventInput, type RetellCallSnapshot, type VoicePlatform } from "./types";
 
 type FetchLike = (url: string, init?: RequestInit) => Promise<Response>;
 
@@ -313,10 +313,58 @@ export function httpBilling(secretKey: string, fetchImpl: FetchLike = fetch): Bi
       });
       return { customerId: String(body.id) };
     },
-    async ensurePrice(input: { lookupKey: string; amountCents: number; kind: PriceKind; productName: string; idempotencyKey: string }) {
+    async ensureMeter(input) {
+      const listed = await send("/v1/billing/meters?limit=100", { method: "GET" });
+      const data = Array.isArray(listed.body.data) ? listed.body.data : [];
+      const existing = data.find((row) => {
+        const meter = row as { id?: string; event_name?: string; status?: string };
+        return meter.event_name === input.eventName && meter.status !== "inactive";
+      }) as { id?: string } | undefined;
+      if (existing?.id) return { meterId: existing.id };
+      const { body } = await send("/v1/billing/meters", {
+        method: "POST",
+        idempotencyKey: input.idempotencyKey,
+        body: formBody({
+          display_name: input.displayName,
+          event_name: input.eventName,
+          "default_aggregation[formula]": "sum",
+          "customer_mapping[event_payload_key]": "stripe_customer_id",
+          "customer_mapping[type]": "by_id",
+          "value_settings[event_payload_key]": "value",
+        }),
+      });
+      return { meterId: String(body.id) };
+    },
+    async ensurePrice(input: EnsurePriceInput) {
       const listed = await send(`/v1/prices?lookup_keys[]=${encodeURIComponent(input.lookupKey)}&active=true`, { method: "GET" });
       const data = Array.isArray(listed.body.data) ? listed.body.data : [];
-      const current = data[0] as { id?: string; unit_amount?: number } | undefined;
+      const current = data[0] as { id?: string; unit_amount?: number | null; billing_scheme?: string } | undefined;
+      if (input.kind === "metered_overage") {
+        // Lookup key encodes included + overage amounts; an active row with that key is the current price.
+        if (current?.id) return { priceId: current.id };
+        if (!input.meterId) throw new Error("meterId is required for metered_overage prices.");
+        const included = input.includedMinutes ?? 0;
+        const overage = input.overagePerMinuteCents ?? input.amountCents;
+        const { body } = await send("/v1/prices", {
+          method: "POST",
+          idempotencyKey: input.idempotencyKey,
+          body: formBody({
+            currency: "usd",
+            lookup_key: input.lookupKey,
+            "product_data[name]": input.productName,
+            billing_scheme: "tiered",
+            tiers_mode: "graduated",
+            "recurring[interval]": "month",
+            "recurring[usage_type]": "metered",
+            "recurring[meter]": input.meterId,
+            "tiers[0][up_to]": String(included),
+            "tiers[0][unit_amount]": "0",
+            "tiers[1][up_to]": "inf",
+            "tiers[1][unit_amount]": String(overage),
+          }),
+        });
+        return { priceId: String(body.id) };
+      }
       if (current?.id && current.unit_amount === input.amountCents) return { priceId: current.id };
       const { body } = await send("/v1/prices", {
         method: "POST",
@@ -327,11 +375,23 @@ export function httpBilling(secretKey: string, fetchImpl: FetchLike = fetch): Bi
           lookup_key: input.lookupKey,
           transfer_lookup_key: current?.id ? "true" : null,
           "product_data[name]": input.productName,
-          "recurring[interval]": input.kind === "recurring" || input.kind === "metered_overage" ? "month" : null,
-          "recurring[usage_type]": input.kind === "metered_overage" ? "metered" : null,
+          "recurring[interval]": input.kind === "recurring" ? "month" : null,
         }),
       });
       return { priceId: String(body.id) };
+    },
+    async reportMeterEvent(input: ReportMeterEventInput) {
+      const { body } = await send("/v1/billing/meter_events", {
+        method: "POST",
+        body: formBody({
+          event_name: input.eventName,
+          identifier: input.identifier,
+          timestamp: String(Math.floor(input.timestamp.getTime() / 1000)),
+          "payload[stripe_customer_id]": input.customerId,
+          "payload[value]": String(input.value),
+        }),
+      });
+      return { identifier: String(body.identifier ?? input.identifier) };
     },
     async createCheckout(input) {
       const lineItems: Array<{ price: string; quantity?: string }> = [

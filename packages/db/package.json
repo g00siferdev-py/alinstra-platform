@@ -14,6 +14,7 @@
     "encrypt:backfill": "tsx scripts/encrypt-backfill.ts",
     "encrypt:rotate": "tsx scripts/rotate-encryption-key.ts",
     "usage:backfill": "tsx scripts/usage-backfill.ts",
+    "stripe:sync": "tsx scripts/stripe-sync.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "build": "prisma generate"

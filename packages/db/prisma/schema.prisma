@@ -544,6 +544,12 @@ model UsageRecord {
   internal        Boolean
   meterReportedAt DateTime?
   meterEventId    String?
+  /// Last billableMinutes successfully sent to Stripe (for positive-delta corrections).
+  meterReportedMinutes Int?
+  /// First failure timestamp of the current report streak; cleared on success.
+  meterReportFailedAt DateTime?
+  /// Set when we emailed admin after 24h of failures (once per streak).
+  meterFailureNotifiedAt DateTime?
   createdAt       DateTime  @default(now())
 
   @@index([clientId, startedAt])
@@ -593,7 +599,7 @@ model StripeEvent {
   @@map("stripe_event")
 }
 
-/// Stripe Price ids created from the plan catalog. `metered_overage` is reserved for Phase 6.
+/// Stripe Price ids created from the plan catalog. `metered_overage` is a graduated metered price on alinstra_minutes.
 model StripePrice {
   id            String   @id @default(cuid())
   lookupKey     String   @unique

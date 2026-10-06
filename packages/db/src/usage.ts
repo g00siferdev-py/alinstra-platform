@@ -22,7 +22,10 @@ type Tx = Prisma.TransactionClient;
 
 /**
  * Creates or updates a UsageRecord for an ended call. Idempotent on callRecordId.
- * When duration changes on a later event, updates the row. Meter delta reporting is Part 3.
+ * When duration changes on a later event, updates the row.
+ *
+ * If meterReportedAt is already set, we leave meterReportedMinutes alone so report-usage
+ * can send a positive-delta correction (Stripe meter adjustments are cancel-only; see report-usage.ts).
  */
 export async function upsertUsageRecord(tx: Tx, input: UsageUpsertInput): Promise<{ created: boolean; updated: boolean }> {
   const durationSeconds = Math.max(0, Math.round(input.durationSeconds));
@@ -51,7 +54,8 @@ export async function upsertUsageRecord(tx: Tx, input: UsageUpsertInput): Promis
     existing.billableMinutes === billableMinutes &&
     existing.costCents === input.costCents;
   if (unchanged) return { created: false, updated: false };
-  // TODO(Part 3): if meterReportedAt is already set, report a meter delta for the billableMinutes change.
+  // Positive-delta correction path: keep meterReportedAt / meterReportedMinutes; report-usage
+  // sends value = billableMinutes - meterReportedMinutes with identifier `${id}:corr:${minutes}`.
   await tx.usageRecord.update({
     where: { id: existing.id },
     data: {

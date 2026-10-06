@@ -123,11 +123,11 @@ describe("Phase B Part 2 checkout and self-serve", () => {
     const client = await seedClient({ planId: plan.id, name: "metered", setupFeeWaived: true });
     await prisma.stripePrice.create({
       data: {
-        lookupKey: `plan_${plan.code}_overage`,
+        lookupKey: `plan_${plan.code}_overage_${plan.includedMinutes}_${plan.overagePerMinuteCents}`,
         stripePriceId: "price_metered_test",
         planCode: plan.code,
         kind: "metered_overage",
-        amountCents: 0,
+        amountCents: plan.overagePerMinuteCents,
       },
     });
     const billing = new MemoryBilling();

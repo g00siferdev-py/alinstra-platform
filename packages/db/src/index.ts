@@ -232,6 +232,16 @@ export {
   type UsageUpsertInput,
 } from "./usage";
 export {
+  loadStoredMeterId,
+  syncStripePrices,
+  type SyncStripePricesReport,
+} from "./stripe-sync";
+export {
+  reportUsageToStripe,
+  type ReportUsageDeps,
+  type ReportUsageReport,
+} from "./report-usage";
+export {
   CALL_OUTCOME_LABELS,
   CALL_OUTCOMES,
   SENTIMENTS,

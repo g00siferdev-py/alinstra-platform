@@ -82,6 +82,9 @@ export const BACKUP_DB_TIMEZONE = "America/New_York";
 export const RECONCILE_CALLS_JOB_ID = "reconcile-calls";
 /** Every 15 minutes. */
 export const RECONCILE_CALLS_EVERY_MS = 15 * 60 * 1000;
+export const REPORT_USAGE_JOB_ID = "report-usage";
+/** Every 5 minutes: send Stripe meter events for unreported UsageRecords. */
+export const REPORT_USAGE_EVERY_MS = 5 * 60 * 1000;
 
 let redis: Redis | undefined;
 
@@ -244,6 +247,27 @@ export async function scheduleReconcileCalls(): Promise<void> {
     RECONCILE_CALLS_JOB_ID,
     { every: RECONCILE_CALLS_EVERY_MS },
     { name: "reconcile-calls", data: {}, opts: { removeOnComplete: 30, removeOnFail: 30 } },
+  );
+}
+
+/**
+ * Every 5 minutes: report UsageRecord billable minutes to the Stripe alinstra_minutes meter.
+ * Fixed jobId so restarts never double-schedule. Exponential backoff on the job itself for transient Stripe errors.
+ */
+export async function scheduleReportUsage(): Promise<void> {
+  await callsJobs().upsertJobScheduler(
+    REPORT_USAGE_JOB_ID,
+    { every: REPORT_USAGE_EVERY_MS },
+    {
+      name: "report-usage",
+      data: {},
+      opts: {
+        attempts: 3,
+        backoff: { type: "exponential", delay: 30_000 },
+        removeOnComplete: 30,
+        removeOnFail: 30,
+      },
+    },
   );
 }
 

@@ -1,4 +1,4 @@
-import { retellTiming, type AgentPublish, type BillingPlatform, type CallTiming, type CreateCheckoutInput, type PriceKind, type PublishedTool, type RecordingDownload, type RetellCallSnapshot, type RetellTiming, type VoicePlatform } from "./types";
+import { retellTiming, type AgentPublish, type BillingPlatform, type CallTiming, type CreateCheckoutInput, type EnsurePriceInput, type PriceKind, type PublishedTool, type RecordingDownload, type ReportMeterEventInput, type RetellCallSnapshot, type RetellTiming, type VoicePlatform } from "./types";
 
 type StoredLlm = { clientId: string; prompt: string; tools: PublishedTool[]; beginMessage: string };
 /** Mirrors what httpVoice sends: the agent carries the clamped Retell timing fields. */
@@ -106,7 +106,11 @@ export class MemoryVoice implements VoicePlatform {
 
 export class MemoryBilling implements BillingPlatform {
   customers = new Map<string, string>();
-  prices = new Map<string, { priceId: string; amountCents: number; kind: PriceKind }>();
+  prices = new Map<string, { priceId: string; amountCents: number; kind: PriceKind; meterId?: string; includedMinutes?: number }>();
+  meters = new Map<string, string>();
+  meterEvents: Array<ReportMeterEventInput & { reportedAt: Date }> = [];
+  /** Next reportMeterEvent calls that should throw (for retry tests). */
+  meterEventFailures = 0;
   checkouts = new Map<string, { url: string; subscriptionId: string }>();
   lastCheckout: {
     successUrl: string;
@@ -119,7 +123,7 @@ export class MemoryBilling implements BillingPlatform {
   } | null = null;
   canceled = new Set<string>();
   periodEnd = new Map<string, Date>();
-  creates = { customer: 0, price: 0, checkout: 0 };
+  creates = { customer: 0, price: 0, checkout: 0, meter: 0, meterEvent: 0 };
 
   async findCustomerId(clientId: string): Promise<string | null> {
     return this.customers.get(clientId) ?? null;
@@ -134,13 +138,45 @@ export class MemoryBilling implements BillingPlatform {
     return { customerId };
   }
 
-  async ensurePrice(input: { lookupKey: string; amountCents: number; kind: PriceKind; productName: string; idempotencyKey: string }): Promise<{ priceId: string }> {
+  async ensureMeter(input: { eventName: string; displayName: string; idempotencyKey: string }): Promise<{ meterId: string }> {
+    const existing = this.meters.get(input.eventName);
+    if (existing) return { meterId: existing };
+    this.creates.meter += 1;
+    const meterId = `mtr_${input.eventName}`;
+    this.meters.set(input.eventName, meterId);
+    return { meterId };
+  }
+
+  async ensurePrice(input: EnsurePriceInput): Promise<{ priceId: string }> {
     const current = this.prices.get(input.lookupKey);
+    if (input.kind === "metered_overage") {
+      const included = input.includedMinutes ?? 0;
+      const overage = input.overagePerMinuteCents ?? input.amountCents;
+      if (current && current.kind === input.kind && current.amountCents === overage && current.includedMinutes === included && current.meterId === input.meterId) {
+        return { priceId: current.priceId };
+      }
+      this.creates.price += 1;
+      const priceId = `price_${input.lookupKey}`;
+      this.prices.set(input.lookupKey, { priceId, amountCents: overage, kind: input.kind, meterId: input.meterId, includedMinutes: included });
+      return { priceId };
+    }
     if (current && current.amountCents === input.amountCents && current.kind === input.kind) return { priceId: current.priceId };
     this.creates.price += 1;
     const priceId = `price_${input.lookupKey}_${input.amountCents}`;
     this.prices.set(input.lookupKey, { priceId, amountCents: input.amountCents, kind: input.kind });
     return { priceId };
+  }
+
+  async reportMeterEvent(input: ReportMeterEventInput): Promise<{ identifier: string }> {
+    if (this.meterEventFailures > 0) {
+      this.meterEventFailures -= 1;
+      throw new Error("meter event failed");
+    }
+    const duplicate = this.meterEvents.find((row) => row.identifier === input.identifier);
+    if (duplicate) return { identifier: input.identifier };
+    this.creates.meterEvent += 1;
+    this.meterEvents.push({ ...input, reportedAt: new Date() });
+    return { identifier: input.identifier };
   }
 
   async createCheckout(input: CreateCheckoutInput): Promise<{ sessionId: string; url: string; expiresAt: Date }> {

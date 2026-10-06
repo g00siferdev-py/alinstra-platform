@@ -169,6 +169,26 @@ export const RECORDING_MAX_BYTES = 64 * 1024 * 1024;
 
 export type PriceKind = "recurring" | "setup" | "metered_overage";
 
+/** Stripe Billing Meter event name (sum aggregation). Created once by price sync. */
+export const METER_EVENT_NAME = "alinstra_minutes";
+
+export type EnsurePriceInput = {
+  lookupKey: string;
+  amountCents: number;
+  kind: PriceKind;
+  productName: string;
+  idempotencyKey: string;
+  /** Required when kind is metered_overage: Stripe Billing Meter id from ensureMeter. */
+  meterId?: string;
+  /** Graduated free tier (first N minutes at $0) when kind is metered_overage. */
+  includedMinutes?: number;
+  /**
+   * Per-minute overage in cents when kind is metered_overage.
+   * Same value as amountCents for metered rows; kept explicit for callers.
+   */
+  overagePerMinuteCents?: number;
+};
+
 export type CreateCheckoutInput = {
   clientId: string;
   customerId: string;
@@ -185,10 +205,26 @@ export type CreateCheckoutInput = {
   idempotencyKey: string;
 };
 
+export type ReportMeterEventInput = {
+  eventName: string;
+  customerId: string;
+  value: number;
+  timestamp: Date;
+  /** Idempotency key for this meter event (Stripe enforces uniqueness for ~24h+). */
+  identifier: string;
+};
+
 export interface BillingPlatform {
   findCustomerId(clientId: string): Promise<string | null>;
   createCustomer(input: { clientId: string; name: string; email: string | null; idempotencyKey: string }): Promise<{ customerId: string }>;
-  ensurePrice(input: { lookupKey: string; amountCents: number; kind: PriceKind; productName: string; idempotencyKey: string }): Promise<{ priceId: string }>;
+  /**
+   * Create or reuse a Stripe Billing Meter by event_name. Sum aggregation.
+   * Store the returned meterId in AppSetting (see stripe-sync).
+   */
+  ensureMeter(input: { eventName: string; displayName: string; idempotencyKey: string }): Promise<{ meterId: string }>;
+  ensurePrice(input: EnsurePriceInput): Promise<{ priceId: string }>;
+  /** POST /v1/billing/meter_events. Returns the identifier Stripe accepted (no separate id). */
+  reportMeterEvent(input: ReportMeterEventInput): Promise<{ identifier: string }>;
   createCheckout(input: CreateCheckoutInput): Promise<{ sessionId: string; url: string; expiresAt: Date }>;
   cancelAtPeriodEnd(subscriptionId: string): Promise<{ serviceEndsAt: Date }>;
   cancelNow(subscriptionId: string): Promise<"canceled" | "missing">;

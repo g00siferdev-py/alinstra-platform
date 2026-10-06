@@ -24,6 +24,7 @@ export {
   DEFAULT_TEXT_MODEL,
   DEFAULT_TEXT_TOKEN_BUDGET,
   END_CALL_TOOL,
+  METER_EVENT_NAME,
   ProviderRequestError,
   RECORDING_MAX_BYTES,
   retellTiming,
@@ -35,10 +36,12 @@ export {
   type BillingPlatform,
   type CallTiming,
   type CreateCheckoutInput,
+  type EnsurePriceInput,
   type NumberRequest,
   type PriceKind,
   type PublishedTool,
   type RecordingDownload,
+  type ReportMeterEventInput,
   type RetellCallSnapshot,
   type RetellTiming,
   type TextCompleteInput,
@@ -48,6 +51,21 @@ export {
   type VoicePlatform,
 } from "./types";
 
-export function overageLookupKey(planCode: string): string {
-  return `plan_${planCode}_overage`;
+/**
+ * Lookup key for a plan's graduated metered overage price.
+ * Includes amounts so ensurePrice is idempotent when included minutes or overage rate change.
+ */
+export function overageLookupKey(planCode: string, includedMinutes: number, overagePerMinuteCents: number): string {
+  return `plan_${planCode}_overage_${includedMinutes}_${overagePerMinuteCents}`;
 }
+
+/**
+ * Per-client metered price when overrideIncludedMinutes and/or overrideOveragePerMinuteCents is set.
+ * Checkout uses this instead of the plan catalog price so custom tiers bill correctly.
+ */
+export function clientOverageLookupKey(clientId: string, includedMinutes: number, overagePerMinuteCents: number): string {
+  return `client_${clientId}_overage_${includedMinutes}_${overagePerMinuteCents}`;
+}
+
+/** AppSetting key for the single alinstra_minutes Billing Meter id. */
+export const METER_APP_SETTING_KEY = "stripe.meter.alinstra_minutes";

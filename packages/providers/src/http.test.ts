@@ -169,4 +169,59 @@ describe("provider HTTP clients", () => {
     const missing = httpBilling("sk_test_local", async () => new Response(JSON.stringify({ id: "sub_test", items: { data: [] } }), { status: 200 }));
     await expect(missing.cancelAtPeriodEnd("sub_test")).rejects.toThrow(/period end/);
   });
+
+  it("creates a graduated metered price on a Billing Meter without network", async () => {
+    const bodies: string[] = [];
+    const billing = httpBilling("sk_test_local", async (url, init) => {
+      const path = String(url);
+      if (path.includes("/v1/billing/meters") && (init?.method ?? "GET") === "GET") {
+        return new Response(JSON.stringify({ data: [] }), { status: 200 });
+      }
+      if (path.includes("/v1/billing/meters") && init?.method === "POST") {
+        bodies.push(String(init.body));
+        return new Response(JSON.stringify({ id: "mtr_test" }), { status: 200 });
+      }
+      if (path.includes("/v1/prices?") && (init?.method ?? "GET") === "GET") {
+        return new Response(JSON.stringify({ data: [] }), { status: 200 });
+      }
+      if (path.includes("/v1/prices") && init?.method === "POST") {
+        bodies.push(String(init.body));
+        return new Response(JSON.stringify({ id: "price_metered" }), { status: 200 });
+      }
+      if (path.includes("/v1/billing/meter_events") && init?.method === "POST") {
+        bodies.push(String(init.body));
+        return new Response(JSON.stringify({ identifier: "evt_1", object: "billing.meter_event" }), { status: 200 });
+      }
+      return new Response("unexpected", { status: 500 });
+    });
+    const meter = await billing.ensureMeter({
+      eventName: "alinstra_minutes",
+      displayName: "Alinstra minutes",
+      idempotencyKey: "meter_alinstra_minutes",
+    });
+    expect(meter.meterId).toBe("mtr_test");
+    expect(bodies[0]).toContain("default_aggregation%5Bformula%5D=sum");
+    const price = await billing.ensurePrice({
+      lookupKey: "plan_solo_overage_150_40",
+      amountCents: 40,
+      kind: "metered_overage",
+      productName: "Solo minutes",
+      idempotencyKey: "price_plan_solo_overage_150_40",
+      meterId: meter.meterId,
+      includedMinutes: 150,
+      overagePerMinuteCents: 40,
+    });
+    expect(price.priceId).toBe("price_metered");
+    expect(bodies[1]).toContain("tiers_mode=graduated");
+    expect(bodies[1]).toContain("recurring%5Bmeter%5D=mtr_test");
+    const event = await billing.reportMeterEvent({
+      eventName: "alinstra_minutes",
+      customerId: "cus_1",
+      value: 3,
+      timestamp: new Date("2026-10-01T12:00:00.000Z"),
+      identifier: "usage_1",
+    });
+    expect(event.identifier).toBe("evt_1");
+    expect(bodies[2]).toContain("payload%5Bvalue%5D=3");
+  });
 });

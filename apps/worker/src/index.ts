@@ -13,6 +13,7 @@ import {
   scheduleBackupDb,
   schedulePurgeCalls,
   scheduleReconcileCalls,
+  scheduleReportUsage,
   sendAccountEmail,
   sendAdminNotice,
   sendInviteEmail,
@@ -29,6 +30,7 @@ import { runPurgeCalls, runReconcileCalls, runStoreRecording } from "./jobs/call
 import { markExtractionFailed } from "./jobs/extract-knowledge-text";
 import { runIsolatedJob } from "./jobs/run-isolated";
 import { runChurnSweep, runMessageEmail, runProvision, runSync } from "./jobs/phase3";
+import { runReportUsage } from "./jobs/report-usage";
 import { deliverAdminNotice } from "./jobs/send-admin-notice";
 import { sendInvite } from "./jobs/send-invite-email";
 import { sendPasswordReset } from "./jobs/send-password-reset-email";
@@ -147,6 +149,10 @@ const calls = new Worker(
       await runReconcileCalls();
       return;
     }
+    if (job.name === "report-usage") {
+      await runReportUsage();
+      return;
+    }
     if (job.name === "backup-db") {
       await runBackupDb();
       return;
@@ -162,6 +168,10 @@ void schedulePurgeCalls().catch((error: unknown) => {
 
 void scheduleReconcileCalls().catch((error: unknown) => {
   log("error", "reconcile schedule failed", { error: error instanceof Error ? error.name : "unknown" });
+});
+
+void scheduleReportUsage().catch((error: unknown) => {
+  log("error", "report-usage schedule failed", { error: error instanceof Error ? error.name : "unknown" });
 });
 
 void scheduleBackupDb().catch((error: unknown) => {

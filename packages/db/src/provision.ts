@@ -1,12 +1,21 @@
 import { buildGreeting, type PromptFeatures } from "@alinstra/agent";
 import type { BillingPlatform, PublishedTool, VoicePlatform } from "@alinstra/providers";
-import { END_CALL_TOOL, overageLookupKey, retellVoiceIdFor, TAKE_MESSAGE_PARAMETERS, TRANSFER_CHECK_PARAMETERS, transferToolNames } from "@alinstra/providers";
+import {
+  clientOverageLookupKey,
+  END_CALL_TOOL,
+  overageLookupKey,
+  retellVoiceIdFor,
+  TAKE_MESSAGE_PARAMETERS,
+  TRANSFER_CHECK_PARAMETERS,
+  transferToolNames,
+} from "@alinstra/providers";
 import { Pool } from "pg";
 import { Prisma } from "./generated/prisma/client";
 import { refreshStaleAgentConfig } from "./agent";
 import { recordChange, type Actor } from "./changes";
 import { messageData, transferNumberOf, transferTargetData, withMessageText, withTransferNumber } from "./cipher";
 import { prisma } from "./client";
+import { loadStoredMeterId } from "./stripe-sync";
 import {
   assertTransferNumber,
   callTimingOf,
@@ -561,7 +570,11 @@ export async function applyFoundingWaiverAtCheckout(clientId: string, planCode: 
 
 /**
  * Shared Checkout builder used by admin `stripe_checkout` and self-serve signup.
- * Line items: base monthly + metered minutes (when a StripePrice exists; Part 3 creates them) + setup unless waived.
+ * Line items: base monthly + metered minutes + setup unless waived.
+ *
+ * Overrides: when overrideMonthlyPriceCents / overrideSetupFeeCents / overrideIncludedMinutes /
+ * overrideOveragePerMinuteCents are set, we ensurePrice with a client_* lookup key (includes
+ * client id + amounts) instead of the shared plan_* catalog price, so custom tiers bill correctly.
  */
 export async function openCheckout(
   clientId: string,
@@ -584,6 +597,8 @@ export async function openCheckout(
       setupFeeWaived: true,
       overrideSetupFeeCents: true,
       overrideMonthlyPriceCents: true,
+      overrideIncludedMinutes: true,
+      overrideOveragePerMinuteCents: true,
       stripeCustomerId: true,
     },
   });
@@ -614,10 +629,33 @@ export async function openCheckout(
     setupPriceId = setup.priceId;
   }
 
-  // Part 3 syncs metered_overage prices. Until then, look up an existing catalog row and skip if missing.
-  const meteredLookup = overageLookupKey(plan.code);
-  const meteredRow = await prisma.stripePrice.findUnique({ where: { lookupKey: meteredLookup } });
-  const meteredPriceId = meteredRow?.kind === "metered_overage" ? meteredRow.stripePriceId : null;
+  const includedMinutes = fresh.overrideIncludedMinutes ?? plan.includedMinutes;
+  const overagePerMinuteCents = fresh.overrideOveragePerMinuteCents ?? plan.overagePerMinuteCents;
+  const meteredOverride = fresh.overrideIncludedMinutes != null || fresh.overrideOveragePerMinuteCents != null;
+  const meteredLookup = meteredOverride
+    ? clientOverageLookupKey(clientId, includedMinutes, overagePerMinuteCents)
+    : overageLookupKey(plan.code, includedMinutes, overagePerMinuteCents);
+
+  let meteredPriceId: string | null = null;
+  const meterId = await loadStoredMeterId();
+  if (meterId) {
+    const metered = await deps.billing.ensurePrice({
+      lookupKey: meteredLookup,
+      amountCents: overagePerMinuteCents,
+      kind: "metered_overage",
+      productName: meteredOverride ? `${plan.name} minutes (custom)` : `${plan.name} minutes`,
+      idempotencyKey: `price_${meteredLookup}`,
+      meterId,
+      includedMinutes,
+      overagePerMinuteCents,
+    });
+    await rememberPrice(meteredLookup, metered.priceId, plan.code, "metered_overage", overagePerMinuteCents);
+    meteredPriceId = metered.priceId;
+  } else {
+    // Meter not synced yet; fall back to an existing catalog row if present.
+    const meteredRow = await prisma.stripePrice.findUnique({ where: { lookupKey: meteredLookup } });
+    meteredPriceId = meteredRow?.kind === "metered_overage" ? meteredRow.stripePriceId : null;
+  }
 
   const urls = options.urls ?? checkoutUrlsFor(deps.appUrl, "admin");
   const session = await deps.billing.createCheckout({
