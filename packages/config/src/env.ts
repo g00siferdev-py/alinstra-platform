@@ -31,6 +31,12 @@ const envSchema = z.object({
   S3_ACCESS_KEY_ID: z.string().default(""),
   S3_SECRET_ACCESS_KEY: z.string().default(""),
   S3_REGION: z.string().default("auto"),
+  /** Names this deployment in backup keys (`backups/<APP_ENV>/...`). Blank means "staging". */
+  APP_ENV: z.string().default(""),
+  /** Encrypts nightly database backups. Set on the WORKER only; never on web. Blank disables backups. */
+  BACKUP_PASSPHRASE: z.string().default(""),
+  /** Optional separate bucket for backups. Blank uses S3_BUCKET under the `backups/` prefix. */
+  BACKUP_S3_BUCKET: z.string().default(""),
   RETELL_API_KEY: z.string().default(""),
   STRIPE_SECRET_KEY: z.string().default(""),
   STRIPE_WEBHOOK_SECRET: z.string().default(""),

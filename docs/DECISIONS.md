@@ -231,6 +231,28 @@ Writes: only ciphertext (and the mask); the old plaintext columns are set to nul
 
 **Retention.** The nightly `purge-calls` job now also runs `purgeLoginEvents` (strictly older than 180 days). Like the access-log purge, a failure is logged and does not block the stale-recording requeue.
 
+## 2026-10-06 — Phase S Part 4: encrypted nightly backups
+
+**Encrypt in the worker, with a passphrase, not the app keyring.** Backups must stay restorable when the app is gone, so they use `BACKUP_PASSPHRASE` (scrypt, per-file salt) rather than `ENCRYPTION_KEY`. They are a separate secret from the app keys; losing the database must not mean losing the key that opens its backups, so keep the passphrase offline as well as in Railway. The passphrase exists only on the worker (web never sees it). Minimum 16 characters, enforced when encrypting.
+
+**GCM streaming trade-off.** Decryption can only be verified at the end of the file, so a decrypt stream emits plaintext before it knows the file is authentic. The format authenticates the header too (GCM AAD). The CLI deletes its output on any failure, and the runbook says to restore only from a CLI run that printed "Decrypted and verified".
+
+**Temp file, then single PUT.** `pg_dump | encrypt` goes to a temp file (mode 0600, only ever ciphertext), then one `PutObject` with a known length. This avoids adding `@aws-sdk/lib-storage` and keeps memory flat. Limit: R2/S3 cap a single PUT at 5 GiB, and the worker needs temp disk of about the dump size. Move to multipart upload before the database approaches that.
+
+**Objects are named in UTC with `-` instead of `:` in the time** (`2026-10-06T07-30-00Z`) so the same key is a legal filename with the local storage driver on Windows. The date folders are UTC too.
+
+**Retention deletes by object `LastModified`, only `*.dump.enc` under `backups/<this env>/`.** It runs after a successful upload, so a failing job never shrinks the backup set. A failure in the sweep is logged and does not fail the backup. Staging and production should use different `APP_ENV` values (blank means `staging`); with one shared bucket each only prunes its own prefix. Rely on R2 lifecycle rules as a second line if you want one.
+
+**Two AppSetting rows.** `backup.last` is the last attempt of any outcome (`success`, `failed`, `not_configured`), exactly the `{ at, bytes, key, status, error? }` shape in the plan. `backup.lastSuccess` is added so the Services card can go red from the age of the last real backup; otherwise one failed run (or a daily "not configured" run) would overwrite the time of the last good one. These are written straight to `AppSetting` with `updatedBy` null, not through `setAppSetting`: it is system bookkeeping, not an admin edit, and a ChangeLog row per night would be noise.
+
+**pg_dump version.** Debian bookworm ships client 15, which cannot dump a 16+ server, so the worker image adds the PGDG apt repo and installs `postgresql-client-${PG_MAJOR}` (build arg, default 16 to match local, CI, and the prod-smoke stack). The job also checks at run time (`pg_dump --version` against `SHOW server_version_num`) and refuses to dump with an older client, with a message that names the Dockerfile arg. A newer client than the server is allowed. If Railway's Postgres is newer than 16, set `PG_MAJOR` on the worker service before relying on backups.
+
+**Credentials never in argv or logs.** `DATABASE_URL` is split into `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`, `PGDATABASE` (+ `PGSSLMODE`) for the child process, which also drops Prisma's `?schema=` parameter that libpq rejects. The child gets a minimal environment (no `BACKUP_PASSPHRASE`). Error text has URLs and the password removed before it is logged, recorded, emailed, or thrown to Sentry.
+
+**Failure goes out twice by design:** an admin notice from inside the job (so it is sent even if Sentry is off) and a thrown `BackupFailedError` that the worker's existing failed-job handler sends to Sentry. The job has `attempts: 1`: a retry would repeat a multi-minute dump, and tomorrow's run is the retry. "Not configured" does not throw (the worker must keep running); its notice is limited to once per 24 hours with a Redis key.
+
+**Not configured is loud on the Services page.** With no backup ever, the card is red ("No successful backup yet"), so a missing passphrase is visible without email.
+
 ## Needs Daniel's review
 
 - Existing AgentConfig rows change `status` when a newer version becomes active. The prompt and settings on that row stay as written. Full immutability, including status, would need a separate "current" pointer.

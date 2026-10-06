@@ -166,3 +166,12 @@ export function keyIdOf(payload: string): string {
   if (parts[0] === V2 && parts.length === 5 && KEY_ID_PATTERN.test(parts[1] ?? "")) return parts[1] as string;
   throw new Error("Unknown ciphertext format");
 }
+
+export {
+  BACKUP_HEADER_BYTES,
+  BACKUP_MAGIC,
+  BACKUP_MIN_PASSPHRASE_LENGTH,
+  BACKUP_TAG_BYTES,
+  createBackupDecryptStream,
+  createBackupEncryptStream,
+} from "./backup";

@@ -185,14 +185,31 @@ Same as web for: `NODE_ENV`, `APP_URL`, `BETTER_AUTH_URL`, `BETTER_AUTH_SECRET`,
 | `ADMIN_EMAIL` | same admin address (required by the env schema; the worker does not seed) |
 | `SENTRY_DSN` | worker project DSN, or empty |
 | `SENTRY_ENVIRONMENT` | `staging` |
+| `APP_ENV` | `staging` (production: `production`). Names the backup folder, `backups/<APP_ENV>/...`. Blank means `staging`, so production **must** set it. |
+| `BACKUP_PASSPHRASE` | a long random passphrase (at least 16 characters): `openssl rand -base64 32`. **Worker only**; never set it on web. Store a copy offline (password manager). Without it backups do not run and you get a "Backups are not configured" email once a day. Losing it makes every backup unreadable. |
+| `BACKUP_S3_BUCKET` | optional. A separate private bucket for backups. Blank uses `S3_BUCKET` under the `backups/` prefix. The R2 token must be able to write to it. |
 
 Do not set `ADMIN_INITIAL_PASSWORD` on the worker.
+
+#### Backups and the Postgres client version
+
+The worker image installs `postgresql-client-16` (build arg `PG_MAJOR`, default `16`). `pg_dump` must be the same major as the Railway Postgres server or newer. Check the server once, in the Railway Postgres service's Data tab or with `railway connect Postgres` and then:
+
+```sql
+SHOW server_version;
+```
+
+If the major is not 16, add a **service variable** `PG_MAJOR=<major>` on the worker (Railway passes service variables to Docker builds as build args) and redeploy. The job also checks at run time and fails with a clear message (`pg_dump 16 is older than the database server 17`) and an admin email if they ever drift, for example after Railway upgrades Postgres.
+
+The job runs daily at 03:30 America/New_York. To try it without waiting, run it once from the worker's Railway shell: `cd /app/apps/worker && pnpm exec tsx scripts/backup-now.ts`. Then check Admin → Services → Backups and the object in R2. Restore steps: `docs/RESTORE.md`.
 
 ### How to verify this step
 
 - Web variables include `EMAIL_TRANSPORT=resend`, `STORAGE_DRIVER=s3`, and a bucket-scoped R2 token.
 - Worker variables have no pre-deploy and no `ADMIN_INITIAL_PASSWORD`.
 - Neither secret contains the words the production guard rejects.
+- `BACKUP_PASSPHRASE` is set on the worker and absent from web. `APP_ENV` is set on the worker.
+- After the first deploy, run `scripts/backup-now.ts` once (see above). The log line `database backup uploaded` shows the `pgDump` and `server` majors, and Admin → Services → Backups turns green.
 
 ## 6. Cloudflare DNS
 

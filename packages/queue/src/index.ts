@@ -78,6 +78,9 @@ export const PROVISION_QUEUE = "provision";
 export const CALLS_QUEUE = "calls";
 export const PURGE_CALLS_JOB_ID = "purge-calls-daily";
 export const PURGE_CALLS_CRON = "15 3 * * *";
+export const BACKUP_DB_JOB_ID = "backup-db-daily";
+export const BACKUP_DB_CRON = "30 3 * * *";
+export const BACKUP_DB_TIMEZONE = "America/New_York";
 
 let redis: Redis | undefined;
 
@@ -234,6 +237,18 @@ export async function schedulePurgeCalls(): Promise<void> {
     data: {},
     opts: { removeOnComplete: 30, removeOnFail: 30 },
   });
+}
+
+/**
+ * Nightly encrypted database backup at 03:30 America/New_York. Fixed jobId so restarts never double-schedule;
+ * one attempt only, because the job reports its own failure and a retry would just repeat a multi-minute dump.
+ */
+export async function scheduleBackupDb(): Promise<void> {
+  await callsJobs().upsertJobScheduler(
+    BACKUP_DB_JOB_ID,
+    { pattern: BACKUP_DB_CRON, tz: BACKUP_DB_TIMEZONE },
+    { name: "backup-db", data: {}, opts: { attempts: 1, removeOnComplete: 30, removeOnFail: 30 } },
+  );
 }
 
 export async function enqueueAccountEmail(data: SendAccountEmail): Promise<void> {

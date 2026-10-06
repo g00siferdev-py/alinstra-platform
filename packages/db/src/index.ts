@@ -224,6 +224,19 @@ export {
 } from "./interview";
 export { getAppSetting, getAppSettings, setAppSetting } from "./app-settings";
 export {
+  BACKUP_LAST_KEY,
+  BACKUP_LAST_SUCCESS_KEY,
+  BACKUP_STALE_MS,
+  backupHealth,
+  getBackupSnapshot,
+  postgresServerMajor,
+  recordBackupResult,
+  type BackupHealth,
+  type BackupRecord,
+  type BackupSnapshot,
+  type BackupStatus,
+} from "./backup-status";
+export {
   ACCESS_ACTION_LABELS,
   ACCESS_ACTIONS,
   ACCESS_LOG_EXPORT_MAX,

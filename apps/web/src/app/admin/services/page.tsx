@@ -1,6 +1,8 @@
 import { ServiceCheck } from "@/components/service-check";
 import { Card, PageHeader, Pill } from "@/components/ui";
 import { getEnv, type Env } from "@alinstra/config";
+import { getBackupSnapshot } from "@alinstra/db";
+import { BackupsCard } from "./backups-card";
 import { requireAdmin } from "@/lib/session";
 import Link from "next/link";
 import type { CheckableService } from "./actions";
@@ -81,6 +83,7 @@ function presence(env: Env, name: EnvName): "set" | "missing" {
 export default async function ServicesPage() {
   await requireAdmin();
   const env = getEnv();
+  const backups = await getBackupSnapshot();
   return (
     <main className="grid gap-6">
       <Link className="text-sm text-[var(--muted)]" href="/home">
@@ -90,6 +93,7 @@ export default async function ServicesPage() {
         title="Services"
         description="Where each outside service lives and whether this deployment has its keys. Values are never shown here; change them in Railway."
       />
+      <BackupsCard snapshot={backups} />
       {SERVICES.map((service) => (
         <Card key={service.name} className="grid gap-3">
           <div className="flex flex-wrap items-baseline justify-between gap-2">

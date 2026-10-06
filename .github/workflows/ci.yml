@@ -54,6 +54,13 @@ jobs:
         run: |
           echo "BETTER_AUTH_SECRET=$(node -e "console.log(require('crypto').randomBytes(32).toString('base64'))")" >> "$GITHUB_ENV"
           echo "ENCRYPTION_KEY=$(node -e "console.log(require('crypto').randomBytes(32).toString('base64'))")" >> "$GITHUB_ENV"
+      # pg_dump, pg_restore and psql for the backup restore drill (apps/worker backup.integration.test.ts), which
+      # skips itself when they are missing. The client must be >= the postgres service major (16).
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends postgresql-client
+          pg_dump --version
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @alinstra/db generate
       - run: pnpm db:migrate:deploy

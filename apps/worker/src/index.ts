@@ -9,6 +9,7 @@ import {
   KNOWLEDGE_QUEUE,
   PROVISION_QUEUE,
   provisionClient,
+  scheduleBackupDb,
   schedulePurgeCalls,
   sendAccountEmail,
   sendAdminNotice,
@@ -21,6 +22,7 @@ import {
 } from "@alinstra/queue";
 import * as Sentry from "@sentry/node";
 import { UnrecoverableError, Worker } from "bullmq";
+import { runBackupDb } from "./jobs/backup";
 import { runPurgeCalls, runStoreRecording } from "./jobs/calls";
 import { markExtractionFailed } from "./jobs/extract-knowledge-text";
 import { runIsolatedJob } from "./jobs/run-isolated";
@@ -133,6 +135,10 @@ const calls = new Worker(
       await runPurgeCalls();
       return;
     }
+    if (job.name === "backup-db") {
+      await runBackupDb();
+      return;
+    }
     log("warn", "unknown job", { job: job.name });
   },
   { connection, concurrency: 2 },
@@ -140,6 +146,10 @@ const calls = new Worker(
 
 void schedulePurgeCalls().catch((error: unknown) => {
   log("error", "purge schedule failed", { error: error instanceof Error ? error.name : "unknown" });
+});
+
+void scheduleBackupDb().catch((error: unknown) => {
+  log("error", "backup schedule failed", { error: error instanceof Error ? error.name : "unknown" });
 });
 
 void runChurnSweep().catch((error: unknown) => {
