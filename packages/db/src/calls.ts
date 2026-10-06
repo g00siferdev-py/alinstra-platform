@@ -1,4 +1,4 @@
-import { open as openCipher, readField, seal as sealCipher } from "./cipher";
+import { MESSAGE_BODY_UNREADABLE, open as openCipher, readField, seal as sealCipher } from "./cipher";
 import { callFlags, parseCallFlags, type CallFlag } from "./call-flags";
 import {
   costCentsOf,
@@ -396,7 +396,18 @@ export async function getCall(viewer: CallViewer, callId: string): Promise<CallD
     recordingContentType: row.recordingContentType,
     recordingBytes: row.recordingBytes,
     rawEvents: viewer.role === "admin" ? parseRawEvents(row.rawEventsCipher) : null,
-    message: message ? { id: message.id, callerName: readField(message.callerNameCipher, message.callerName), body: readField(message.bodyCipher, message.body), createdAt: message.createdAt } : null,
+    message: message
+      ? {
+          id: message.id,
+          callerName: readField(message.callerNameCipher, message.callerName, `client_message.callerName:${message.id}`),
+          body: (() => {
+            if (!message.bodyCipher) return message.body ?? "";
+            const opened = openCipher(message.bodyCipher, `client_message.body:${message.id}`);
+            return opened === null ? MESSAGE_BODY_UNREADABLE : opened;
+          })(),
+          createdAt: message.createdAt,
+        }
+      : null,
     analyzedAt: row.analyzedAt,
   };
 }

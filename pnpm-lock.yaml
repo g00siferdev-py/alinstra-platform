@@ -253,6 +253,9 @@ importers:
       '@alinstra/agent':
         specifier: workspace:*
         version: link:../agent
+      '@alinstra/config':
+        specifier: workspace:*
+        version: link:../config
       '@alinstra/crypto':
         specifier: workspace:*
         version: link:../crypto

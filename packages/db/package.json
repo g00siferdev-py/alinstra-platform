@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@alinstra/agent": "workspace:*",
+    "@alinstra/config": "workspace:*",
     "@alinstra/crypto": "workspace:*",
     "@alinstra/providers": "workspace:*",
     "@prisma/adapter-pg": "7.10.0",

@@ -625,6 +625,13 @@ async function publishInput(clientId: string, deps: Phase3Deps) {
   if (!loaded.config) throw new Error("Activate a receptionist config before provisioning.");
   if (loaded.client.internal) await ensureDanielTarget(clientId, deps.danielNumber);
   const targets = await prisma.transferTarget.findMany({ where: { clientId }, orderBy: { createdAt: "asc" } });
+  const transferRows = targets.map((target) => {
+    const e164 = transferNumberOf(target);
+    if (!e164) {
+      throw new Error("A transfer number could not be decrypted; check ENCRYPTION_KEY settings on web and worker");
+    }
+    return { label: target.label, e164 };
+  });
   const base = origin(deps.appUrl);
   const voice = loaded.client.voice && typeof loaded.client.voice === "object" ? (loaded.client.voice as { voiceId?: unknown }) : {};
   return {
@@ -634,7 +641,7 @@ async function publishInput(clientId: string, deps: Phase3Deps) {
     prompt: retellPrompt(loaded.config.promptText, loaded.client.timezone),
     beginMessage: loaded.config.greeting?.trim() || "Thank you for calling.",
     // Transfer numbers are decrypted only here, to publish the transfer tools to Retell.
-    tools: toolsFor(deps.appUrl, targets.map(withTransferNumber), loaded.client.features),
+    tools: toolsFor(deps.appUrl, transferRows, loaded.client.features),
     timing: callTimingOf(loaded.client.coverage),
     webhookUrl: `${base}/api/retell/webhook`,
     inboundWebhookUrl: `${base}/api/retell/inbound`,
@@ -1008,6 +1015,8 @@ export async function decideTransfer(
   }
   if (index === -1) return { allowed: false, reason: TRANSFER_UNKNOWN_TARGET };
   if (!officeOpen(client.weeklyHours, client.timezone, now)) return { allowed: false, reason: TRANSFER_CLOSED };
+  const chosen = targets[index];
+  if (!chosen || !transferNumberOf(chosen)) return { allowed: false, reason: TRANSFER_UNAVAILABLE };
   const names = transferToolNames(targets.map((target) => target.label));
   return { allowed: true, tool: names[index] ?? `transfer_${index + 1}` };
 }

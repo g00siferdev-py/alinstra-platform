@@ -1,9 +1,32 @@
-import { decryptString, encryptString } from "@alinstra/crypto";
+import { log } from "@alinstra/config";
+import { decryptString, encryptString, keyIdOf } from "@alinstra/crypto";
 
 /**
  * Column-level encryption helpers (AES-256-GCM via @alinstra/crypto, keyring from env).
  * Never log what goes in or comes out of these. Log ids and counts only.
  */
+
+/** Shown in admin and the portal when a message body cipher cannot be opened. */
+export const MESSAGE_BODY_UNREADABLE = "This message could not be decrypted. Contact support.";
+
+type DecryptFailureFields = { keyId: string | null; error: string; label?: string };
+type DecryptFailureReporter = (fields: DecryptFailureFields) => void;
+
+let decryptFailureReporter: DecryptFailureReporter | null = null;
+
+/** Web and worker call this once at startup so decrypt failures also reach Sentry. */
+export function setDecryptFailureReporter(reporter: DecryptFailureReporter | null): void {
+  decryptFailureReporter = reporter;
+}
+
+function reportDecryptFailed(fields: DecryptFailureFields): void {
+  log("error", "cipher.decrypt_failed", fields);
+  try {
+    decryptFailureReporter?.(fields);
+  } catch {
+    // Never let reporting break a read path.
+  }
+}
 
 /** Encrypts with the active key; always writes the v2 format. Null and empty stay null. */
 export function seal(value: string | null | undefined): string | null {
@@ -11,12 +34,26 @@ export function seal(value: string | null | undefined): string | null {
   return encryptString(value);
 }
 
-/** Decrypts a cipher column. Null in, null out. An unreadable payload also yields null (never throws, never leaks). */
-export function open(cipher: string | null | undefined): string | null {
+/**
+ * Decrypts a cipher column. Null in, null out. An unreadable payload yields null (never throws, never
+ * leaks the payload); failures are logged and sent to Sentry with key id, error name, and call-site label.
+ */
+export function open(cipher: string | null | undefined, label?: string): string | null {
   if (!cipher) return null;
   try {
     return decryptString(cipher);
-  } catch {
+  } catch (error) {
+    let keyId: string | null = null;
+    try {
+      keyId = keyIdOf(cipher);
+    } catch {
+      keyId = null;
+    }
+    reportDecryptFailed({
+      keyId,
+      error: error instanceof Error ? error.name : "unknown",
+      ...(label ? { label } : {}),
+    });
     return null;
   }
 }
@@ -26,8 +63,8 @@ export function sealJson(value: unknown): string | null {
   return encryptString(JSON.stringify(value));
 }
 
-export function openJson<T = unknown>(cipher: string | null | undefined): T | null {
-  const text = open(cipher);
+export function openJson<T = unknown>(cipher: string | null | undefined, label?: string): T | null {
+  const text = open(cipher, label);
   if (text === null) return null;
   try {
     return JSON.parse(text) as T;
@@ -37,8 +74,14 @@ export function openJson<T = unknown>(cipher: string | null | undefined): T | nu
 }
 
 /** Reads a field that may be encrypted: the cipher wins, plaintext is the fallback for rows not yet backfilled. */
-export function readField(cipher: string | null | undefined, plain: string | null | undefined): string {
-  return open(cipher) ?? plain ?? "";
+export function readField(cipher: string | null | undefined, plain: string | null | undefined, label?: string): string {
+  if (cipher) {
+    const opened = open(cipher, label);
+    if (opened !== null) return opened;
+    // Cipher present but unreadable: do not fall back to plaintext (it should already be null after backfill).
+    return plain ?? "";
+  }
+  return plain ?? "";
 }
 
 // ---------------------------------------------------------------------------
@@ -99,12 +142,12 @@ export function transferTargetData(row: { label: string; e164: string }): { labe
 }
 
 /** The number for a transfer target: ciphertext first, legacy plaintext as the fallback. Empty string if unreadable. */
-export function transferNumberOf(row: { e164?: string | null; e164Cipher?: string | null }): string {
-  return readField(row.e164Cipher, row.e164);
+export function transferNumberOf(row: { id?: string; e164?: string | null; e164Cipher?: string | null }, label?: string): string {
+  return readField(row.e164Cipher, row.e164, label ?? (row.id ? `transfer_target.e164:${row.id}` : undefined));
 }
 
 /** Row with `e164` filled in for display and publishing. Decrypt only where the number is actually needed. */
-export function withTransferNumber<T extends { e164: string | null; e164Cipher: string | null }>(row: T): Omit<T, "e164"> & { e164: string } {
+export function withTransferNumber<T extends { id?: string; e164: string | null; e164Cipher: string | null }>(row: T): Omit<T, "e164"> & { e164: string } {
   return { ...row, e164: transferNumberOf(row) };
 }
 
@@ -130,6 +173,7 @@ export function messageData(input: { callerName: string; callbackNumber: string;
 }
 
 type MessageColumns = {
+  id?: string;
   callerName: string | null;
   callbackNumber: string | null;
   body: string | null;
@@ -141,23 +185,26 @@ type MessageColumns = {
 
 /** A message row with the readable fields filled in (cipher first, plaintext fallback). */
 export function withMessageText<T extends MessageColumns>(row: T): Omit<T, "callerName" | "callbackNumber" | "body"> & { callerName: string; callbackNumber: string; body: string } {
+  const id = row.id ?? "?";
+  const openedBody = row.bodyCipher ? open(row.bodyCipher, `client_message.body:${id}`) : null;
+  const body = row.bodyCipher ? (openedBody === null ? MESSAGE_BODY_UNREADABLE : openedBody) : (row.body ?? "");
   return {
     ...row,
-    callerName: readField(row.callerNameCipher, row.callerName),
-    callbackNumber: readField(row.callbackNumberCipher, row.callbackNumber),
-    body: readField(row.bodyCipher, row.body),
+    callerName: readField(row.callerNameCipher, row.callerName, `client_message.callerName:${id}`),
+    callbackNumber: readField(row.callbackNumberCipher, row.callbackNumber, `client_message.callbackNumber:${id}`),
+    body,
   };
 }
 
 /** KnowledgeBase.staff: ciphertext first (JSON), legacy plaintext Json as the fallback. */
-export function staffOf(row: { staff: unknown; staffCipher?: string | null }): unknown {
-  const sealed = openJson(row.staffCipher);
+export function staffOf(row: { id?: string; staff: unknown; staffCipher?: string | null }): unknown {
+  const sealed = openJson(row.staffCipher, row.id ? `knowledge_base.staff:${row.id}` : "knowledge_base.staff");
   return sealed ?? row.staff ?? null;
 }
 
 /** KnowledgeDocument.extractedText: ciphertext first, legacy plaintext fallback. Null if neither. */
-export function extractedTextOf(row: { extractedText?: string | null; extractedTextCipher?: string | null }): string | null {
-  return open(row.extractedTextCipher) ?? row.extractedText ?? null;
+export function extractedTextOf(row: { id?: string; extractedText?: string | null; extractedTextCipher?: string | null }): string | null {
+  return open(row.extractedTextCipher, row.id ? `knowledge_document.extractedText:${row.id}` : "knowledge_document.extractedText") ?? row.extractedText ?? null;
 }
 
 // ---------------------------------------------------------------------------

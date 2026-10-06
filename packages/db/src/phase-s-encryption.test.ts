@@ -1,13 +1,31 @@
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { keyIdOf } from "@alinstra/crypto";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { encryptString, keyIdOf } from "@alinstra/crypto";
 import { approveQuickUpdate, applyQuickUpdate, receptionistFields } from "./agent";
 import { recordChange } from "./changes";
-import { containsPhone, maskPhoneDisplay, maskPhonesIn, maskPhonesInText, openPayload, protectPayload, SEALED_KEY } from "./cipher";
+import {
+  containsPhone,
+  maskPhoneDisplay,
+  maskPhonesIn,
+  maskPhonesInText,
+  MESSAGE_BODY_UNREADABLE,
+  open,
+  openPayload,
+  protectPayload,
+  SEALED_KEY,
+  setDecryptFailureReporter,
+} from "./cipher";
 import { prisma } from "./client";
 import { knowledgeBases } from "./knowledge";
-import { decideTransfer, clientMessages, recordTakenMessage, transferTargets, writeTransferTargets } from "./provision";
+import { decideTransfer, clientMessages, recordTakenMessage, syncProvisionedAgent, transferTargets, TRANSFER_UNAVAILABLE, writeTransferTargets } from "./provision";
 import { resetTestDatabase } from "./reset-test-database";
 import { clientEditPayload, editClientStep } from "./wizard";
+
+vi.mock("@alinstra/config", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@alinstra/config")>();
+  return { ...actual, log: vi.fn() };
+});
+
+import { log } from "@alinstra/config";
 
 const admin = { id: "admin_phase_s", role: "admin" as const };
 const openFriday = new Date("2026-10-02T19:00:00.000Z");
@@ -219,5 +237,91 @@ describe("Phase S encrypted columns", () => {
     await approveQuickUpdate(admin, row.id);
     expect((await transferTargets({ role: "admin" }).list(client.id)).map((target) => target.e164)).toEqual(["+14155550333"]);
     expect(JSON.stringify(await prisma.quickUpdate.findFirstOrThrow({ where: { id: row.id } }))).not.toContain("4155550333");
+  });
+});
+
+describe("decrypt failures stay loud", () => {
+  beforeEach(async () => {
+    await resetTestDatabase();
+    setDecryptFailureReporter(null);
+    vi.mocked(log).mockClear();
+  });
+  afterAll(async () => {
+    setDecryptFailureReporter(null);
+    await prisma.$disconnect();
+  });
+
+  it("logs cipher.decrypt_failed with key id and label, never the payload", async () => {
+    const reported: Array<Record<string, unknown>> = [];
+    setDecryptFailureReporter((fields) => {
+      reported.push(fields);
+    });
+    const key = Buffer.alloc(32, 9).toString("base64");
+    const payload = encryptString("secret", key);
+    expect(open(payload, "transfer_target.e164:t1")).toBeNull();
+    expect(log).toHaveBeenCalledWith(
+      "error",
+      "cipher.decrypt_failed",
+      expect.objectContaining({ keyId: "k1", error: expect.any(String), label: "transfer_target.e164:t1" }),
+    );
+    const logged = vi.mocked(log).mock.calls.map((call) => JSON.stringify(call)).join(" ");
+    expect(logged).not.toContain(payload);
+    expect(logged).not.toContain("secret");
+    expect(reported).toEqual([expect.objectContaining({ keyId: "k1", label: "transfer_target.e164:t1" })]);
+  });
+
+  it("shows a support message when a message body cannot be decrypted", async () => {
+    const client = await seedClient();
+    const key = Buffer.alloc(32, 9).toString("base64");
+    await prisma.clientMessage.create({
+      data: {
+        clientId: client.id,
+        callerNameCipher: encryptString("Pat"),
+        callbackNumberCipher: encryptString("+14235550198"),
+        bodyCipher: encryptString("hidden", key),
+        callbackMasked: "(423) ***-0198",
+      },
+    });
+    const [row] = await clientMessages({ role: "admin" }).list(client.id);
+    expect(row?.body).toBe(MESSAGE_BODY_UNREADABLE);
+    expect(row?.callerName).toBe("Pat");
+  });
+
+  it("refuses a transfer when the target number cannot be decrypted", async () => {
+    const client = await seedClient();
+    const key = Buffer.alloc(32, 9).toString("base64");
+    await prisma.transferTarget.create({
+      data: { clientId: client.id, label: "Desk", e164Cipher: encryptString("+14155550100", key), e164Masked: "(415) ***-0100" },
+    });
+    expect(await decideTransfer(client.id, { target: "Desk" }, openFriday)).toEqual({
+      allowed: false,
+      reason: TRANSFER_UNAVAILABLE,
+    });
+  });
+
+  it("marks agent sync failed when a transfer number cannot be decrypted", async () => {
+    const { MemoryBilling, MemoryVoice } = await import("@alinstra/providers");
+    const client = await seedClient();
+    const key = Buffer.alloc(32, 9).toString("base64");
+    await prisma.transferTarget.create({
+      data: { clientId: client.id, label: "Desk", e164Cipher: encryptString("+14155550100", key), e164Masked: "(415) ***-0100" },
+    });
+    await prisma.client.update({
+      where: { id: client.id },
+      data: { retellLlmId: "llm_1", retellAgentId: "agent_1", agentSyncStatus: "pending", phoneE164: "+14155550999" },
+    });
+    const deps = {
+      billing: new MemoryBilling(),
+      voice: new MemoryVoice(),
+      appUrl: "https://example.com",
+      danielNumber: null,
+      danielEmail: "a@example.com",
+      defaultAreaCode: null,
+      defaultTollFree: false,
+    };
+    expect(await syncProvisionedAgent(client.id, deps)).toBe("failed");
+    const stored = await prisma.client.findUniqueOrThrow({ where: { id: client.id } });
+    expect(stored.agentSyncStatus).toBe("failed");
+    expect(stored.agentSyncError).toMatch(/ENCRYPTION_KEY/);
   });
 });

@@ -1,6 +1,7 @@
 import { getEnv, log, scrubSentryEvent, type SentryLikeEvent } from "@alinstra/config";
+import { activeKeyId, configuredKeyIds } from "@alinstra/crypto";
 import { sendEmail } from "@alinstra/email";
-import { EXTRACT_TIMEOUT_MS } from "@alinstra/db";
+import { EXTRACT_TIMEOUT_MS, setDecryptFailureReporter } from "@alinstra/db";
 import {
   bullConnection,
   CALLS_QUEUE,
@@ -42,6 +43,12 @@ Sentry.init({
     return scrubSentryEvent(event as SentryLikeEvent) as typeof event;
   },
 });
+
+setDecryptFailureReporter((fields) => {
+  Sentry.captureMessage("cipher.decrypt_failed", { level: "error", tags: { area: "cipher" }, extra: fields });
+});
+
+log("info", "encryption.keyring", { keys: configuredKeyIds().join(","), active: activeKeyId() });
 
 const connection = bullConnection();
 
