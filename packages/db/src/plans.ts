@@ -5,6 +5,16 @@ import { assertTenantContext, type TenantContext } from "./tenant";
 
 export const PLAN_SEEDS = [
   {
+    code: "solo",
+    name: "Solo",
+    monthlyPriceCents: 9900,
+    includedMinutes: 150,
+    overagePerMinuteCents: 40,
+    setupFeeCents: 9900,
+    includedChangesPerMonth: 1,
+    sortOrder: 0,
+  },
+  {
     code: "starter",
     name: "Starter",
     monthlyPriceCents: 19900,

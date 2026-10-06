@@ -43,8 +43,17 @@ describe("publicPlans", () => {
       },
     });
     const plans = await publicPlans();
-    expect(plans.map((plan) => plan.code)).toEqual(["starter", "professional", "premium"]);
+    expect(plans.map((plan) => plan.code)).toEqual(["solo", "starter", "professional", "premium"]);
     expect(plans[0]).toMatchObject({
+      name: "Solo",
+      monthlyPriceCents: 9900,
+      includedMinutes: 150,
+      overagePerMinuteCents: 40,
+      setupFeeCents: 9900,
+      includedChangesPerMonth: 1,
+      sortOrder: 0,
+    });
+    expect(plans[1]).toMatchObject({
       name: "Starter",
       monthlyPriceCents: 19900,
       includedMinutes: 300,
@@ -52,7 +61,7 @@ describe("publicPlans", () => {
       setupFeeCents: 29900,
       includedChangesPerMonth: 1,
     });
-    expect(plans[2]?.includedChangesPerMonth).toBeNull();
+    expect(plans[3]?.includedChangesPerMonth).toBeNull();
     expect(formatPlanCents(19900)).toBe("$199");
     expect(formatPlanCents(35)).toBe("$0.35");
     expect(formatOveragePerMinute(35)).toBe("$0.35/min");
@@ -65,8 +74,13 @@ describe("publicPlans", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const plans = await publicPlans();
     expect(plans).toEqual(publicPlansFromSeeds());
-    expect(plans.map((plan) => plan.id)).toEqual(["starter", "professional", "premium"]);
+    expect(plans.map((plan) => plan.id)).toEqual(["solo", "starter", "professional", "premium"]);
     expect(plans.every((plan) => plan.recallMonthlyCents === 0 && plan.recallPerBookingCents === 0)).toBe(true);
     expect(warn).toHaveBeenCalledOnce();
+  });
+
+  it("lists four seeds with Solo first by sortOrder", () => {
+    expect(publicPlansFromSeeds()).toHaveLength(4);
+    expect(publicPlansFromSeeds()[0]?.code).toBe("solo");
   });
 });

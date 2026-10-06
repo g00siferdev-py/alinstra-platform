@@ -17,6 +17,7 @@ export type CreateLeadInput = {
   missedCalls: string;
   notes?: string | null;
   source?: string;
+  planInterest?: string | null;
 };
 
 function trimRequired(value: unknown, label: string, max: number): string {
@@ -42,6 +43,10 @@ export function parseLeadInput(raw: CreateLeadInput): CreateLeadInput {
     typeof raw.notes === "string" && raw.notes.trim()
       ? raw.notes.trim().slice(0, 2000)
       : null;
+  const planInterest =
+    typeof raw.planInterest === "string" && raw.planInterest.trim()
+      ? raw.planInterest.trim().slice(0, 40)
+      : null;
   return {
     business,
     name,
@@ -51,6 +56,7 @@ export function parseLeadInput(raw: CreateLeadInput): CreateLeadInput {
     missedCalls,
     notes,
     source: raw.source?.trim() || "marketing",
+    planInterest,
   };
 }
 
@@ -66,6 +72,7 @@ export async function createLead(input: CreateLeadInput) {
       missedCalls: data.missedCalls,
       notes: data.notes,
       source: data.source ?? "marketing",
+      planInterest: data.planInterest ?? null,
     },
   });
 }
@@ -146,6 +153,7 @@ export function leadAdminNotice(lead: {
   industry: string;
   missedCalls: string;
   notes: string | null;
+  planInterest?: string | null;
 }): { subject: string; text: string } {
   const lines = [
     `Business: ${lead.business}`,
@@ -155,6 +163,7 @@ export function leadAdminNotice(lead: {
     `Industry: ${leadIndustryLabel(lead.industry)}`,
     `Missed calls / week: ${leadMissedCallsLabel(lead.missedCalls)}`,
   ];
+  if (lead.planInterest) lines.push(`Plan interest: ${lead.planInterest}`);
   if (lead.notes) lines.push(`Notes: ${lead.notes}`);
   return {
     subject: `New lead: ${lead.business}`,

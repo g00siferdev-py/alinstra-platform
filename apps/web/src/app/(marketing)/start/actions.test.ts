@@ -8,7 +8,16 @@ const { createLead, leadAdminNotice, enqueueSendAdminNotice, increment, headersM
   headersMock: vi.fn(async () => new Headers({ "x-real-ip": "203.0.113.9" })),
 }));
 
-vi.mock("@alinstra/db", () => ({ createLead, leadAdminNotice }));
+vi.mock("@alinstra/db", () => ({
+  createLead,
+  leadAdminNotice,
+  PLAN_SEEDS: [
+    { code: "solo", name: "Solo" },
+    { code: "starter", name: "Starter" },
+    { code: "professional", name: "Professional" },
+    { code: "premium", name: "Premium" },
+  ],
+}));
 vi.mock("@alinstra/queue", () => ({ enqueueSendAdminNotice }));
 vi.mock("@alinstra/auth", () => ({
   clientIp: () => "203.0.113.9",
@@ -80,5 +89,18 @@ describe("submitLeadAction", () => {
     const result = await submitLeadAction(null, form(valid));
     expect(result).toEqual({ ok: true });
     expect(createLead).toHaveBeenCalled();
+  });
+
+  it("saves a valid planInterest and drops an invalid one", async () => {
+    await submitLeadAction(null, form({ ...valid, planInterest: "solo" }));
+    expect(createLead).toHaveBeenCalledWith(expect.objectContaining({ planInterest: "solo" }));
+
+    createLead.mockClear();
+    await submitLeadAction(null, form({ ...valid, planInterest: "enterprise" }));
+    expect(createLead).toHaveBeenCalledWith(expect.objectContaining({ planInterest: "enterprise" }));
+
+    createLead.mockClear();
+    await submitLeadAction(null, form({ ...valid, planInterest: "not-a-plan" }));
+    expect(createLead).toHaveBeenCalledWith(expect.objectContaining({ planInterest: null }));
   });
 });

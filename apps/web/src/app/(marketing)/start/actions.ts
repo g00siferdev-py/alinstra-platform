@@ -4,6 +4,7 @@ import { clientIp, getCounter } from "@alinstra/auth";
 import { log } from "@alinstra/config";
 import { createLead, leadAdminNotice } from "@alinstra/db";
 import { enqueueSendAdminNotice } from "@alinstra/queue";
+import { normalizePlanInterest } from "@/lib/marketing-plan-interest";
 import { headers } from "next/headers";
 
 const LEAD_LIMIT = 5;
@@ -41,6 +42,7 @@ export async function submitLeadAction(_prev: LeadFormState, formData: FormData)
         ? `other:${industryOther}`
         : industrySelect;
 
+    const planInterest = normalizePlanInterest(field(formData, "planInterest"));
     const lead = await createLead({
       business: field(formData, "business"),
       name: field(formData, "name"),
@@ -50,6 +52,7 @@ export async function submitLeadAction(_prev: LeadFormState, formData: FormData)
       missedCalls: field(formData, "missedCalls"),
       notes: field(formData, "notes"),
       source: "marketing",
+      planInterest,
     });
     try {
       await enqueueSendAdminNotice(leadAdminNotice(lead));

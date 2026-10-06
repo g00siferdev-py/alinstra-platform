@@ -11,6 +11,10 @@ describe("marketing home route", () => {
     const source = readFileSync(`${root}/app/(marketing)/page.tsx`, "utf8");
     expect(source).toContain("The calls you miss are the ones that mattered.");
     expect(source).not.toMatch(/\bredirect\s*\(/);
+    expect(source).not.toContain("email or text");
+    expect(source).not.toContain("Most popular");
+    expect(source).toContain('id="pricing"');
+    expect(source).toContain("PlanCards");
   });
 
   it("formats the Call Ava CTA phone for display and tel links", () => {

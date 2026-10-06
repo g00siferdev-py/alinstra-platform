@@ -537,6 +537,8 @@ model Lead {
   missedCalls       String
   notes             String?   @db.Text
   source            String    @default("marketing")
+  /// Plan code from /start?plan= (solo|starter|professional|premium|enterprise), when present.
+  planInterest      String?
   createdAt         DateTime  @default(now())
   contactedAt       DateTime?
   convertedClientId String?

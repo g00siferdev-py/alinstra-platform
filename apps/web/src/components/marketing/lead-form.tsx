@@ -8,7 +8,7 @@ import { useActionState, useState } from "react";
 const CONFIRMATION =
   "Thanks. We'll call you within one business day to walk through setup, and you'll be live within 24 hours of that call.";
 
-export function LeadForm() {
+export function LeadForm({ planInterest = null }: { planInterest?: string | null }) {
   const [state, action, pending] = useActionState(submitLeadAction, null as LeadFormState);
   const [industry, setIndustry] = useState("");
 
@@ -23,6 +23,7 @@ export function LeadForm() {
         <label htmlFor="company_url">Company website</label>
         <input id="company_url" name="company_url" tabIndex={-1} autoComplete="off" />
       </div>
+      {planInterest ? <input type="hidden" name="planInterest" value={planInterest} /> : null}
 
       <div>
         <Label htmlFor="business">Business name</Label>

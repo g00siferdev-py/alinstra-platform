@@ -1,5 +1,6 @@
 import { MarkContactedButton } from "@/components/marketing/mark-contacted-button";
-import { Button, Card, EmptyState, PageHeader } from "@/components/ui";
+import { Button, Card, EmptyState, PageHeader, Pill } from "@/components/ui";
+import { planInterestLabel } from "@/lib/marketing-plan-interest";
 import { formatLocalTime, leadIndustryLabel, leadIndustryToWizard, leadMissedCallsLabel, listLeads } from "@alinstra/db";
 import { requireAdmin } from "@/lib/session";
 import Link from "next/link";
@@ -41,7 +42,12 @@ export default async function AdminLeadsPage() {
                 <Card className="text-sm">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="grid gap-1">
-                      <p className="font-bold text-[var(--ink)]">{lead.business}</p>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="font-bold text-[var(--ink)]">{lead.business}</p>
+                        {lead.planInterest ? (
+                          <Pill tone="info">Plan: {planInterestLabel(lead.planInterest)}</Pill>
+                        ) : null}
+                      </div>
                       <p>
                         {lead.name} · {lead.phone} · {lead.email}
                       </p>

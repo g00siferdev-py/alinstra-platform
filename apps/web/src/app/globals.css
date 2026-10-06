@@ -118,6 +118,23 @@ body {
   }
 }
 
+@keyframes live-dot-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(20, 163, 139, 0.45);
+  }
+  100% {
+    box-shadow: 0 0 0 9px rgba(20, 163, 139, 0);
+  }
+}
+
+.live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 9999px;
+  background: var(--live-strong);
+  animation: live-dot-pulse 1.6s ease-out infinite;
+}
+
 .interview-thinking-dots {
   display: inline-flex;
   gap: 0.3rem;
@@ -158,14 +175,23 @@ body {
   height: 28px;
 }
 
-.live-waveform > span {
+.live-waveform > span,
+.marketing-wave > span {
   display: block;
-  width: 4px;
-  height: 100%;
   border-radius: 9999px;
   background: var(--live-strong);
   transform-origin: center;
   animation: live-wave 1s ease-in-out infinite;
+}
+
+.live-waveform > span {
+  width: 4px;
+  height: 100%;
+}
+
+.marketing-wave {
+  display: inline-flex;
+  align-items: center;
 }
 
 .live-waveform > span:nth-child(2) {
@@ -193,8 +219,13 @@ body {
     opacity: 0.7;
   }
 
-  .live-waveform > span {
+  .live-waveform > span,
+  .marketing-wave > span {
     animation: none;
     transform: scaleY(0.55);
+  }
+
+  .live-dot {
+    animation: none;
   }
 }

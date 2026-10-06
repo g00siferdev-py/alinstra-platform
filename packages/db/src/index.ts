@@ -5,6 +5,7 @@ export {
   formatIncludedChanges,
   formatOveragePerMinute,
   formatPlanCents,
+  PLAN_SEEDS,
   plans,
   publicPlans,
   publicPlansFromSeeds,
