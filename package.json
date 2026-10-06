@@ -25,5 +25,10 @@
     "turbo": "2.11.5",
     "typescript": "5.9.3",
     "typescript-eslint": "8.46.0"
+  },
+  "pnpm": {
+    "overrides": {
+      "fast-xml-parser": ">=5.7.0"
+    }
   }
 }

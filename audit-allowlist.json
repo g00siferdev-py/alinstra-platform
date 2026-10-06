@@ -2,30 +2,6 @@
   "$comment": "Exceptions for `pnpm audit --prod --audit-level=high` (checked by scripts/check-audit.mjs). Every entry needs id (GHSA id), reason and expires (YYYY-MM-DD). Expired entries fail CI. Prefer upgrading/overriding the dependency over adding entries.",
   "advisories": [
     {
-      "id": "GHSA-m7jm-9gc2-mpf2",
-      "module": "fast-xml-parser",
-      "reason": "Transitive via @aws-sdk/client-s3 > xml-builder (R2 storage). Parses only XML responses from our own Cloudflare R2 endpoint, never user-supplied XML. TODO: bump @aws-sdk/client-s3 or add a pnpm override to fast-xml-parser >=5.7.0.",
-      "expires": "2026-11-05"
-    },
-    {
-      "id": "GHSA-37qj-frw5-hhjh",
-      "module": "fast-xml-parser",
-      "reason": "Same as GHSA-m7jm-9gc2-mpf2: R2 response parsing only, no user-supplied XML. Resolved by the same @aws-sdk/client-s3 bump or override.",
-      "expires": "2026-11-05"
-    },
-    {
-      "id": "GHSA-jmr7-xgp7-cmfj",
-      "module": "fast-xml-parser",
-      "reason": "Same as GHSA-m7jm-9gc2-mpf2: R2 response parsing only, no user-supplied XML. Resolved by the same @aws-sdk/client-s3 bump or override.",
-      "expires": "2026-11-05"
-    },
-    {
-      "id": "GHSA-8gc5-j5rx-235r",
-      "module": "fast-xml-parser",
-      "reason": "Same as GHSA-m7jm-9gc2-mpf2: R2 response parsing only, no user-supplied XML. Resolved by the same @aws-sdk/client-s3 bump or override.",
-      "expires": "2026-11-05"
-    },
-    {
       "id": "GHSA-ggr8-5vv4-36mx",
       "module": "deepmerge-ts",
       "reason": "Transitive via better-auth > prisma > @prisma/config. Prisma CLI config tooling merging our own config objects; not reachable from request handling. Resolved by a better-auth/prisma bump.",
