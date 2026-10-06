@@ -90,7 +90,7 @@ export function ErrorText({ children }: { children: ReactNode }) {
   return <p className="text-sm text-[var(--danger-text)]">{children}</p>;
 }
 
-export type PillTone = "success" | "warning" | "danger" | "info" | "neutral" | "live" | "purple";
+export type PillTone = "success" | "warning" | "danger" | "info" | "neutral" | "live" | "purple" | "none";
 
 const pillTones: Record<PillTone, string> = {
   success: "bg-[var(--success-soft)] text-[var(--success-text)]",
@@ -100,6 +100,7 @@ const pillTones: Record<PillTone, string> = {
   neutral: "bg-[var(--neutral-soft)] text-[var(--neutral-text)]",
   live: "bg-[var(--live-soft)] text-[var(--live-text)]",
   purple: "bg-[var(--purple-soft)] text-[var(--purple-text)]",
+  none: "",
 };
 
 export function Pill({
@@ -113,7 +114,9 @@ export function Pill({
 }) {
   return (
     <span
-      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold ${pillTones[tone]} ${className}`.trim()}
+      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold ${pillTones[tone]} ${className}`
+        .replace(/\s+/g, " ")
+        .trim()}
     >
       {children}
     </span>

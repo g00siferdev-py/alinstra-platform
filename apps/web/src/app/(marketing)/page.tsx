@@ -11,6 +11,7 @@ import {
   ArrowLeftRight,
   BookOpen,
   Calendar,
+  CalendarDays,
   Check,
   ChevronDown,
   Headphones,
@@ -32,7 +33,7 @@ export const metadata = marketingMetadata({
 const INDUSTRIES = ["HVAC", "Veterinary", "Home services", "Salons", "Auto shops", "Offices"];
 const WAVE_SM = [10, 16, 12, 18, 9, 14, 11];
 const WAVE_LG = [14, 22, 18, 28, 16, 24, 20, 30, 18, 26, 15, 22, 28, 17, 24, 20, 30, 16, 22, 18];
-const WAVE_MINI = [8, 14, 10, 16];
+const WAVE_MINI = [8, 12, 7, 11];
 
 function CallCta({
   phone,
@@ -169,10 +170,12 @@ export default async function MarketingHomePage() {
               label: cheapest ? `Plans start with ${cheapest.name}` : "Plans coming soon",
               color: "text-[var(--success-text)]",
             },
-          ].map((cell, index) => (
+          ].map((cell, index, cells) => (
             <div
               key={cell.value}
-              className={`flex flex-col gap-1 px-5 py-6 ${index % 2 === 0 ? "border-r border-[var(--divider)]" : ""} md:border-r md:last:border-r-0`}
+              className={`flex flex-col gap-1 border-[var(--divider)] px-5 py-6 ${
+                index % 2 === 0 ? "border-r" : ""
+              } md:border-r ${index === cells.length - 1 ? "md:border-r-0" : ""}`}
             >
               <span className={`text-[28px] font-extrabold tracking-tight ${cell.color}`}>{cell.value}</span>
               <span className="text-sm font-semibold text-[var(--muted)]">{cell.label}</span>
@@ -198,7 +201,8 @@ export default async function MarketingHomePage() {
       </section>
 
       {/* How it works */}
-      <section className="mx-auto max-w-[1160px] px-7 py-20">
+      <section className="px-7 py-20">
+        <div className="mx-auto max-w-[1160px]">
         <div className="mb-11 grid justify-items-center gap-3 text-center">
           <p className="text-[13px] font-extrabold tracking-[0.08em] text-[var(--primary)]">HOW IT WORKS</p>
           <h2 className="text-[38px] font-extrabold tracking-[-0.028em] text-[var(--ink)]">Live in three simple steps.</h2>
@@ -260,6 +264,7 @@ export default async function MarketingHomePage() {
             </div>
           </li>
         </ol>
+        </div>
       </section>
 
       {/* What Ava does */}
@@ -331,7 +336,8 @@ export default async function MarketingHomePage() {
 
       {/* Hear Ava */}
       {tel && display ? (
-        <section className="mx-auto max-w-[1160px] px-7 py-16">
+        <section className="px-7 py-16">
+          <div className="mx-auto max-w-[1160px]">
           <div className="grid gap-10 rounded-[28px] border border-[var(--live-border)] bg-[var(--live-soft)] px-6 py-10 md:grid-cols-2 md:px-10">
             <div className="grid gap-4 content-start">
               <div className="flex items-center gap-2 text-[13px] font-extrabold tracking-[0.08em] text-[var(--live-text)]">
@@ -346,13 +352,15 @@ export default async function MarketingHomePage() {
                 receptionist, then picture her answering for you.
               </p>
               <MarketingWaveform heights={WAVE_LG} size="lg" />
-              <a className={`${btnPrimary} w-fit`} href={tel}>
-                <Phone className="h-4 w-4" aria-hidden="true" />
-                Call {display}
-              </a>
-              <p className="text-sm text-[var(--muted)]">
-                {isTollFree(phone) ? "Toll-free · " : ""}about two minutes
-              </p>
+              <div className="flex flex-col gap-2 md:flex-row md:flex-wrap md:items-center md:gap-4">
+                <a className={`${btnPrimary} w-fit`} href={tel}>
+                  <Phone className="h-4 w-4" aria-hidden="true" />
+                  Call {display}
+                </a>
+                <p className="text-sm font-semibold text-[var(--live-text)]">
+                  {isTollFree(phone) ? "Toll-free · " : ""}about two minutes
+                </p>
+              </div>
             </div>
             <div className="rounded-[20px] bg-white p-5 shadow-[0_1px_2px_rgba(15,27,45,0.06),0_18px_40px_rgba(14,110,92,0.14)]">
               <div className="mb-4 flex items-center justify-between gap-2">
@@ -378,7 +386,7 @@ export default async function MarketingHomePage() {
                   <li key={index} className={`flex ${turn.role === "ava" ? "justify-start" : "justify-end"}`}>
                     <div className={`flex max-w-[90%] items-end gap-2 ${turn.role === "caller" ? "flex-row-reverse" : ""}`}>
                       {turn.role === "ava" ? (
-                        <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--live-soft)] text-xs font-extrabold text-[var(--live-text)]">
+                        <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--live-strong)] text-xs font-extrabold text-white">
                           A
                         </span>
                       ) : null}
@@ -395,12 +403,14 @@ export default async function MarketingHomePage() {
               </ol>
             </div>
           </div>
+          </div>
         </section>
       ) : null}
 
       {/* Pricing */}
-      <section id="pricing" className="mx-auto max-w-[1160px] px-7 py-16">
-        <div className="mb-8 grid gap-3">
+      <section id="pricing" className="px-7 py-16">
+        <div className="mx-auto max-w-[1160px]">
+        <div className="mb-8 grid justify-items-center gap-3 text-center">
           <p className="text-[13px] font-extrabold tracking-[0.08em] text-[var(--primary)]">PRICING</p>
           <h2 className="text-[38px] font-extrabold tracking-[-0.028em]">Simple plans. No per-call surprises.</h2>
           <p className="max-w-3xl text-lg text-[var(--body)]">
@@ -408,7 +418,7 @@ export default async function MarketingHomePage() {
             line, and a typical message takes two to three minutes.
           </p>
           {FOUNDING_OFFER.active && waivedNames.length > 0 ? (
-            <Pill tone="success" className="w-fit">
+            <Pill tone="success" className="h-8 w-fit text-[13px]">
               Founding offer: setup fee waived on {joinNames(waivedNames)} for {FOUNDING_OFFER.audience}
             </Pill>
           ) : null}
@@ -424,26 +434,44 @@ export default async function MarketingHomePage() {
           </Link>
         </div>
         <div className="mt-6 grid gap-4 md:grid-cols-2">
-          <article className="grid gap-2 rounded-[20px] bg-[var(--warning-soft)] p-6">
-            <div className="flex items-center gap-2">
-              <h3 className="font-extrabold">Follow-up calls</h3>
-              <Pill tone="warning">Add-on</Pill>
+          <article className="flex gap-4 rounded-[20px] bg-[var(--warning-soft)] p-6">
+            <IconTile soft="var(--surface)" className="text-[var(--warning-text)]">
+              <RefreshCw className="h-5 w-5" />
+            </IconTile>
+            <div className="grid min-w-0 flex-1 gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="font-extrabold">Follow-up calls</h3>
+                <Pill tone="none" className="bg-white text-[var(--warning-text)]">
+                  Add-on
+                </Pill>
+              </div>
+              <p className="text-sm text-[var(--body)]">
+                {ASSISTANT_NAME} calls your recall list when service is due and books the next visit. Never charged for
+                calls that don&apos;t connect.
+              </p>
+              <Link className="text-sm font-bold text-[var(--warning-text)]" href="/start">
+                Ask about pricing →
+              </Link>
             </div>
-            <p className="text-sm text-[var(--body)]">
-              {ASSISTANT_NAME} calls your recall list when service is due and books the next visit. Never charged for
-              calls that don&apos;t connect.
-            </p>
-            <Link className="text-sm font-bold text-[var(--warning-text)]" href="/start">
-              Ask about pricing →
-            </Link>
           </article>
-          <article className="grid gap-2 rounded-[20px] bg-[var(--purple-soft)] p-6">
-            <h3 className="font-extrabold">Calendar booking</h3>
-            <p className="text-sm text-[var(--body)]">
-              {ASSISTANT_NAME} books straight into your calendar once it&apos;s connected. Google Calendar first; practice
-              systems on request. Included on Professional and Premium.
-            </p>
+          <article className="flex gap-4 rounded-[20px] bg-[var(--purple-soft)] p-6">
+            <IconTile soft="var(--surface)" className="text-[var(--purple-text)]">
+              <CalendarDays className="h-5 w-5" />
+            </IconTile>
+            <div className="grid min-w-0 flex-1 gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="font-extrabold">Calendar booking</h3>
+                <Pill tone="none" className="bg-white text-[var(--purple-text)]">
+                  Professional and Premium
+                </Pill>
+              </div>
+              <p className="text-sm text-[var(--body)]">
+                {ASSISTANT_NAME} books straight into your calendar once it&apos;s connected. Google Calendar first; practice
+                systems on request.
+              </p>
+            </div>
           </article>
+        </div>
         </div>
       </section>
 
@@ -478,49 +506,78 @@ export default async function MarketingHomePage() {
             className="rounded-[20px] bg-white p-6 shadow-[0_1px_2px_rgba(15,27,45,0.06),0_18px_44px_rgba(15,27,45,0.10)]"
             aria-label="Example recall list"
           >
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-              <p className="font-extrabold">Recall list · This week · 12 customers due</p>
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <div className="grid gap-0.5">
+                <p className="text-[17px] font-extrabold text-[var(--ink)]">Recall list</p>
+                <p className="text-[13px] text-[var(--muted)]">This week · 12 customers due</p>
+              </div>
               <Pill tone="success">4 booked</Pill>
             </div>
-            <ul className="divide-y divide-[var(--divider)] text-sm">
-              <li className="flex justify-between gap-3 py-3">
-                <span>
-                  <span className="font-bold">The Hendersons</span>
-                  <span className="text-[var(--muted)]"> — Furnace tune-up</span>
-                </span>
-                <span className="text-[var(--success-text)]">Booked · Oct 14</span>
-              </li>
-              <li className="flex justify-between gap-3 py-3">
-                <span>
-                  <span className="font-bold">Ravi Patel</span>
-                  <span className="text-[var(--muted)]"> — AC maintenance plan</span>
-                </span>
-                <span className="inline-flex items-center gap-2 font-semibold text-[var(--live-text)]">
-                  Calling now <MarketingWaveform heights={WAVE_MINI} size="sm" />
-                </span>
-              </li>
-              <li className="flex justify-between gap-3 py-3">
-                <span>
-                  <span className="font-bold">Julia Alvarez</span>
-                  <span className="text-[var(--muted)]"> — Filter replacement</span>
-                </span>
-                <span className="text-[var(--muted)]">Left a message</span>
-              </li>
-              <li className="flex justify-between gap-3 py-3">
-                <span>
-                  <span className="font-bold">Mark Brooks</span>
-                  <span className="text-[var(--muted)]"> — Duct cleaning</span>
-                </span>
-                <span className="text-[var(--muted)]">Due Oct 20</span>
-              </li>
+            <ul className="divide-y divide-[var(--divider)]">
+              {(
+                [
+                  {
+                    initials: "TH",
+                    soft: "var(--primary-soft)",
+                    ink: "text-[var(--primary-text)]",
+                    name: "The Hendersons",
+                    service: "Furnace tune-up",
+                    status: <Pill tone="success">Booked · Oct 14</Pill>,
+                  },
+                  {
+                    initials: "RP",
+                    soft: "var(--live-soft)",
+                    ink: "text-[var(--live-text)]",
+                    name: "Ravi Patel",
+                    service: "AC maintenance plan",
+                    status: (
+                      <Pill tone="live">
+                        <MarketingWaveform heights={WAVE_MINI} size="sm" />
+                        Calling now
+                      </Pill>
+                    ),
+                  },
+                  {
+                    initials: "JA",
+                    soft: "var(--purple-soft)",
+                    ink: "text-[var(--purple-text)]",
+                    name: "Julia Alvarez",
+                    service: "Filter replacement",
+                    status: <Pill tone="warning">Left a message</Pill>,
+                  },
+                  {
+                    initials: "MB",
+                    soft: "var(--neutral-soft)",
+                    ink: "text-[var(--neutral-text)]",
+                    name: "Mark Brooks",
+                    service: "Duct cleaning",
+                    status: <Pill tone="neutral">Due Oct 20</Pill>,
+                  },
+                ]
+              ).map((row) => (
+                <li key={row.initials} className="flex items-center gap-3 py-3.5">
+                  <span
+                    className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[13px] font-extrabold ${row.ink}`}
+                    style={{ background: row.soft }}
+                  >
+                    {row.initials}
+                  </span>
+                  <div className="min-w-0 flex-1 grid gap-0.5">
+                    <p className="text-[14.5px] font-bold text-[var(--ink)]">{row.name}</p>
+                    <p className="text-[13px] text-[var(--muted)]">{row.service}</p>
+                  </div>
+                  {row.status}
+                </li>
+              ))}
             </ul>
           </div>
         </div>
       </section>
 
       {/* Why owners */}
-      <section className="mx-auto max-w-[1160px] px-7 py-20">
-        <div className="mb-10 grid gap-2">
+      <section className="px-7 py-20">
+        <div className="mx-auto max-w-[1160px]">
+        <div className="mb-10 grid justify-items-center gap-2 text-center">
           <p className="text-[13px] font-extrabold tracking-[0.08em] text-[var(--primary)]">WHY OWNERS PICK IT</p>
           <h2 className="text-[38px] font-extrabold tracking-[-0.028em]">Built by people you can actually reach.</h2>
         </div>
@@ -549,10 +606,12 @@ export default async function MarketingHomePage() {
             </article>
           ))}
         </div>
+        </div>
       </section>
 
       {/* FAQ */}
-      <section className="mx-auto grid max-w-[1160px] gap-10 px-7 py-16 md:grid-cols-[0.9fr_1.1fr]">
+      <section className="px-7 py-16">
+        <div className="mx-auto grid max-w-[1160px] gap-10 md:grid-cols-[0.9fr_1.1fr]">
         <div className="grid gap-3 content-start">
           <p className="text-[13px] font-extrabold tracking-[0.08em] text-[var(--primary)]">QUESTIONS</p>
           <h2 className="text-[38px] font-extrabold tracking-[-0.028em]">Good questions, straight answers.</h2>
@@ -599,6 +658,7 @@ export default async function MarketingHomePage() {
               <p className="max-w-xl pb-5 text-[15px] leading-relaxed text-[var(--body)]">{item.a}</p>
             </details>
           ))}
+        </div>
         </div>
       </section>
 

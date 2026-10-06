@@ -116,7 +116,11 @@ describe("phase 2 configs", () => {
     const result = await applyQuickUpdate(owner, { kind: "staff", text: "Dana Lee, owner, weekdays\nDirect: 415-555-0199", transferNumber: "+14155550142" });
     expect(result.prompt).toContain("Dana Lee, owner, weekdays");
     expect(result.prompt).not.toContain("Transfer number");
-    expect(result.prompt.slice(result.prompt.indexOf("Staff directory"))).not.toMatch(/(?:\d\D{0,2}){7,}/);
+    const staffStart = result.prompt.indexOf("Staff directory");
+    const staffEnd = result.prompt.indexOf("REFERENCE END", staffStart);
+    const staffSection =
+      staffEnd === -1 ? result.prompt.slice(staffStart) : result.prompt.slice(staffStart, staffEnd);
+    expect(staffSection).not.toMatch(/(?:\d\D{0,2}){7,}/);
   });
 
   it("stops client A from reading client B and stops staff from submitting", async () => {

@@ -22,3 +22,13 @@ describe("marketing home route", () => {
     expect(marketingTelHref("+18883871525")).toBe("tel:+18883871525");
   });
 });
+
+describe("marketing pricing route", () => {
+  it("does not advertise follow-up per-booking pricing", () => {
+    const source = readFileSync(`${root}/app/(marketing)/pricing/page.tsx`, "utf8");
+    expect(source).not.toContain("per booking");
+    expect(source).not.toContain("recallMonthlyCents");
+    expect(source).not.toContain("recallPerBookingCents");
+    expect(source).toContain("Ask about pricing");
+  });
+});

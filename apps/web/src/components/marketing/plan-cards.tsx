@@ -28,14 +28,17 @@ export function PlanCards({ plans }: { plans: PublicPlan[] }) {
           return (
             <article
               key={plan.id}
-              className={`relative flex flex-col gap-4 rounded-[20px] bg-[var(--surface)] p-6 shadow-[0_1px_2px_rgba(15,27,45,0.06),0_8px_24px_rgba(15,27,45,0.06)] ${
+              className={`relative flex flex-col gap-4 rounded-[20px] bg-[var(--surface)] px-5 py-6 shadow-[0_1px_2px_rgba(15,27,45,0.06),0_8px_24px_rgba(15,27,45,0.06)] ${
                 recommended
                   ? "border-2 border-[var(--primary)] lg:-translate-y-3 lg:shadow-[0_1px_2px_rgba(15,27,45,0.06),0_24px_48px_rgba(36,83,214,0.18)]"
                   : "border border-[var(--line)]"
               }`}
             >
               {recommended ? (
-                <Pill className="absolute -top-3.5 left-1/2 -translate-x-1/2 bg-[var(--primary)] text-white shadow-[0_0_0_4px_var(--btn-halo)]">
+                <Pill
+                  tone="none"
+                  className="absolute -top-3.5 left-1/2 -translate-x-1/2 bg-[var(--primary)] text-white shadow-[0_0_0_4px_var(--btn-halo)]"
+                >
                   Recommended
                 </Pill>
               ) : null}
@@ -47,9 +50,9 @@ export function PlanCards({ plans }: { plans: PublicPlan[] }) {
                 <p className="min-h-[2.6rem] text-sm text-[var(--muted)]">{meta.tagline}</p>
               </div>
               <div>
-                <p className="text-[34px] font-extrabold tracking-tight text-[var(--ink)]">
+                <p className="text-[44px] font-extrabold tracking-tight text-[var(--ink)] leading-none">
                   {formatPlanCents(plan.monthlyPriceCents)}
-                  <span className="text-base font-bold text-[var(--muted)]">/month</span>
+                  <span className="text-[15px] font-bold text-[var(--muted)]">/month</span>
                 </p>
               </div>
               <div
@@ -105,7 +108,9 @@ export function PlanCards({ plans }: { plans: PublicPlan[] }) {
         <div className="min-w-0 flex-1 grid gap-1">
           <div className="flex flex-wrap items-center gap-2">
             <p className="text-lg font-extrabold">Enterprise</p>
-            <Pill className="bg-white/12 text-[#DCE6FB]">Custom pricing</Pill>
+            <Pill tone="none" className="bg-white/12 text-[#DCE6FB]">
+              Custom pricing
+            </Pill>
           </div>
           <p className="text-sm text-[#C9D3E6]">
             Several locations, heavy call volume, or special requirements? We&apos;ll build a plan around you.
