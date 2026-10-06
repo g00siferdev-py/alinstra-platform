@@ -117,6 +117,21 @@ export function clientMessages(ctx: TenantContext) {
   };
 }
 
+/**
+ * Loads one message for the email worker by id (no tenant context: the job already carries trusted recipients).
+ * Returns null when the row is gone. Decrypts caller name and body for the email body only.
+ */
+export async function messageForEmail(messageId: string): Promise<{
+  clientId: string;
+  callerName: string;
+  body: string;
+} | null> {
+  const row = await prisma.clientMessage.findUnique({ where: { id: messageId } });
+  if (!row) return null;
+  const message = withMessageText(row);
+  return { clientId: row.clientId, callerName: message.callerName, body: message.body };
+}
+
 export function callRecords(ctx: TenantContext) {
   return {
     list(clientId: string) {

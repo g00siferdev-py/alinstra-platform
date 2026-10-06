@@ -1,5 +1,5 @@
 import { getEnv, log } from "@alinstra/config";
-import { advanceProvisioning, failProvisioning, formatLocalTime, latestProvisionFailure, plainCallerName, prisma, runDueTeardowns, syncProvisionedAgent, withMessageText, type Phase3Deps } from "@alinstra/db";
+import { advanceProvisioning, failProvisioning, formatLocalTime, latestProvisionFailure, messageForEmail, plainCallerName, runDueTeardowns, syncProvisionedAgent, type Phase3Deps } from "@alinstra/db";
 import { provisionFailedEmail, sendEmail, type EmailMessage } from "@alinstra/email";
 import { platformsFor } from "@alinstra/providers";
 import { enqueueSendAdminNotice, type SendMessageEmail } from "@alinstra/queue";
@@ -87,12 +87,11 @@ export function messageEmailText(input: {
 
 export async function runMessageEmail(payload: SendMessageEmail): Promise<void> {
   const env = getEnv();
-  const row = await prisma.clientMessage.findUnique({ where: { id: payload.messageId } });
-  if (!row) {
+  const message = await messageForEmail(payload.messageId);
+  if (!message) {
     log("warn", "message email skipped; message missing", { messageId: payload.messageId });
     return;
   }
-  const message = withMessageText(row);
   for (const to of payload.recipients) {
     await sendEmail({
       to,
@@ -101,7 +100,7 @@ export async function runMessageEmail(payload: SendMessageEmail): Promise<void> 
         {
           callerName: message.callerName,
           body: message.body,
-          clientId: row.clientId,
+          clientId: message.clientId,
           receivedAt: payload.receivedAt,
           timezone: payload.timezone,
         },
