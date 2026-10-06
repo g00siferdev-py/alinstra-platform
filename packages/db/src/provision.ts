@@ -956,13 +956,13 @@ export async function recordTakenMessage(
   args: { callerName?: string; callbackNumber?: string; message?: string },
   danielEmail: string | null,
   retellCallId: string | null = null,
-): Promise<{ sentence: string; recipients: string[]; receivedAt: Date; timezone: string }> {
+): Promise<{ sentence: string; recipients: string[]; receivedAt: Date; timezone: string; messageId: string }> {
   const client = await prisma.client.findFirst({ where: { id: clientId, archivedAt: null } });
   if (!client) throw new Error("That client is not available.");
   const body = (args.message ?? "").trim();
   if (!body) throw new Error("A message is required.");
   const recipients = recipientsOf(client.features, client.internal, danielEmail);
-  const receivedAt = await prisma.$transaction(async (tx) => {
+  const saved = await prisma.$transaction(async (tx) => {
     const row = await tx.clientMessage.create({
       data: {
         clientId,
@@ -983,9 +983,9 @@ export async function recordTakenMessage(
       entityId: row.id,
       summary: `Stored a message for ${client.name}`,
     });
-    return row.createdAt;
+    return row;
   });
-  return { sentence: "I've passed that message to the office.", recipients, receivedAt, timezone: client.timezone };
+  return { sentence: "I've passed that message to the office.", recipients, receivedAt: saved.createdAt, timezone: client.timezone, messageId: saved.id };
 }
 
 export type TransferDecision = { allowed: true; tool: string } | { allowed: false; reason: string };

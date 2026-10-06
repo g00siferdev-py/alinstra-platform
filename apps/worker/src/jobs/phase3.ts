@@ -1,5 +1,5 @@
 import { getEnv, log } from "@alinstra/config";
-import { advanceProvisioning, failProvisioning, formatLocalTime, latestProvisionFailure, plainCallerName, runDueTeardowns, syncProvisionedAgent, type Phase3Deps } from "@alinstra/db";
+import { advanceProvisioning, failProvisioning, formatLocalTime, latestProvisionFailure, plainCallerName, prisma, runDueTeardowns, syncProvisionedAgent, withMessageText, type Phase3Deps } from "@alinstra/db";
 import { provisionFailedEmail, sendEmail, type EmailMessage } from "@alinstra/email";
 import { platformsFor } from "@alinstra/providers";
 import { enqueueSendAdminNotice, type SendMessageEmail } from "@alinstra/queue";
@@ -67,25 +67,46 @@ export async function runSync(clientId: string): Promise<void> {
   }
 }
 
-export function messageEmailText(payload: SendMessageEmail, appUrl: string): string {
-  const received = payload.receivedAt ? formatLocalTime(payload.receivedAt, payload.timezone) : "";
+export function messageEmailText(input: {
+  callerName: string;
+  body: string;
+  clientId: string;
+  receivedAt?: string;
+  timezone?: string;
+}, appUrl: string): string {
+  const received = input.receivedAt ? formatLocalTime(input.receivedAt, input.timezone) : "";
   return [
-    `${payload.callerName} left a message${received ? ` at ${received}` : ""}:`,
+    `${input.callerName} left a message${received ? ` at ${received}` : ""}:`,
     "",
-    payload.body,
+    input.body,
     "",
-    `Client ${payload.clientId}`,
+    `Client ${input.clientId}`,
     appUrl,
   ].join("\n");
 }
 
 export async function runMessageEmail(payload: SendMessageEmail): Promise<void> {
   const env = getEnv();
+  const row = await prisma.clientMessage.findUnique({ where: { id: payload.messageId } });
+  if (!row) {
+    log("warn", "message email skipped; message missing", { messageId: payload.messageId });
+    return;
+  }
+  const message = withMessageText(row);
   for (const to of payload.recipients) {
     await sendEmail({
       to,
-      subject: `New message for your receptionist (${plainCallerName(payload.callerName)})`,
-      text: messageEmailText(payload, env.APP_URL),
+      subject: `New message for your receptionist (${plainCallerName(message.callerName)})`,
+      text: messageEmailText(
+        {
+          callerName: message.callerName,
+          body: message.body,
+          clientId: row.clientId,
+          receivedAt: payload.receivedAt,
+          timezone: payload.timezone,
+        },
+        env.APP_URL,
+      ),
     });
   }
 }
@@ -106,4 +127,3 @@ export async function runChurnSweep(): Promise<void> {
     });
   }
 }
-

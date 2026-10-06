@@ -86,11 +86,11 @@ describe("provisioning failure email", () => {
 
   it("stamps message emails with the client's local time", () => {
     const text = messageEmailText(
-      { clientId: "client_1", recipients: ["a@example.com"], callerName: "Pat", body: "Heat is out", receivedAt: "2026-10-04T15:34:00.000Z", timezone: "America/New_York" },
+      { clientId: "client_1", callerName: "Pat", body: "Heat is out", receivedAt: "2026-10-04T15:34:00.000Z", timezone: "America/New_York" },
       "https://staging.alinstra.com",
     );
     expect(text).toContain("Pat left a message at Oct 4, 11:34 AM:");
     expect(text).not.toContain("2026-10-04T15:34");
-    expect(messageEmailText({ clientId: "c", recipients: ["a@example.com"], callerName: "Pat", body: "Hi" }, "https://x")).toContain("Pat left a message:");
+    expect(messageEmailText({ clientId: "c", callerName: "Pat", body: "Hi" }, "https://x")).toContain("Pat left a message:");
   });
 });

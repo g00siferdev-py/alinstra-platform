@@ -13,6 +13,7 @@ vi.mock("@alinstra/db", () => ({
     recipients: ["office@example.com"],
     receivedAt: new Date("2026-10-04T15:34:00.000Z"),
     timezone: "America/New_York",
+    messageId: "msg_1",
   })),
 }));
 vi.mock("@alinstra/queue", () => ({
@@ -56,6 +57,8 @@ describe("take message route", () => {
     expect(vi.mocked(recordTakenMessage).mock.calls[0]?.[3]).toBe("call_abc");
     const again = await call({ caller_name: "Pat", callback_number: "4155550100", message: "The heat is out" });
     expect(again.status).toBe(200);
-    expect(enqueueMessageEmail).toHaveBeenLastCalledWith(expect.objectContaining({ receivedAt: "2026-10-04T15:34:00.000Z", timezone: "America/New_York" }));
+    expect(enqueueMessageEmail).toHaveBeenLastCalledWith(
+      expect.objectContaining({ messageId: "msg_1", receivedAt: "2026-10-04T15:34:00.000Z", timezone: "America/New_York" }),
+    );
   });
 });

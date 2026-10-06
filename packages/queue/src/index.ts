@@ -41,10 +41,8 @@ export const sendAccountEmail = z.object({
 });
 
 export const sendMessageEmail = z.object({
-  clientId: z.string().min(1),
+  messageId: z.string().min(1),
   recipients: z.array(z.string().email()).min(1),
-  callerName: z.string().min(1),
-  body: z.string().min(1),
   /** ISO timestamp of when the message was taken; rendered in the client's timezone. */
   receivedAt: z.string().datetime().optional(),
   timezone: z.string().min(1).optional(),
@@ -141,24 +139,22 @@ function knowledgeJobs(): Queue {
   return knowledgeQueue;
 }
 
+/** Sensitive email jobs: drop completed payloads immediately; keep failures for a day for debugging. */
+const SENSITIVE_EMAIL_JOB_OPTS = {
+  attempts: 5,
+  backoff: { type: "exponential" as const, delay: 2000 },
+  removeOnComplete: true as const,
+  removeOnFail: { age: 86_400 },
+};
+
 export async function enqueueSendInvite(data: SendInviteEmail): Promise<void> {
   const payload = sendInviteEmail.parse(data);
-  await emailJobs().add("send-invite-email", payload, {
-    attempts: 5,
-    backoff: { type: "exponential", delay: 2000 },
-    removeOnComplete: 100,
-    removeOnFail: 100,
-  });
+  await emailJobs().add("send-invite-email", payload, SENSITIVE_EMAIL_JOB_OPTS);
 }
 
 export async function enqueueSendPasswordReset(data: SendPasswordResetEmail): Promise<void> {
   const payload = sendPasswordResetEmail.parse(data);
-  await emailJobs().add("send-password-reset-email", payload, {
-    attempts: 5,
-    backoff: { type: "exponential", delay: 2000 },
-    removeOnComplete: 100,
-    removeOnFail: 100,
-  });
+  await emailJobs().add("send-password-reset-email", payload, SENSITIVE_EMAIL_JOB_OPTS);
 }
 
 export async function enqueueSendAdminNotice(data: SendAdminNotice): Promise<void> {
@@ -263,22 +259,12 @@ export async function enqueueAccountEmail(data: SendAccountEmail): Promise<void>
 
 export async function enqueueSignInNotice(data: SendSignInNotice): Promise<void> {
   const payload = sendSignInNotice.parse(data);
-  await emailJobs().add("send-signin-notice", payload, {
-    attempts: 5,
-    backoff: { type: "exponential", delay: 2000 },
-    removeOnComplete: 100,
-    removeOnFail: 100,
-  });
+  await emailJobs().add("send-signin-notice", payload, SENSITIVE_EMAIL_JOB_OPTS);
 }
 
 export async function enqueueMessageEmail(data: SendMessageEmail): Promise<void> {
   const payload = sendMessageEmail.parse(data);
-  await emailJobs().add("send-message-email", payload, {
-    attempts: 5,
-    backoff: { type: "exponential", delay: 2000 },
-    removeOnComplete: 100,
-    removeOnFail: 100,
-  });
+  await emailJobs().add("send-message-email", payload, SENSITIVE_EMAIL_JOB_OPTS);
 }
 
 export async function closeQueue(): Promise<void> {

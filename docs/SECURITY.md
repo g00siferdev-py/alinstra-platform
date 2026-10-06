@@ -59,10 +59,10 @@ Alinstra answers a client's phone calls with an AI receptionist. The sensitive m
 
 | Data | Encrypted? | Retention | Who can see it |
 | --- | --- | --- | --- |
-| BullMQ job payloads (invite and reset emails, admin notices, sign-in notices, recording ids, **message emails**) | No | Last 100 completed and 100 failed jobs per queue are kept (`removeOnComplete: 100`), so payloads can sit in Redis for days. See the known gap below | Anyone with Redis access (engineering only) |
+| BullMQ job payloads (invite and reset emails, admin notices, sign-in notices, recording ids, **message emails**) | No | Message, invite, password-reset and sign-in-notice jobs are removed on completion (`removeOnComplete: true`); failed copies are kept for 24 hours. Admin notices and other jobs keep the last 100 completed and failed. Message email payloads hold **ids and recipient addresses only** — the worker loads and decrypts the message body | Anyone with Redis access (engineering only) |
 | Rate-limit and alert counters, lockout counters, recording-dedupe keys | No. Keys can contain an email address or IP address | Seconds to hours (TTL on every key) | Engineering only |
 
-**Known gap:** the `send-message-email` job carries the caller name and the message body in plaintext through Redis so the worker can email the owner. The callback number is not in it. The job is retried up to 5 times and then retained among the last 100. Fix options are listed in section 8.
+Message email jobs no longer carry caller name or body through Redis. The worker loads the row by `messageId` and decrypts it with the app keyring before sending.
 
 ### 2.4 Third-party systems
 
@@ -79,7 +79,7 @@ Alinstra answers a client's phone calls with an AI receptionist. The sensitive m
 
 ### 2.5 What never leaves the system
 
-Full caller numbers, transcripts, message text and transfer numbers are not written to application logs, Sentry events, or `ChangeLog`/`QuickUpdate` JSON (numbers are masked there). Logs and Sentry carry ids and counts. The one deliberate exception is the message email described above.
+Full caller numbers, transcripts, message text and transfer numbers are not written to application logs, Sentry events, or `ChangeLog`/`QuickUpdate` JSON (numbers are masked there). Logs and Sentry carry ids and counts. Message email content is decrypted only in the worker at send time and is not stored in Redis job history.
 
 ## 3. Access controls
 
@@ -191,7 +191,7 @@ The controls above are covered by tests in the repo: tenant isolation (`packages
 ## 8. Open items (decisions for Daniel and counsel)
 
 1. **Messages have no retention.** Call content is purged; `client_message` rows (encrypted) are not. Decide whether messages follow `callRetentionDays`, get their own setting, or are kept until the client deletes them. State the answer to clients in the DPA.
-2. **Message emails carry plaintext.** Caller name and body go through Redis and Resend. Options: send a "you have a new message, open the portal" email with no body; shorten job retention for this queue (`removeOnComplete`); or accept and disclose it. Resend and the recipient's mailbox will hold the text regardless of what we do to Redis.
+2. **Message emails still reach Resend in plaintext.** The Redis job now carries only the message id; the worker decrypts before send. Resend and the recipient's mailbox still hold the text. Options: send a "you have a new message, open the portal" email with no body; or accept and disclose it.
 3. **Recordings and uploaded documents are not app-encrypted** in R2 (provider-managed encryption only). Encrypting objects before upload would remove that gap but changes playback and the worker; not scheduled.
 4. **Retell, Resend, Sentry and OpenRouter retention** must be confirmed against each vendor's current terms, and each vendor's DPA signed where one exists.
 5. **Leads have no purge** and sit in plaintext. Decide a retention period.

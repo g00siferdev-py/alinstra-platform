@@ -39,10 +39,8 @@ export async function POST(request: Request): Promise<Response> {
     if (saved.recipients.length > 0) {
       try {
         await enqueueMessageEmail({
-          clientId,
+          messageId: saved.messageId,
           recipients: saved.recipients,
-          callerName,
-          body: body.args?.message?.trim() || "Message",
           receivedAt: saved.receivedAt.toISOString(),
           timezone: saved.timezone,
         });
