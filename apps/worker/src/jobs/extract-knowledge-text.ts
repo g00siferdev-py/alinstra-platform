@@ -1,4 +1,4 @@
-import { MAX_EXTRACTED_CHARS, prisma } from "@alinstra/db";
+import { MAX_EXTRACTED_CHARS, prisma, sealCipher } from "@alinstra/db";
 import { log } from "@alinstra/config";
 import { extractDocumentText, ExtractionFailed, getStorage } from "@alinstra/storage";
 
@@ -15,7 +15,9 @@ export async function extractKnowledge(documentId: string): Promise<void> {
       where: { id: document.id },
       data: {
         extractionStatus: "done",
-        extractedText: extracted.text,
+        // Encrypted at rest (Phase S); the legacy plaintext column is cleared.
+        extractedText: null,
+        extractedTextCipher: sealCipher(extracted.text),
         extractedTextTruncated: extracted.truncated,
         extractionError: null,
       },
@@ -33,6 +35,6 @@ export async function extractKnowledge(documentId: string): Promise<void> {
 export async function markExtractionFailed(documentId: string, message: string): Promise<void> {
   await prisma.knowledgeDocument.updateMany({
     where: { id: documentId },
-    data: { extractionStatus: "failed", extractionError: message, extractedText: null },
+    data: { extractionStatus: "failed", extractionError: message, extractedText: null, extractedTextCipher: null },
   });
 }

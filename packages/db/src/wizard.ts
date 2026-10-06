@@ -2,6 +2,7 @@ import { Prisma } from "./generated/prisma/client";
 import { prisma } from "./client";
 import { createDraftAgentConfig, rebuildAgentConfig } from "./agent";
 import { recordChange, type Actor } from "./changes";
+import { protectPayload, sealJson, staffOf, transferTargetData, withTransferNumber } from "./cipher";
 import {
   AGENT_AFFECTING_STEPS,
   businessSchema,
@@ -224,7 +225,7 @@ async function applyStep(
     if (mode === "edit") {
       await tx.transferTarget.deleteMany({ where: { clientId } });
       for (const target of targets) {
-        await tx.transferTarget.create({ data: { clientId, label: target.label, e164: target.e164 } });
+        await tx.transferTarget.create({ data: { clientId, ...transferTargetData(target) } });
       }
     }
   }
@@ -241,7 +242,9 @@ async function applyStep(
         services: fields.services ?? Prisma.DbNull,
         faqs: fields.faqs ?? Prisma.DbNull,
         policies: fields.policies ?? Prisma.DbNull,
-        staff: fields.staff ?? Prisma.DbNull,
+        // Staff notes are stored encrypted only (Phase S); the legacy plaintext column is cleared.
+        staff: Prisma.DbNull,
+        staffCipher: sealJson(fields.staff),
       },
     });
   }
@@ -320,7 +323,7 @@ export async function submitWizard(ctx: Actor, input: { clientId: string; payloa
     await tx.transferTarget.deleteMany({ where: { clientId: input.clientId } });
     if (targets.length > 0) {
       await tx.transferTarget.createMany({
-        data: targets.map((target) => ({ clientId: input.clientId, label: target.label, e164: target.e164 })),
+        data: targets.map((target) => ({ clientId: input.clientId, ...transferTargetData(target) })),
       });
     }
     await tx.knowledgeBase.updateMany({ where: { clientId: input.clientId, status: "draft" }, data: { status: "submitted" } });
@@ -405,6 +408,7 @@ export async function removeClient(ctx: Actor, clientId: string) {
           storageKey: `deleted/${document.id}`,
           extractionStatus: "deleted",
           extractedText: null,
+          extractedTextCipher: null,
           extractionError: null,
         },
       });
@@ -516,7 +520,7 @@ export async function clientEditPayload(ctx: Actor, clientId: string): Promise<W
     features: {
       ...features,
       weeklyHoursText: formatWeeklyHours(client.weeklyHours as WeeklyHours | null),
-      transferTargetsText: formatTransferTargets(targets),
+      transferTargetsText: formatTransferTargets(targets.map(withTransferNumber)),
     } as WizardPayload["features"],
     voice: voice as WizardPayload["voice"],
     knowledge: {
@@ -524,7 +528,7 @@ export async function clientEditPayload(ctx: Actor, clientId: string): Promise<W
       services: text(knowledge?.services),
       faqs: text(knowledge?.faqs),
       policies: text(knowledge?.policies),
-      staff: text(knowledge?.staff),
+      staff: text(knowledge ? staffOf(knowledge) : undefined),
     },
     phone: phone as WizardPayload["phone"],
     compliance: {
@@ -589,7 +593,8 @@ export async function editClientStep(
         data: {
           clientId: input.clientId,
           kind: OWNER_STEP_HOLD_KIND,
-          payload: { kind: OWNER_STEP_HOLD_KIND, step, title, payload } as unknown as Prisma.InputJsonValue,
+          // Numbers are masked in the stored copy; the original rides along encrypted so approval can apply it.
+          payload: protectPayload({ kind: OWNER_STEP_HOLD_KIND, step, title, payload }) as unknown as Prisma.InputJsonValue,
           status: "held",
           holdReason,
           createdById: ctx.id,

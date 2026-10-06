@@ -17,6 +17,7 @@ import {
   scheduleChurn,
   startProvisioning,
   syncProvisionedAgent,
+  transferTargets,
   type Phase3Deps,
 } from "./provision";
 import { resetTestDatabase } from "./reset-test-database";
@@ -232,7 +233,7 @@ describe("phase 3 provisioning", () => {
     const rawRow = JSON.stringify(calls[0]);
     expect(rawRow).not.toContain("do not store");
     expect(rawRow).not.toContain("+14155551212");
-    expect(calls[0]?.transcriptCipher).toMatch(/^v1\./);
+    expect(calls[0]?.transcriptCipher).toMatch(/^v2\.k\d+\./);
     // Access-checked reader decrypts for the client's owner.
     const detail = await getCall({ role: "client_owner", clientId: client.id }, calls[0]!.id);
     expect(detail?.transcript?.text).toBe("do not store");
@@ -277,7 +278,9 @@ describe("phase 3 provisioning", () => {
     expect(result.sync).toBe(true);
     const updated = await prisma.client.findUniqueOrThrow({ where: { id: client.id } });
     expect(updated.agentSyncStatus).toBe("syncing");
-    expect(await prisma.transferTarget.findMany({ where: { clientId: client.id } })).toMatchObject([{ e164: "+14155550200" }]);
+    // Phase S: only ciphertext and the mask are stored; the readable list decrypts for display.
+    expect(await prisma.transferTarget.findMany({ where: { clientId: client.id } })).toMatchObject([{ e164: null, e164Masked: "(415) ***-0200" }]);
+    expect(await transferTargets({ role: "admin" }).list(client.id)).toMatchObject([{ label: "Cell", e164: "+14155550200" }]);
   });
 
   it("queues a sync when an owner applies an hours update on a provisioned client", async () => {
@@ -348,7 +351,9 @@ describe("phase 3 provisioning", () => {
     const client = await seedClient({ name: "Named" });
     const saved = await recordTakenMessage(client.id, { callerName: "Pat\nBcc: evil", callbackNumber: "4155550100", message: "Call me" }, null);
     expect(plainCallerName("Pat\nBcc: evil")).toBe("Pat Bcc: evil");
-    expect((await prisma.clientMessage.findFirstOrThrow({ where: { clientId: client.id } })).callerName).toBe("Pat Bcc: evil");
+    const stored = await prisma.clientMessage.findFirstOrThrow({ where: { clientId: client.id } });
+    expect(stored.callerName).toBeNull();
+    expect((await clientMessages({ role: "admin" }).list(client.id))[0]?.callerName).toBe("Pat Bcc: evil");
     expect(saved.sentence).toMatch(/message/i);
     await expect(prisma.client.create({ data: { name: "Twin", phoneE164: "+18005550100" } })).resolves.toBeTruthy();
     await expect(prisma.client.create({ data: { name: "Twin 2", phoneE164: "+18005550100" } })).rejects.toThrow();

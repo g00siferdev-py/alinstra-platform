@@ -1,4 +1,4 @@
-import { decryptString, encryptString } from "@alinstra/crypto";
+import { open as openCipher, readField, seal as sealCipher } from "./cipher";
 import { callFlags, parseCallFlags, type CallFlag } from "./call-flags";
 import {
   costCentsOf,
@@ -28,25 +28,15 @@ export const CALL_RETENTION_LIMITS = { min: CALL_RETENTION_MIN_DAYS, max: CALL_R
 /** Archived clients lose everything this long after service ends, whatever their retention setting. */
 export const ARCHIVED_PURGE_GRACE_DAYS = 30;
 
-/** AES key for call data. Read per call so tests can swap it; never cached. */
-function encryptionKey(): string {
-  const key = process.env.ENCRYPTION_KEY;
-  if (!key) throw new Error("ENCRYPTION_KEY is not set");
-  return key;
-}
-
+// Call data is sealed with the @alinstra/crypto keyring (v2 payloads, active key); the keyring is read from
+// env on every call, so tests can swap keys and rotation needs no restart.
 function seal(value: string): string {
-  return encryptString(value, encryptionKey());
+  const sealed = sealCipher(value);
+  if (sealed === null) throw new Error("Cannot seal an empty value");
+  return sealed;
 }
 
-function open(cipher: string | null): string | null {
-  if (!cipher) return null;
-  try {
-    return decryptString(cipher, encryptionKey());
-  } catch {
-    return null;
-  }
-}
+const open = openCipher;
 
 function parseTranscript(cipher: string | null): CallTranscript | null {
   const text = open(cipher);
@@ -391,7 +381,7 @@ export async function getCall(viewer: CallViewer, callId: string): Promise<CallD
   if (!row || !canAccessCall(viewer, row)) return null;
   const message = await prisma.clientMessage.findFirst({
     where: { clientId: row.clientId, retellCallId: row.retellCallId },
-    select: { id: true, callerName: true, body: true, createdAt: true },
+    select: { id: true, callerName: true, callerNameCipher: true, body: true, bodyCipher: true, createdAt: true },
   });
   return {
     ...summaryRow(row, canSeeCallerNumber(viewer)),
@@ -406,7 +396,7 @@ export async function getCall(viewer: CallViewer, callId: string): Promise<CallD
     recordingContentType: row.recordingContentType,
     recordingBytes: row.recordingBytes,
     rawEvents: viewer.role === "admin" ? parseRawEvents(row.rawEventsCipher) : null,
-    message,
+    message: message ? { id: message.id, callerName: readField(message.callerNameCipher, message.callerName), body: readField(message.bodyCipher, message.body), createdAt: message.createdAt } : null,
     analyzedAt: row.analyzedAt,
   };
 }

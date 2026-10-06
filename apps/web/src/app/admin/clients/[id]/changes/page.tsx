@@ -1,6 +1,6 @@
 import { ChangeRequestReview, HeldUpdateReview } from "@/components/change-review";
 import { Card, EmptyState, PageHeader } from "@/components/ui";
-import { changeRequests, clients, quickUpdates, receptionistFields } from "@alinstra/db";
+import { changeRequests, clients, openPayload, quickUpdates, receptionistFields } from "@alinstra/db";
 import { requireAdmin } from "@/lib/session";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -33,7 +33,7 @@ export default async function ClientChangesPage({ params }: { params: Promise<{ 
         <h2 className="text-base font-extrabold text-[var(--ink)]">Held quick updates</h2>
         {held.length === 0 ? <EmptyState title="None waiting" /> : null}
         {held.map((update) => (
-          <HeldUpdateReview key={update.id} id={update.id} kind={update.kind} holdReason={update.holdReason} payload={payloadText(update.payload)} />
+          <HeldUpdateReview key={update.id} id={update.id} kind={update.kind} holdReason={update.holdReason} payload={payloadText(openPayload(update.payload))} />
         ))}
       </Card>
       <Card className="grid gap-3">

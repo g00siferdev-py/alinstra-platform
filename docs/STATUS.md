@@ -2,6 +2,14 @@
 
 Phase 2 is merged into `main`. Staging deploy readiness (navigation, port, worker thread, production-image rehearsal) is on `main` with it. `staging` points at `main`.
 
+## Phase S Part 1 (branch `phase-s-security`, not merged)
+
+- Key versioning in `@alinstra/crypto`: keyring from `ENCRYPTION_KEY` (k1), `ENCRYPTION_KEY_V<N>`, and `ENCRYPTION_ACTIVE_KEY`. New writes are `v2.<keyId>…`; v1 and v2 are readable forever. `getEnv()` fails fast in production on a bad keyring.
+- Migration `20261006020000_phase_s_cipher_columns` adds cipher columns for `ClientMessage` (caller name, callback number, body, plus `callbackMasked`), `TransferTarget` (`e164Cipher`, `e164Masked`), `KnowledgeBase.staffCipher`, and `KnowledgeDocument.extractedTextCipher`. Plaintext columns are nullable and not dropped yet.
+- New rows are written encrypted only. Older rows are read through the plaintext fallback until `packages/db/scripts/encrypt-backfill.ts` runs. ChangeLog and QuickUpdate JSON mask phone numbers.
+- `packages/db/scripts/rotate-encryption-key.ts` and `docs/KEY-ROTATION.md` cover rotation.
+- Todo before this part is done on each environment: deploy, run the backfill, confirm "Plaintext still present" is 0. Dropping the plaintext columns is a later phase. Parts 2 to 7 of `docs/phase-s-plan.md` are not started.
+
 ## Verified locally
 
 - Phase 2: `pnpm test` passed 60 tests (prompt rendering, admin two-factor, allowance, isolation, plus the Phase 0–1 suites). `pnpm lint` and `pnpm typecheck` were run after the navigation and deploy-readiness changes.

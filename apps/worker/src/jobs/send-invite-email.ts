@@ -8,7 +8,7 @@ export async function sendInvite(inviteId: string): Promise<void> {
   const env = getEnv();
   const invite = await prisma.invite.findUnique({ where: { id: inviteId } });
   if (!invite || invite.acceptedAt || invite.revokedAt || !invite.tokenCipher) return;
-  const token = decryptString(invite.tokenCipher, env.ENCRYPTION_KEY);
+  const token = decryptString(invite.tokenCipher);
   const url = `${env.APP_URL}/invite/${token}`;
   await sendEmail({
     to: invite.email,

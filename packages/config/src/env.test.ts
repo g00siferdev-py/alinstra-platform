@@ -86,6 +86,45 @@ describe("production secret guard", () => {
     expect(() => getEnv()).not.toThrow();
   });
 
+  describe("encryption keyring", () => {
+    const prodBase = {
+      NODE_ENV: "production",
+      BETTER_AUTH_SECRET: realSecret,
+      ENCRYPTION_KEY: realKey,
+      STORAGE_DRIVER: "s3",
+      S3_ENDPOINT: "https://example.r2.cloudflarestorage.com",
+      S3_BUCKET: "alinstra-production",
+      S3_ACCESS_KEY_ID: "r2-access",
+      S3_SECRET_ACCESS_KEY: "r2-secret",
+    };
+    const keyTwo = randomBytes(32).toString("base64");
+
+    it("accepts a valid second key and an active key", () => {
+      useEnv({ ...prodBase, ENCRYPTION_KEY_V2: keyTwo, ENCRYPTION_ACTIVE_KEY: "2" });
+      expect(() => getEnv()).not.toThrow();
+    });
+
+    it("refuses, naming the variable and never the key, when a key is wrong", () => {
+      const short = Buffer.from("short").toString("base64");
+      useEnv({ ...prodBase, ENCRYPTION_KEY_V2: short });
+      expect(() => getEnv()).toThrow(/ENCRYPTION_KEY_V2 must be 32 bytes/);
+      resetEnvCache();
+      try {
+        getEnv();
+      } catch (error) {
+        expect((error as Error).message).not.toContain(short);
+        expect((error as Error).message).not.toContain(realKey);
+      }
+    });
+
+    it("refuses duplicate keys and a missing active key", () => {
+      useEnv({ ...prodBase, ENCRYPTION_KEY_V2: realKey });
+      expect(() => getEnv()).toThrow(/duplicates/);
+      useEnv({ ...prodBase, ENCRYPTION_ACTIVE_KEY: "2" });
+      expect(() => getEnv()).toThrow(/ENCRYPTION_ACTIVE_KEY points at k2/);
+    });
+  });
+
   it("accepts optional MARKETING_PHONE", () => {
     useEnv({
       NODE_ENV: "development",

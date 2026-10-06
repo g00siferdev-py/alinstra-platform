@@ -25,7 +25,7 @@ Better Auth's organization and invitation plugins are not used. Invites live in 
 
 We do **not** wrap those columns again. Better Auth decrypts them itself on verify; a second layer would break verification.
 
-`ENCRYPTION_KEY` is a separate 32-byte key for secrets this app owns and Better Auth does not: the invite token ciphertext now, and OAuth / provider tokens in later phases. Helper: `@alinstra/crypto` (`encryptString` / `decryptString`), AES-256-GCM, payload `v1.<iv>.<tag>.<ciphertext>` (base64url).
+`ENCRYPTION_KEY` is a separate 32-byte key for secrets this app owns and Better Auth does not: the invite token ciphertext now, and OAuth / provider tokens in later phases. Helper: `@alinstra/crypto` (`encryptString` / `decryptString`), AES-256-GCM. Payload `v1.<iv>.<tag>.<ciphertext>` (base64url) until Phase S; since then new writes are `v2.<keyId>.<iv>.<tag>.<ciphertext>` and v1 is still readable (see the Phase S Part 1 section below).
 
 Generate a key (32 bytes):
 
@@ -179,6 +179,27 @@ Payment is Stripe Checkout in subscription mode, with the setup fee as a one-tim
 ## 2026-10-02 — Staging and production hosting
 
 Daniel approved this: production is a **separate Railway project**, not a second environment inside the staging project. Each project has its own Postgres, Redis, R2 bucket, Resend key, Sentry environment, and `ENCRYPTION_KEY`. Staging is `staging.alinstra.com`. Production, later, is `app.alinstra.com`.
+
+## 2026-10-06 — Phase S Part 1: key versioning and encryption at rest
+
+**Keyring.** `@alinstra/crypto` reads keys from env: `k1` = `ENCRYPTION_KEY`, `kN` = `ENCRYPTION_KEY_V<N>` (N ≥ 2), and `ENCRYPTION_ACTIVE_KEY` (default `1`) picks the key for new writes. New writes are always `v2.<keyId>.<iv>.<tag>.<ciphertext>`. Decrypt reads v1 (always `k1`) and v2 (key by id) forever; an unknown key id throws an error that names the id and the env var, never the key. `loadKeyring` validates: every key is 32 bytes of base64, no two keys are identical, the active key exists. `getEnv()` calls it in production, so the app refuses to start on a bad keyring. `encryptString(plaintext, encodedKey?)` and `decryptString(payload, encodedKey?)` keep their old signature: with the second argument the string is a single-key ring (`k1`), without it the keyring comes from env. Call sites in `@alinstra/db`, `@alinstra/auth`, and the worker now omit it. `keyIdOf(payload)` and `encryptStringWithKey(plaintext, keyId)` exist for the rotation script. Runbook: `docs/KEY-ROTATION.md`.
+
+**Cipher columns, two-step.** This phase adds the columns and writes ciphertext only; it does not drop plaintext. Dropping `ClientMessage.callerName/callbackNumber/body`, `TransferTarget.e164`, `KnowledgeBase.staff`, and `KnowledgeDocument.extractedText` waits until staging and production are verified and the backfill reports zero plaintext. The migration (`20261006020000_phase_s_cipher_columns`) only adds nullable columns and drops three NOT NULL constraints, so the previous release keeps running while it is applied.
+
+| Table | Cipher columns | Plain, list-safe column |
+| --- | --- | --- |
+| `client_message` | `callerNameCipher`, `callbackNumberCipher`, `bodyCipher` | `callbackMasked`, e.g. `(423) ***-0198` |
+| `transfer_target` | `e164Cipher` | `e164Masked` |
+| `knowledge_base` | `staffCipher` (encrypted JSON) | none |
+| `knowledge_document` | `extractedTextCipher` | none |
+
+Writes: only ciphertext (and the mask); the old plaintext columns are set to null. Reads: cipher first, plaintext as the fallback for rows the backfill has not reached yet. Reads decrypt in the repository layer (`clientMessages.list`, `transferTargets.list`, `knowledgeBases.getCurrent`, the prompt loader) or at the moment of use (`toolsFor` when publishing to Retell, `decideTransfer` for a by-number lookup). Staff notes are plain text in the prompt that Ava reads, so the prompt and its AgentConfig snapshot still contain them; this phase protects the stored knowledge base rows, not the published prompt. Hours, services, FAQs, policies and notices stay plaintext by design.
+
+**Nothing filters or sorts on an encrypted field.** Messages list by `clientId` and `createdAt`; transfer targets by `clientId` and `createdAt` (a by-number lookup in `decideTransfer` decrypts a handful of rows for one client in memory); the message count queries use `createdAt` only. No search was broken.
+
+**Phone numbers in JSON logs.** `recordChange` masks every phone number (10 to 15 digits, with common separators; dates are left alone) in `ChangeLog.before/after`. `QuickUpdate.payload` is masked too. A held quick update (and an owner step edit held for review) is applied later from its payload, so for held rows the original rides along encrypted under `__sealed`, and `openPayload` restores it when an admin previews or approves. `ChangeRequest` has no payload column, so there was nothing to mask. `WizardDraft.payload` is not part of this part and still holds the numbers the admin typed until the wizard is submitted.
+
+**Backfill and rotation scripts** live in `packages/db/scripts/` and run with `tsx` (a dependency of `@alinstra/db`) from the Railway console. Both are idempotent and resumable (id-ordered batches, optimistic per-row updates so a live write is never overwritten), print counts only, and support `--dry-run`. Rotation covers every cipher column, including the CallRecord ones and `Invite.tokenCipher`, and prints per-column counts by key id before and after.
 
 ## Needs Daniel's review
 

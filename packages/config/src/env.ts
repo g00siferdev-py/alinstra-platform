@@ -1,3 +1,4 @@
+import { loadKeyring } from "@alinstra/crypto";
 import { z } from "zod";
 
 const envSchema = z.object({
@@ -6,6 +7,9 @@ const envSchema = z.object({
   BETTER_AUTH_URL: z.string().url(),
   BETTER_AUTH_SECRET: z.string().min(32),
   ENCRYPTION_KEY: z.string().min(1),
+  // Key rotation: kN = ENCRYPTION_KEY_V<N> (N >= 2, read from process.env by @alinstra/crypto).
+  // ENCRYPTION_ACTIVE_KEY picks the key for new writes; default "1".
+  ENCRYPTION_ACTIVE_KEY: z.string().default(""),
   ADMIN_EMAIL: z.string().email(),
   ADMIN_INITIAL_PASSWORD: z.string().min(12).optional(),
   DATABASE_URL: z.string().min(1),
@@ -67,6 +71,13 @@ function assertProductionSecrets(env: Env): void {
   }
   if (encryptionKeyByteLength(env.ENCRYPTION_KEY) !== 32) {
     throw new Error("Refusing to start: ENCRYPTION_KEY must decode to 32 bytes");
+  }
+  // Keyring: every ENCRYPTION_KEY_V<N> is 32 bytes, keys are distinct, the active key exists.
+  // Errors name the variable, never the key.
+  try {
+    loadKeyring(process.env);
+  } catch (error) {
+    throw new Error(`Refusing to start: ${error instanceof Error ? error.message : "invalid encryption keyring"}`);
   }
   if (
     env.STORAGE_DRIVER !== "s3" ||

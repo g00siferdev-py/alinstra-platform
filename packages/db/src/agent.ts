@@ -25,6 +25,7 @@ import { isVoiceKey } from "@alinstra/providers";
 import { Prisma } from "./generated/prisma/client";
 import { prisma } from "./client";
 import { recordChange, type Actor } from "./changes";
+import { extractedTextOf, maskPhonesIn, openPayload, protectPayload, sealJson, staffOf } from "./cipher";
 import { EXTRA_CHANGE_FEE_CENTS, wizardPayloadSchema } from "./domain";
 import { OWNER_STEP_HOLD_KIND, parseOwnerStepHold } from "./owner-edit-hold";
 import { flagAgentSync, writeTransferTargets } from "./provision";
@@ -207,12 +208,15 @@ function settingsOf(
 async function load(tx: Prisma.TransactionClient, clientId: string) {
   const client = await tx.client.findFirst({ where: { id: clientId, archivedAt: null } });
   if (!client) throw new Error("That client is not available.");
-  const knowledge = await tx.knowledgeBase.findFirst({ where: { clientId }, orderBy: { version: "desc" } });
-  const documents = await tx.knowledgeDocument.findMany({
+  const stored = await tx.knowledgeBase.findFirst({ where: { clientId }, orderBy: { version: "desc" } });
+  // Staff notes are encrypted at rest; decrypt only here, where the prompt input is built.
+  const knowledge = stored ? { ...stored, staff: staffOf(stored) } : null;
+  const rows = await tx.knowledgeDocument.findMany({
     where: { clientId, extractionStatus: { not: "deleted" } },
     orderBy: { createdAt: "asc" },
-    select: { id: true, originalFilename: true, extractedText: true },
+    select: { id: true, originalFilename: true, extractedText: true, extractedTextCipher: true },
   });
+  const documents = rows.map((row) => ({ id: row.id, originalFilename: row.originalFilename, extractedText: extractedTextOf(row) }));
   return { client, knowledge, documents, input: toInput(client, knowledge, documents) };
 }
 
@@ -512,7 +516,8 @@ async function forkKnowledge(tx: Prisma.TransactionClient, clientId: string, pat
       services: jsonOr(patch.services !== undefined ? patch.services : current.services),
       faqs: jsonOr(patch.faqs !== undefined ? patch.faqs : current.faqs),
       policies: jsonOr(patch.policies !== undefined ? patch.policies : current.policies),
-      staff: jsonOr(patch.staff !== undefined ? patch.staff : current.staff),
+      staff: Prisma.DbNull,
+      staffCipher: sealJson(patch.staff !== undefined ? patch.staff : staffOf(current)),
       notices: jsonOr(patch.notices !== undefined ? patch.notices : current.notices),
     },
   });
@@ -587,7 +592,7 @@ export async function applyQuickUpdate(ctx: Actor, input: QuickUpdateInput): Pro
       const holdReason = sensitiveHoldReason(textsForHold(input));
       if (holdReason) {
         const held = await tx.quickUpdate.create({
-          data: { clientId, kind: input.kind, payload: input as unknown as Prisma.InputJsonValue, status: "held", holdReason, createdById: ctx.id },
+          data: { clientId, kind: input.kind, payload: protectPayload(input) as unknown as Prisma.InputJsonValue, status: "held", holdReason, createdById: ctx.id },
         });
         await recordChange(tx, {
           clientId,
@@ -602,7 +607,7 @@ export async function applyQuickUpdate(ctx: Actor, input: QuickUpdateInput): Pro
       }
       const sync = await writeTransferTargets(tx, ctx, clientId, input.text);
       const row = await tx.quickUpdate.create({
-        data: { clientId, kind: input.kind, payload: input as unknown as Prisma.InputJsonValue, status: "applied", createdById: ctx.id },
+        data: { clientId, kind: input.kind, payload: maskPhonesIn(input) as unknown as Prisma.InputJsonValue, status: "applied", createdById: ctx.id },
       });
       await recordChange(tx, {
         clientId,
@@ -623,7 +628,7 @@ export async function applyQuickUpdate(ctx: Actor, input: QuickUpdateInput): Pro
         data: {
           clientId,
           kind: input.kind,
-          payload: input as unknown as Prisma.InputJsonValue,
+          payload: protectPayload(input) as unknown as Prisma.InputJsonValue,
           status: "held",
           holdReason,
           createdById: ctx.id,
@@ -660,7 +665,7 @@ export async function applyQuickUpdate(ctx: Actor, input: QuickUpdateInput): Pro
       data: {
         clientId,
         kind: input.kind,
-        payload: input as unknown as Prisma.InputJsonValue,
+        payload: maskPhonesIn(input) as unknown as Prisma.InputJsonValue,
         status: "applied",
         agentConfigId: config.id,
         createdById: ctx.id,
@@ -695,7 +700,7 @@ export async function previewHeldUpdate(ctx: Actor, id: string): Promise<PromptP
   const row = await prisma.quickUpdate.findFirst({ where: { id, status: "held" } });
   if (!row) throw new Error("That update is not waiting for review.");
   if (row.kind === OWNER_STEP_HOLD_KIND) {
-    const held = parseOwnerStepHold(row.payload);
+    const held = parseOwnerStepHold(openPayload(row.payload));
     return {
       prompt: held ? `Owner edit of ${held.title} (step ${held.step}) is waiting for review.` : "Owner edit is waiting for review.",
       truncated: false,
@@ -703,7 +708,7 @@ export async function previewHeldUpdate(ctx: Actor, id: string): Promise<PromptP
       holdReason: row.holdReason,
     };
   }
-  const input = parseQuick(row.payload);
+  const input = parseQuick(openPayload(row.payload));
   return prisma.$transaction(async (tx) => {
     const loaded = await load(tx, row.clientId);
     const patch = patchFor(loaded.knowledge, input);
@@ -718,7 +723,7 @@ export async function approveQuickUpdate(ctx: Actor, id: string): Promise<{ prom
     const row = await tx.quickUpdate.findFirst({ where: { id, status: "held" } });
     if (!row) throw new Error("That update is not waiting for review.");
     if (row.kind === OWNER_STEP_HOLD_KIND) {
-      const held = parseOwnerStepHold(row.payload);
+      const held = parseOwnerStepHold(openPayload(row.payload));
       if (!held) throw new Error("That update cannot be applied.");
       // Lazy import avoids a wizard ↔ agent cycle (wizard already calls rebuildAgentConfig).
       const { applyHeldOwnerStep } = await import("./wizard");
@@ -738,7 +743,7 @@ export async function approveQuickUpdate(ctx: Actor, id: string): Promise<{ prom
       });
       return { prompt: `Owner edit of ${held.title} is live.`, truncated: false, clientId: row.clientId };
     }
-    const input = parseQuick(row.payload);
+    const input = parseQuick(openPayload(row.payload));
     const error = validateQuickUpdate(input);
     if (error) throw new Error(error);
     if (input.kind === "transfers") {
@@ -1233,7 +1238,7 @@ async function forkKnowledgeSnapshot(
     : null;
   const settings = asRecord(source.settings);
   const value = (field: "hours" | "services" | "faqs" | "policies" | "staff" | "notices") =>
-    stored ? stored[field] : (settings[field] ?? null);
+    stored ? (field === "staff" ? staffOf(stored) : stored[field]) : (settings[field] ?? null);
   const latest = await tx.knowledgeBase.aggregate({ where: { clientId: source.clientId }, _max: { version: true } });
   return tx.knowledgeBase.create({
     data: {
@@ -1244,7 +1249,8 @@ async function forkKnowledgeSnapshot(
       services: jsonOr(value("services")),
       faqs: jsonOr(value("faqs")),
       policies: jsonOr(value("policies")),
-      staff: jsonOr(value("staff")),
+      staff: Prisma.DbNull,
+      staffCipher: sealJson(value("staff")),
       notices: jsonOr(value("notices")),
     },
   });

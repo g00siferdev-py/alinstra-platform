@@ -183,7 +183,7 @@ describe("phase 4b calls", () => {
     const rows = await prisma.callRecord.findMany({ where: { clientId: client.id } });
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ outcome: "message_taken", sentiment: "Neutral", costCents: 70, durationSeconds: 45, recordingStatus: "pending" });
-    expect(rows[0]!.summaryCipher).toMatch(/^v1\./);
+    expect(rows[0]!.summaryCipher).toMatch(/^v2\.k\d+\./);
     expect(rows[0]!.endedAt?.getTime()).toBe(startMs + 45_000);
   });
 
@@ -317,7 +317,7 @@ describe("phase 4b calls", () => {
     expect(old.purgedAt?.getTime()).toBe(now.getTime());
     const fresh = await prisma.callRecord.findUniqueOrThrow({ where: { retellCallId: "call_new" } });
     expect(fresh.purgedAt).toBeNull();
-    expect(fresh.transcriptCipher).toMatch(/^v1\./);
+    expect(fresh.transcriptCipher).toMatch(/^v2\.k\d+\./);
     const stored = await prisma.client.findUniqueOrThrow({ where: { id: client.id } });
     expect(stored.lastCallPurgeAt?.getTime()).toBe(now.getTime());
     expect(stored.lastCallPurgeCount).toBe(1);

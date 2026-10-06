@@ -5,6 +5,7 @@ import { Pool } from "pg";
 import { Prisma } from "./generated/prisma/client";
 import { refreshStaleAgentConfig } from "./agent";
 import { recordChange, type Actor } from "./changes";
+import { messageData, transferNumberOf, transferTargetData, withMessageText, withTransferNumber } from "./cipher";
 import { prisma } from "./client";
 import {
   assertTransferNumber,
@@ -100,16 +101,18 @@ export function transferTargets(ctx: TenantContext) {
   return {
     list(clientId: string) {
       if (!owns(ctx, clientId)) return Promise.resolve([]);
-      return prisma.transferTarget.findMany({ where: { clientId }, orderBy: { createdAt: "asc" } });
+      // `e164` is decrypted here for portal/admin display (formatTransferTargets); the list view uses `e164Masked`.
+      return prisma.transferTarget.findMany({ where: { clientId }, orderBy: { createdAt: "asc" } }).then((rows) => rows.map(withTransferNumber));
     },
   };
 }
 
 export function clientMessages(ctx: TenantContext) {
   return {
+    /** Newest first. `callerName`, `callbackNumber`, and `body` are decrypted (plaintext fallback for older rows); `callbackMasked` is the list-safe form. */
     list(clientId: string) {
       if (!owns(ctx, clientId)) return Promise.resolve([]);
-      return prisma.clientMessage.findMany({ where: { clientId }, orderBy: { createdAt: "desc" }, take: 50 });
+      return prisma.clientMessage.findMany({ where: { clientId }, orderBy: { createdAt: "desc" }, take: 50 }).then((rows) => rows.map(withMessageText));
     },
   };
 }
@@ -158,7 +161,7 @@ export async function writeTransferTargets(tx: Prisma.TransactionClient, ctx: Ac
   if (!client) throw new Error("That client is not available.");
   await tx.transferTarget.deleteMany({ where: { clientId } });
   if (rows.length > 0) {
-    await tx.transferTarget.createMany({ data: rows.map((row) => ({ clientId, label: row.label, e164: row.e164 })) });
+    await tx.transferTarget.createMany({ data: rows.map((row) => ({ clientId, ...transferTargetData(row) })) });
   }
   const sync = await flagAgentSync(tx, clientId, ctx);
   await recordChange(tx, {
@@ -613,7 +616,7 @@ async function ensureDanielTarget(clientId: string, number: string | null) {
   const count = await prisma.transferTarget.count({ where: { clientId } });
   if (count > 0 || !number) return;
   assertTransferNumber(number);
-  await prisma.transferTarget.create({ data: { clientId, label: "Daniel", e164: number } });
+  await prisma.transferTarget.create({ data: { clientId, ...transferTargetData({ label: "Daniel", e164: number }) } });
 }
 
 async function publishInput(clientId: string, deps: Phase3Deps) {
@@ -626,12 +629,12 @@ async function publishInput(clientId: string, deps: Phase3Deps) {
   const voice = loaded.client.voice && typeof loaded.client.voice === "object" ? (loaded.client.voice as { voiceId?: unknown }) : {};
   return {
     loaded,
-    targets,
     // The client's wizard selection decides the Retell voice; unset falls back to the default voice.
     voiceId: retellVoiceIdFor(voice.voiceId),
     prompt: retellPrompt(loaded.config.promptText, loaded.client.timezone),
     beginMessage: loaded.config.greeting?.trim() || "Thank you for calling.",
-    tools: toolsFor(deps.appUrl, targets, loaded.client.features),
+    // Transfer numbers are decrypted only here, to publish the transfer tools to Retell.
+    tools: toolsFor(deps.appUrl, targets.map(withTransferNumber), loaded.client.features),
     timing: callTimingOf(loaded.client.coverage),
     webhookUrl: `${base}/api/retell/webhook`,
     inboundWebhookUrl: `${base}/api/retell/inbound`,
@@ -956,9 +959,12 @@ export async function recordTakenMessage(
     const row = await tx.clientMessage.create({
       data: {
         clientId,
-        callerName: plainCallerName(args.callerName ?? "Caller"),
-        callbackNumber: (args.callbackNumber ?? "").trim().slice(0, 40),
-        body: body.slice(0, 4000),
+        // Ciphertext and the masked callback only; the plaintext columns stay null (Phase S).
+        ...messageData({
+          callerName: plainCallerName(args.callerName ?? "Caller"),
+          callbackNumber: (args.callbackNumber ?? "").trim().slice(0, 40),
+          body: body.slice(0, 4000),
+        }),
         retellCallId: retellCallId?.trim() ? retellCallId.trim().slice(0, 120) : null,
       },
     });
@@ -997,7 +1003,8 @@ export async function decideTransfer(
   let index = wanted ? targets.findIndex((target) => target.label.trim().toLowerCase() === wanted) : -1;
   if (index === -1 && args.number) {
     const normalized = normalizeTransferNumber(args.number);
-    if (normalized) index = targets.findIndex((target) => target.e164 === normalized);
+    // Decrypt only for this legacy by-number lookup.
+    if (normalized) index = targets.findIndex((target) => transferNumberOf(target) === normalized);
   }
   if (index === -1) return { allowed: false, reason: TRANSFER_UNKNOWN_TARGET };
   if (!officeOpen(client.weeklyHours, client.timezone, now)) return { allowed: false, reason: TRANSFER_CLOSED };

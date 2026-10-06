@@ -1,4 +1,5 @@
 import type { Prisma } from "./generated/prisma/client";
+import { maskPhonesIn } from "./cipher";
 import { prisma } from "./client";
 import type { Role, TenantContext } from "./tenant";
 
@@ -59,8 +60,9 @@ async function writeChange(
       entityType: entry.entityType,
       entityId: entry.entityId,
       summary: entry.summary,
-      before: entry.before,
-      after: entry.after,
+      // Phone numbers never land in the log in full (Phase S): 10+ digit numbers are masked.
+      before: entry.before === undefined ? undefined : maskPhonesIn(entry.before),
+      after: entry.after === undefined ? undefined : maskPhonesIn(entry.after),
     },
   });
 }

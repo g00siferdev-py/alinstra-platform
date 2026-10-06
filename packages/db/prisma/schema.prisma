@@ -241,7 +241,10 @@ model KnowledgeBase {
   services  Json?
   faqs      Json?
   policies  Json?
+  /// Legacy plaintext staff notes. New writes use staffCipher and leave this null.
   staff     Json?
+  /// Encrypted JSON of the staff notes (AES-256-GCM, @alinstra/crypto).
+  staffCipher String? @db.Text
   notices   Json?
   createdAt DateTime            @default(now())
   updatedAt DateTime            @updatedAt
@@ -263,7 +266,9 @@ model KnowledgeDocument {
   originalFilename       String
   contentType            String
   byteSize               Int
+  /// Legacy plaintext. New extractions write extractedTextCipher and leave this null.
   extractedText          String?        @db.Text
+  extractedTextCipher    String?        @db.Text
   extractedTextTruncated Boolean        @default(false)
   extractionStatus       String         @default("pending")
   extractionError        String?
@@ -387,7 +392,11 @@ model TransferTarget {
   clientId  String
   client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
   label     String
-  e164      String
+  /// Legacy plaintext. New writes use e164Cipher + e164Masked and leave this null.
+  e164       String?
+  e164Cipher String?  @db.Text
+  /// e.g. (423) ***-0198, safe to show in lists.
+  e164Masked String?
   createdAt DateTime @default(now())
 
   @@index([clientId])
@@ -398,9 +407,15 @@ model ClientMessage {
   id             String   @id @default(cuid())
   clientId       String
   client         Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  callerName     String
-  callbackNumber String
-  body           String   @db.Text
+  /// Legacy plaintext columns, nullable since Phase S. New messages write the *Cipher columns only.
+  callerName     String?
+  callbackNumber String?
+  body           String?  @db.Text
+  callerNameCipher     String? @db.Text
+  callbackNumberCipher String? @db.Text
+  bodyCipher           String? @db.Text
+  /// e.g. (423) ***-0198, safe to show in lists.
+  callbackMasked       String?
   /// The Retell call the message was taken on, when the tool call carried one.
   retellCallId   String?
   createdAt      DateTime @default(now())

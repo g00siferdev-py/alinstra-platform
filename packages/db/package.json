@@ -10,7 +10,9 @@
     "generate": "prisma generate",
     "migrate": "prisma migrate dev",
     "migrate:deploy": "prisma migrate deploy",
-    "lint": "pnpm -w exec eslint packages/db/src packages/db/prisma.config.ts",
+    "lint": "pnpm -w exec eslint packages/db/src packages/db/scripts packages/db/prisma.config.ts",
+    "encrypt:backfill": "tsx scripts/encrypt-backfill.ts",
+    "encrypt:rotate": "tsx scripts/rotate-encryption-key.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "build": "prisma generate"
@@ -23,6 +25,7 @@
     "@prisma/client": "7.10.0",
     "dotenv": "17.2.3",
     "pg": "8.16.3",
+    "tsx": "4.20.6",
     "zod": "4.6.5"
   },
   "devDependencies": {

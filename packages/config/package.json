@@ -13,6 +13,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@alinstra/crypto": "workspace:*",
     "zod": "4.6.5"
   },
   "devDependencies": {

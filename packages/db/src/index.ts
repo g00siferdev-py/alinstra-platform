@@ -148,6 +148,23 @@ export {
 } from "./domain";
 export { recordEmailChange, type Actor } from "./changes";
 export {
+  extractedTextOf,
+  maskPhoneDisplay,
+  maskPhonesIn,
+  maskPhonesInText,
+  open as openCipher,
+  openJson,
+  openPayload,
+  protectPayload,
+  readField,
+  seal as sealCipher,
+  sealJson,
+  staffOf,
+  transferNumberOf,
+  withMessageText,
+  withTransferNumber,
+} from "./cipher";
+export {
   applyRetellCall,
   ARCHIVED_PURGE_GRACE_DAYS,
   CALL_RETENTION_LIMITS,

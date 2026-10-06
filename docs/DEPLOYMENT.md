@@ -131,6 +131,10 @@ Run that twice. The first value is `BETTER_AUTH_SECRET` (it is also longer than 
 
 `ADMIN_INITIAL_PASSWORD`: a password of at least 12 characters, used only by the seed command. You will delete this variable after you enroll two-factor.
 
+`ENCRYPTION_KEY_V2` and `ENCRYPTION_ACTIVE_KEY` are optional and only used when you rotate the encryption key. Both services (web and worker) must always have the same encryption variables. See `docs/KEY-ROTATION.md`.
+
+After the Phase S deploy, run the one-time backfill once per environment from the web service's Railway console: `cd /app/packages/db && pnpm exec tsx scripts/encrypt-backfill.ts --dry-run`, then without `--dry-run`. It encrypts older messages, transfer numbers, staff notes, and document text, and masks phone numbers in the change log.
+
 In Railway, web and worker do not share a variable group with production later. Reference Postgres with `${{Postgres.DATABASE_URL}}` and Redis with `${{Redis.REDIS_URL}}` (the plugin variable names Railway shows on those services).
 
 `PORT` is set by Railway. Do not set it yourself.

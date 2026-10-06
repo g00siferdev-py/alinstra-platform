@@ -1,5 +1,4 @@
 import { createHash, randomBytes } from "node:crypto";
-import { getEnv } from "@alinstra/config";
 import { encryptString } from "@alinstra/crypto";
 import { prisma, type Role, type TenantContext } from "@alinstra/db";
 import { enqueueSendInvite } from "@alinstra/queue";
@@ -42,7 +41,7 @@ export async function createInvite(input: {
       role: input.role,
       clientId: input.clientId,
       tokenHash: hashInviteToken(token),
-      tokenCipher: encryptString(token, getEnv().ENCRYPTION_KEY),
+      tokenCipher: encryptString(token),
       expiresAt: new Date(Date.now() + INVITE_TTL_MS),
       createdById: input.actor.id,
     },

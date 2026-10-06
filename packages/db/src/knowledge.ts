@@ -1,3 +1,4 @@
+import { staffOf } from "./cipher";
 import { prisma } from "./client";
 import { recordChange, type Actor } from "./changes";
 import {
@@ -24,7 +25,7 @@ const documentSelect = {
   originalFilename: true,
   contentType: true,
   byteSize: true,
-  extractedText: true,
+  // The extracted text itself (extractedTextCipher, legacy extractedText) is never selected for lists.
   extractedTextTruncated: true,
   extractionStatus: true,
   extractionError: true,
@@ -35,12 +36,14 @@ export function knowledgeBases(ctx: TenantContext) {
   assertTenantContext(ctx);
   const clientFilter = ctx.role === "admin" ? {} : { clientId: ctx.clientId };
   return {
-    getCurrent(clientId: string) {
+    /** Latest knowledge base. `staff` is decrypted (cipher first, legacy plaintext fallback). */
+    async getCurrent(clientId: string) {
       assertClientAccess(ctx, clientId);
-      return prisma.knowledgeBase.findFirst({
+      const row = await prisma.knowledgeBase.findFirst({
         where: { clientId, ...clientFilter },
         orderBy: { version: "desc" },
       });
+      return row ? { ...row, staff: staffOf(row) } : null;
     },
   };
 }
