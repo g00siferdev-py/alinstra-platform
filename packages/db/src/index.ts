@@ -328,6 +328,19 @@ export {
 } from "./admin-overview";
 export { ownerOverview, type OwnerOverview } from "./owner-overview";
 export {
+  approvePlanChangeRequest,
+  cancelPlanChangeRequest,
+  createOwnerPortalSession,
+  listPlanChangeRequests,
+  ownerBillingOverview,
+  pausePastDueClients,
+  rejectPlanChangeRequest,
+  requestPlanChange,
+  type OwnerBillingOverview,
+  type OwnerEmail,
+  type PausePastDueReport,
+} from "./billing-lifecycle";
+export {
   callFlags,
   flagExplanation,
   parseCallFlags,

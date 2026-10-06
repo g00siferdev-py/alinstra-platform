@@ -17,7 +17,7 @@ export type LiveCallRow = {
 
 export type AdminTodoItem = {
   id: string;
-  kind: "held_edit" | "failed_recording" | "flagged_call" | "lead" | "setup" | "self_serve_review";
+  kind: "held_edit" | "failed_recording" | "flagged_call" | "lead" | "setup" | "self_serve_review" | "paused" | "plan_change";
   title: string;
   detail: string;
   href: string;
@@ -27,7 +27,7 @@ export type AdminClientRow = {
   id: string;
   name: string;
   initials: string;
-  status: "on_a_call" | "live" | "setting_up" | "draft";
+  status: "on_a_call" | "live" | "setting_up" | "draft" | "paused";
   statusLabel: string;
   planName: string | null;
   minutesUsed: number;
@@ -123,6 +123,8 @@ export async function adminOverview(ctx: Actor, now = new Date()): Promise<Admin
     flaggedCalls,
     uncontactedLeads,
     selfServeAwaitingReview,
+    pausedClients,
+    planChangeRequests,
     clients,
     latestCallRows,
     activeInterviews,
@@ -172,6 +174,22 @@ export async function adminOverview(ctx: Actor, now = new Date()): Promise<Admin
       take: 10,
       orderBy: { wizardSubmittedAt: "desc" },
       select: { id: true, name: true },
+    }),
+    prisma.client.findMany({
+      where: { archivedAt: null, internal: false, billingStatus: "paused" },
+      take: 20,
+      orderBy: { updatedAt: "desc" },
+      select: { id: true, name: true, pastDueSince: true },
+    }),
+    prisma.planChangeRequest.findMany({
+      where: { status: { in: ["pending", "scheduled"] } },
+      take: 20,
+      orderBy: { createdAt: "desc" },
+      include: {
+        client: { select: { name: true } },
+        toPlan: { select: { name: true } },
+        fromPlan: { select: { name: true } },
+      },
     }),
     prisma.client.findMany({
       where: { archivedAt: null },
@@ -268,6 +286,27 @@ export async function adminOverview(ctx: Actor, now = new Date()): Promise<Admin
       href: `/admin/clients/${client.id}`,
     });
   }
+  for (const client of pausedClients) {
+    todos.push({
+      id: `paused-${client.id}`,
+      kind: "paused",
+      title: `${client.name} is paused`,
+      detail: "Past due more than 7 days — Ava is not answering until the card is updated.",
+      href: `/admin/clients/${client.id}`,
+    });
+  }
+  for (const row of planChangeRequests) {
+    todos.push({
+      id: `pcr-${row.id}`,
+      kind: "plan_change",
+      title:
+        row.status === "pending"
+          ? `Approve ${row.client.name}'s plan change`
+          : `${row.client.name}'s downgrade is scheduled`,
+      detail: `${row.fromPlan.name} → ${row.toPlan.name} (${row.direction}).`,
+      href: `/admin/clients/${row.clientId}/billing`,
+    });
+  }
   for (const client of clients) {
     const draft = client.wizardDraft;
     const midWizard = Boolean(draft && !draft.discardedAt && !client.wizardSubmittedAt);
@@ -300,6 +339,9 @@ export async function adminOverview(ctx: Actor, now = new Date()): Promise<Admin
     if (liveClientIds.has(client.id)) {
       status = "on_a_call";
       statusLabel = "On a call";
+    } else if (client.billingStatus === "paused") {
+      status = "paused";
+      statusLabel = "Paused";
     } else if (interviewPct !== null || midWizard) {
       status = "setting_up";
       statusLabel =

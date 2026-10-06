@@ -214,6 +214,25 @@ export type ReportMeterEventInput = {
   identifier: string;
 };
 
+export type CreatePortalSessionInput = {
+  customerId: string;
+  returnUrl: string;
+};
+
+export type UpdateSubscriptionPricesInput = {
+  subscriptionId: string;
+  recurringPriceId: string;
+  /** Null removes the metered line if present; otherwise swaps/adds it. */
+  meteredPriceId: string | null;
+  /** Upgrades prorate; downgrades use none so the new price hits the next invoice. */
+  prorationBehavior: "create_prorations" | "none";
+};
+
+export type SubscriptionPeriodBounds = {
+  currentPeriodStart: Date;
+  currentPeriodEnd: Date;
+};
+
 export interface BillingPlatform {
   findCustomerId(clientId: string): Promise<string | null>;
   createCustomer(input: { clientId: string; name: string; email: string | null; idempotencyKey: string }): Promise<{ customerId: string }>;
@@ -226,6 +245,13 @@ export interface BillingPlatform {
   /** POST /v1/billing/meter_events. Returns the identifier Stripe accepted (no separate id). */
   reportMeterEvent(input: ReportMeterEventInput): Promise<{ identifier: string }>;
   createCheckout(input: CreateCheckoutInput): Promise<{ sessionId: string; url: string; expiresAt: Date }>;
+  /** Stripe Customer Portal (card, invoices, cancel at period end). */
+  createPortalSession(input: CreatePortalSessionInput): Promise<{ url: string }>;
+  /**
+   * Swap the subscription's base recurring and metered prices.
+   * Lists current items, replaces matching kinds, leaves unrelated items alone.
+   */
+  updateSubscriptionPrices(input: UpdateSubscriptionPricesInput): Promise<SubscriptionPeriodBounds>;
   cancelAtPeriodEnd(subscriptionId: string): Promise<{ serviceEndsAt: Date }>;
   cancelNow(subscriptionId: string): Promise<"canceled" | "missing">;
 }

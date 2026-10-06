@@ -1,4 +1,4 @@
-import { retellTiming, type AgentPublish, type BillingPlatform, type CallTiming, type CreateCheckoutInput, type EnsurePriceInput, type PriceKind, type PublishedTool, type RecordingDownload, type ReportMeterEventInput, type RetellCallSnapshot, type RetellTiming, type VoicePlatform } from "./types";
+import { retellTiming, type AgentPublish, type BillingPlatform, type CallTiming, type CreateCheckoutInput, type CreatePortalSessionInput, type EnsurePriceInput, type PriceKind, type PublishedTool, type RecordingDownload, type ReportMeterEventInput, type RetellCallSnapshot, type RetellTiming, type SubscriptionPeriodBounds, type UpdateSubscriptionPricesInput, type VoicePlatform } from "./types";
 
 type StoredLlm = { clientId: string; prompt: string; tools: PublishedTool[]; beginMessage: string };
 /** Mirrors what httpVoice sends: the agent carries the clamped Retell timing fields. */
@@ -123,7 +123,11 @@ export class MemoryBilling implements BillingPlatform {
   } | null = null;
   canceled = new Set<string>();
   periodEnd = new Map<string, Date>();
-  creates = { customer: 0, price: 0, checkout: 0, meter: 0, meterEvent: 0 };
+  periodStart = new Map<string, Date>();
+  subscriptionItems = new Map<string, { recurringPriceId: string; meteredPriceId: string | null }>();
+  portalSessions: Array<{ customerId: string; returnUrl: string; url: string }> = [];
+  lastPriceUpdate: UpdateSubscriptionPricesInput | null = null;
+  creates = { customer: 0, price: 0, checkout: 0, meter: 0, meterEvent: 0, portal: 0 };
 
   async findCustomerId(clientId: string): Promise<string | null> {
     return this.customers.get(clientId) ?? null;
@@ -196,8 +200,35 @@ export class MemoryBilling implements BillingPlatform {
     const url = `https://checkout.stripe.test/${input.clientId}/${this.creates.checkout}`;
     const subscriptionId = `sub_${input.clientId}`;
     this.checkouts.set(input.idempotencyKey, { url, subscriptionId });
-    this.periodEnd.set(subscriptionId, new Date(Date.now() + 30 * 24 * 60 * 60 * 1000));
+    const start = new Date();
+    const end = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    this.periodStart.set(subscriptionId, start);
+    this.periodEnd.set(subscriptionId, end);
+    this.subscriptionItems.set(subscriptionId, {
+      recurringPriceId: input.recurringPriceId,
+      meteredPriceId: input.meteredPriceId ?? null,
+    });
     return { sessionId: `cs_${input.clientId}`, url, expiresAt };
+  }
+
+  async createPortalSession(input: CreatePortalSessionInput): Promise<{ url: string }> {
+    this.creates.portal += 1;
+    const url = `https://billing.stripe.test/session/${input.customerId}/${this.creates.portal}`;
+    this.portalSessions.push({ customerId: input.customerId, returnUrl: input.returnUrl, url });
+    return { url };
+  }
+
+  async updateSubscriptionPrices(input: UpdateSubscriptionPricesInput): Promise<SubscriptionPeriodBounds> {
+    this.lastPriceUpdate = input;
+    const start = this.periodStart.get(input.subscriptionId) ?? new Date();
+    const end = this.periodEnd.get(input.subscriptionId) ?? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    this.subscriptionItems.set(input.subscriptionId, {
+      recurringPriceId: input.recurringPriceId,
+      meteredPriceId: input.meteredPriceId,
+    });
+    this.periodStart.set(input.subscriptionId, start);
+    this.periodEnd.set(input.subscriptionId, end);
+    return { currentPeriodStart: start, currentPeriodEnd: end };
   }
 
   subscriptionFor(clientId: string): string {

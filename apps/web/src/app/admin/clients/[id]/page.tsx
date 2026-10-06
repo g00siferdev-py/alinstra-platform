@@ -95,6 +95,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
         <Link href={`/admin/clients/${client.id}/agent`}>Agent config</Link>
         <Link href={`/admin/clients/${client.id}/calls`}>Calls</Link>
         <Link href={`/admin/clients/${client.id}/changes`}>Change requests</Link>
+        <Link href={`/admin/clients/${client.id}/billing`}>Billing</Link>
         <Link href={`/admin/clients/${client.id}/access`}>Access history</Link>
       </div>
       <ProvisionPanel
@@ -196,6 +197,11 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
         <p className="text-sm">Voice: {voiceDisplayName(clientVoice.voiceId)} · Assistant name: {typeof clientVoice.assistantName === "string" && clientVoice.assistantName.trim() ? clientVoice.assistantName : "Ava"}</p>
         <p className="text-sm">Plan: {plan?.name ?? "—"}{client.setupFeeWaived ? " · setup fee waived" : ""}</p>
         <p className="text-sm">Minutes included: {client.overrideIncludedMinutes ?? plan?.includedMinutes ?? "—"}</p>
+        <p className="text-sm">
+          Billing: {client.billingStatus}
+          {client.billingStatus === "paused" ? " · Ava is paused until the card is updated" : ""}
+          {client.pastDueSince ? ` · past due since ${when(client.pastDueSince)}` : ""}
+        </p>
         <p className="text-sm">Owner email on file: {client.portalOwnerEmail ?? "—"}</p>
       </Card>
       <Card className="grid gap-2">

@@ -26,6 +26,7 @@ export async function AppHeader({ liveCallCount = 0 }: { liveCallCount?: number 
         ? [
             { href: "/home", label: "Home" },
             { href: "/home/business", label: "My Business" },
+            { href: "/home/billing", label: "Billing" },
             { href: "/home/calls", label: "Calls" },
             { href: "/home/changes", label: "Change Requests" },
             { href: "/home/team", label: "Team" },

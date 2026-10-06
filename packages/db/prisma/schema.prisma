@@ -114,6 +114,9 @@ model Plan {
   createdAt               DateTime @default(now())
   updatedAt               DateTime @updatedAt
   clients                 Client[]
+  pendingClients          Client[] @relation("ClientPendingPlan")
+  planChangeFrom          PlanChangeRequest[] @relation("PlanChangeFrom")
+  planChangeTo            PlanChangeRequest[] @relation("PlanChangeTo")
 
   @@map("plan")
 }
@@ -166,6 +169,14 @@ model Client {
   stripeCheckoutUrl               String?
   stripeCheckoutExpiresAt         DateTime?
   paidAt                          DateTime?
+  /// Set on first invoice.payment_failed while past_due; cleared when paid resumes.
+  pastDueSince                    DateTime?
+  /// Stripe subscription item current period (from subscription events).
+  stripeCurrentPeriodStart        DateTime?
+  stripeCurrentPeriodEnd          DateTime?
+  /// Downgrade approved but not yet applied to planId (waits for next renewal).
+  pendingPlanId                   String?
+  pendingPlan                     Plan?     @relation("ClientPendingPlan", fields: [pendingPlanId], references: [id], onDelete: SetNull)
   serviceEndsAt                   DateTime?
   retellLlmId                     String?   @unique
   retellAgentId                   String?   @unique
@@ -189,6 +200,7 @@ model Client {
   agentConfigs                    AgentConfig[]
   quickUpdates                    QuickUpdate[]
   changeRequests                  ChangeRequest[]
+  planChangeRequests              PlanChangeRequest[]
   transferTargets                 TransferTarget[]
   messages                        ClientMessage[]
   callRecords                     CallRecord[]
@@ -199,6 +211,7 @@ model Client {
 
   @@index([status])
   @@index([archivedAt])
+  @@index([billingStatus, pastDueSince])
   @@map("client")
 }
 
@@ -436,6 +449,30 @@ model ChangeRequest {
 
   @@index([clientId, status])
   @@map("change_request")
+}
+
+/// Owner-requested plan change. Upgrades apply on admin approve; downgrades wait for the next renewal.
+model PlanChangeRequest {
+  id           String    @id @default(cuid())
+  clientId     String
+  client       Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  fromPlanId   String
+  fromPlan     Plan      @relation("PlanChangeFrom", fields: [fromPlanId], references: [id], onDelete: Restrict)
+  toPlanId     String
+  toPlan       Plan      @relation("PlanChangeTo", fields: [toPlanId], references: [id], onDelete: Restrict)
+  /// upgrade | downgrade
+  direction    String
+  /// pending | approved | rejected | scheduled | applied | cancelled
+  status       String
+  createdById  String
+  reviewedById String?
+  createdAt    DateTime  @default(now())
+  reviewedAt   DateTime?
+  appliedAt    DateTime?
+
+  @@index([clientId, status])
+  @@index([status])
+  @@map("plan_change_request")
 }
 
 model TransferTarget {

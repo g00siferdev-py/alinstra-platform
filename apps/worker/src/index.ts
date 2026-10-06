@@ -14,6 +14,7 @@ import {
   schedulePurgeCalls,
   scheduleReconcileCalls,
   scheduleReportUsage,
+  schedulePausePastDue,
   sendAccountEmail,
   sendAdminNotice,
   sendInviteEmail,
@@ -31,6 +32,7 @@ import { markExtractionFailed } from "./jobs/extract-knowledge-text";
 import { runIsolatedJob } from "./jobs/run-isolated";
 import { runChurnSweep, runMessageEmail, runProvision, runSync } from "./jobs/phase3";
 import { runReportUsage } from "./jobs/report-usage";
+import { runPausePastDue } from "./jobs/pause-past-due";
 import { deliverAdminNotice } from "./jobs/send-admin-notice";
 import { sendInvite } from "./jobs/send-invite-email";
 import { sendPasswordReset } from "./jobs/send-password-reset-email";
@@ -153,6 +155,10 @@ const calls = new Worker(
       await runReportUsage();
       return;
     }
+    if (job.name === "pause-past-due") {
+      await runPausePastDue();
+      return;
+    }
     if (job.name === "backup-db") {
       await runBackupDb();
       return;
@@ -172,6 +178,10 @@ void scheduleReconcileCalls().catch((error: unknown) => {
 
 void scheduleReportUsage().catch((error: unknown) => {
   log("error", "report-usage schedule failed", { error: error instanceof Error ? error.name : "unknown" });
+});
+
+void schedulePausePastDue().catch((error: unknown) => {
+  log("error", "pause-past-due schedule failed", { error: error instanceof Error ? error.name : "unknown" });
 });
 
 void scheduleBackupDb().catch((error: unknown) => {

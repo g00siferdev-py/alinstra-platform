@@ -265,6 +265,9 @@ importers:
       '@alinstra/crypto':
         specifier: workspace:*
         version: link:../crypto
+      '@alinstra/email':
+        specifier: workspace:*
+        version: link:../email
       '@alinstra/providers':
         specifier: workspace:*
         version: link:../providers

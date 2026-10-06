@@ -1,4 +1,4 @@
-import { ProviderRequestError, RECORDING_MAX_BYTES, retellTiming, STRIPE_API_VERSION, type AgentPublish, type BillingPlatform, type EnsurePriceInput, type PublishedTool, type ReportMeterEventInput, type RetellCallSnapshot, type VoicePlatform } from "./types";
+import { ProviderRequestError, RECORDING_MAX_BYTES, retellTiming, STRIPE_API_VERSION, type AgentPublish, type BillingPlatform, type EnsurePriceInput, type PublishedTool, type ReportMeterEventInput, type RetellCallSnapshot, type UpdateSubscriptionPricesInput, type VoicePlatform } from "./types";
 
 type FetchLike = (url: string, init?: RequestInit) => Promise<Response>;
 
@@ -38,15 +38,24 @@ function toolsOf(tools: PublishedTool[]): unknown[] {
 }
 
 export function subscriptionPeriodEnd(body: Record<string, unknown>, now = Date.now()): Date {
-  const items = body.items as { data?: Array<{ current_period_end?: unknown }> } | undefined;
-  const ends = (items?.data ?? [])
-    .map((item) => Number(item.current_period_end))
-    .filter((value) => Number.isFinite(value));
-  if (ends.length === 0) throw new Error("Stripe did not return a subscription item period end. Nothing was saved.");
-  const seconds = Math.max(...ends);
-  const endsAt = new Date(seconds * 1000);
+  return subscriptionPeriodBounds(body, now).currentPeriodEnd;
+}
+
+/** Period start/end from subscription items (basil+ shape). Uses the max end and matching start. */
+export function subscriptionPeriodBounds(body: Record<string, unknown>, now = Date.now()): { currentPeriodStart: Date; currentPeriodEnd: Date } {
+  const items = body.items as { data?: Array<{ current_period_start?: unknown; current_period_end?: unknown }> } | undefined;
+  const rows = (items?.data ?? [])
+    .map((item) => ({
+      start: Number(item.current_period_start),
+      end: Number(item.current_period_end),
+    }))
+    .filter((row) => Number.isFinite(row.end));
+  if (rows.length === 0) throw new Error("Stripe did not return a subscription item period end. Nothing was saved.");
+  const chosen = rows.reduce((best, row) => (row.end >= best.end ? row : best));
+  const endsAt = new Date(chosen.end * 1000);
   if (!(endsAt.getTime() > now)) throw new Error("Stripe period end is not in the future. Nothing was saved.");
-  return endsAt;
+  const startSeconds = Number.isFinite(chosen.start) && chosen.start > 0 ? chosen.start : chosen.end - 30 * 24 * 60 * 60;
+  return { currentPeriodStart: new Date(startSeconds * 1000), currentPeriodEnd: endsAt };
 }
 
 function redactSecrets(value: string, secrets: string[]): string {
@@ -435,6 +444,63 @@ export function httpBilling(secretKey: string, fetchImpl: FetchLike = fetch): Bi
         body: formBody({ cancel_at_period_end: "true" }),
       });
       return { serviceEndsAt: subscriptionPeriodEnd(body) };
+    },
+    async createPortalSession(input) {
+      const { body } = await send("/v1/billing/portal/sessions", {
+        method: "POST",
+        body: formBody({
+          customer: input.customerId,
+          return_url: input.returnUrl,
+        }),
+      });
+      return { url: String(body.url) };
+    },
+    async updateSubscriptionPrices(input: UpdateSubscriptionPricesInput) {
+      const listed = await send(`/v1/subscriptions/${input.subscriptionId}?expand[]=items.data.price`, { method: "GET" });
+      const items = Array.isArray((listed.body.items as { data?: unknown[] } | undefined)?.data)
+        ? ((listed.body.items as { data: Array<Record<string, unknown>> }).data)
+        : [];
+      const fields: Record<string, string | null> = {
+        proration_behavior: input.prorationBehavior,
+      };
+      let index = 0;
+      let sawRecurring = false;
+      let sawMetered = false;
+      for (const item of items) {
+        const itemId = typeof item.id === "string" ? item.id : "";
+        if (!itemId) continue;
+        const price = item.price && typeof item.price === "object" ? (item.price as Record<string, unknown>) : {};
+        const recurring = price.recurring && typeof price.recurring === "object" ? (price.recurring as Record<string, unknown>) : {};
+        const usageType = typeof recurring.usage_type === "string" ? recurring.usage_type : "";
+        const isMetered = usageType === "metered" || price.billing_scheme === "tiered";
+        fields[`items[${index}][id]`] = itemId;
+        if (isMetered) {
+          sawMetered = true;
+          if (input.meteredPriceId) {
+            fields[`items[${index}][price]`] = input.meteredPriceId;
+          } else {
+            fields[`items[${index}][deleted]`] = "true";
+          }
+        } else {
+          sawRecurring = true;
+          fields[`items[${index}][price]`] = input.recurringPriceId;
+          fields[`items[${index}][quantity]`] = "1";
+        }
+        index += 1;
+      }
+      if (!sawRecurring) {
+        fields[`items[${index}][price]`] = input.recurringPriceId;
+        fields[`items[${index}][quantity]`] = "1";
+        index += 1;
+      }
+      if (input.meteredPriceId && !sawMetered) {
+        fields[`items[${index}][price]`] = input.meteredPriceId;
+      }
+      const { body } = await send(`/v1/subscriptions/${input.subscriptionId}`, {
+        method: "POST",
+        body: formBody(fields),
+      });
+      return subscriptionPeriodBounds(body);
     },
     async cancelNow(subscriptionId) {
       try {

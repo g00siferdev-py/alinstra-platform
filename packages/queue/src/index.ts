@@ -85,6 +85,10 @@ export const RECONCILE_CALLS_EVERY_MS = 15 * 60 * 1000;
 export const REPORT_USAGE_JOB_ID = "report-usage";
 /** Every 5 minutes: send Stripe meter events for unreported UsageRecords. */
 export const REPORT_USAGE_EVERY_MS = 5 * 60 * 1000;
+export const PAUSE_PAST_DUE_JOB_ID = "pause-past-due-daily";
+/** 09:00 America/New_York daily: pause clients past due more than 7 days. */
+export const PAUSE_PAST_DUE_CRON = "0 9 * * *";
+export const PAUSE_PAST_DUE_TIMEZONE = "America/New_York";
 
 let redis: Redis | undefined;
 
@@ -268,6 +272,15 @@ export async function scheduleReportUsage(): Promise<void> {
         removeOnFail: 30,
       },
     },
+  );
+}
+
+/** Daily pause of past-due clients at 09:00 America/New_York. Fixed jobId so restarts never double-schedule. */
+export async function schedulePausePastDue(): Promise<void> {
+  await callsJobs().upsertJobScheduler(
+    PAUSE_PAST_DUE_JOB_ID,
+    { pattern: PAUSE_PAST_DUE_CRON, tz: PAUSE_PAST_DUE_TIMEZONE },
+    { name: "pause-past-due", data: {}, opts: { removeOnComplete: 30, removeOnFail: 30 } },
   );
 }
 

@@ -81,3 +81,10 @@ export async function sendEmail(message: EmailMessage): Promise<void> {
     throw new Error(`Resend rejected the message: ${result.error.name}`);
   }
 }
+
+export {
+  billingPausedOwnerEmail,
+  billingResumedOwnerEmail,
+  paymentFailedOwnerEmail,
+} from "./billing-emails";
+

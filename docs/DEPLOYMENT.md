@@ -324,7 +324,7 @@ Leave these empty until you are ready for one real Retell number. Empty keys mak
 | `STRIPE_WEBHOOK_SECRET` | web | Stripe → Developers → Webhooks → endpoint `https://staging.alinstra.com/api/stripe/webhook` → signing secret. |
 | `DANIEL_TRANSFER_NUMBER` | both | Your cell as a US or Canada number, `+1` then 10 digits, for client zero. |
 
-Stripe webhook API version: the code pins `2026-09-30.endive` (`STRIPE_API_VERSION` in `packages/providers/src/types.ts`) on every request it makes. Subscribe to `checkout.session.completed`, `checkout.session.expired`, `customer.subscription.deleted`, and `invoice.payment_failed`.
+Stripe webhook API version: the code pins `2026-09-30.endive` (`STRIPE_API_VERSION` in `packages/providers/src/types.ts`) on every request it makes. Subscribe to `checkout.session.completed`, `checkout.session.expired`, `customer.subscription.deleted`, `customer.subscription.updated`, `invoice.payment_failed`, and `invoice.paid`. Full dashboard checklist: `docs/BILLING.md`.
 
 The webhook endpoint created on 4 October 2026 is on `2026-08-26.dahlia` because the dashboard did not yet offer `endive` for new endpoints. That mismatch is safe: the webhook handler reads `items.data[].current_period_end` (present in both versions) and never the removed top-level `current_period_end`. When the dashboard lets you select `2026-09-30.endive` for the endpoint, bump it so the event payloads match the version the code requests. No code change is needed for the bump.
 

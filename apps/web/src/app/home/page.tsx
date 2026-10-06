@@ -54,7 +54,7 @@ function formatTime(value: Date | null): string {
 
 function statusPillTone(status: string): "live" | "warning" | "neutral" | "success" {
   if (status === "on_a_call") return "live";
-  if (status === "setting_up") return "warning";
+  if (status === "setting_up" || status === "paused") return "warning";
   if (status === "live") return "success";
   return "neutral";
 }
@@ -320,6 +320,18 @@ export default async function HomePage() {
               </li>
             </ol>
           </SectionCard>
+        ) : null}
+
+        {role === "client_owner" && overview.billingStatus === "paused" ? (
+          <Card className="grid gap-3 border-[var(--warning)] bg-[var(--warning-soft)]">
+            <h2 className="text-lg font-extrabold text-[var(--ink)]">Ava is paused: update your card</h2>
+            <p className="text-sm text-[var(--muted)]">
+              Payment is past due, so Ava is not answering calls. Update your card to resume.
+            </p>
+            <Link href="/home/billing">
+              <Button variant="primary">Update billing</Button>
+            </Link>
+          </Card>
         ) : null}
 
         <section className={`grid gap-3 sm:grid-cols-2 ${canViewCalls ? "xl:grid-cols-3" : ""}`}>

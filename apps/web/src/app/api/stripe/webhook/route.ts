@@ -1,7 +1,7 @@
 import { getEnv, log } from "@alinstra/config";
 import { applyStripeEvent } from "@alinstra/db";
 import { verifyStripe } from "@alinstra/providers";
-import { enqueueSendAdminNotice } from "@alinstra/queue";
+import { enqueueAccountEmail, enqueueSendAdminNotice } from "@alinstra/queue";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +15,11 @@ export async function POST(request: Request): Promise<Response> {
   if (result.notify) {
     await enqueueSendAdminNotice(result.notify).catch((error: unknown) => {
       log("error", "billing notice was not queued", { error: error instanceof Error ? error.name : "unknown" });
+    });
+  }
+  for (const mail of result.ownerEmails ?? []) {
+    await enqueueAccountEmail(mail).catch((error: unknown) => {
+      log("error", "billing owner email was not queued", { error: error instanceof Error ? error.name : "unknown" });
     });
   }
   return Response.json({ received: true });

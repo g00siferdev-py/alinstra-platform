@@ -1,5 +1,5 @@
 export { checkRetellHealth, checkStripeHealth, type ServiceHealth } from "./health";
-export { httpBilling, httpVoice } from "./http";
+export { httpBilling, httpVoice, subscriptionPeriodBounds, subscriptionPeriodEnd } from "./http";
 export { platformsFor, type PlatformsEnv } from "./local";
 export { MemoryBilling, MemoryVoice } from "./memory";
 export { memoryText, type MemoryTextReply } from "./memory-text";
@@ -36,6 +36,7 @@ export {
   type BillingPlatform,
   type CallTiming,
   type CreateCheckoutInput,
+  type CreatePortalSessionInput,
   type EnsurePriceInput,
   type NumberRequest,
   type PriceKind,
@@ -44,10 +45,12 @@ export {
   type ReportMeterEventInput,
   type RetellCallSnapshot,
   type RetellTiming,
+  type SubscriptionPeriodBounds,
   type TextCompleteInput,
   type TextCompleteResult,
   type TextPlatform,
   type ToolParameters,
+  type UpdateSubscriptionPricesInput,
   type VoicePlatform,
 } from "./types";
 
