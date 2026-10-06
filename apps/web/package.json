@@ -13,6 +13,7 @@
   "dependencies": {
     "@alinstra/auth": "workspace:*",
     "@alinstra/config": "workspace:*",
+    "@alinstra/crypto": "workspace:*",
     "@alinstra/db": "workspace:*",
     "@alinstra/providers": "workspace:*",
     "@alinstra/queue": "workspace:*",

@@ -35,6 +35,9 @@ importers:
       '@alinstra/config':
         specifier: workspace:*
         version: link:../../packages/config
+      '@alinstra/crypto':
+        specifier: workspace:*
+        version: link:../../packages/crypto
       '@alinstra/db':
         specifier: workspace:*
         version: link:../../packages/db
