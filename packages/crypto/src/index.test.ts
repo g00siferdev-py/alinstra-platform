@@ -58,6 +58,14 @@ describe("encryptString with an explicit key (single-key ring)", () => {
     expect(() => decryptString(payload, key2)).toThrow();
   });
 
+  it("rejects a truncated authentication tag before setAuthTag", () => {
+    const payload = encryptString("secret", key);
+    const parts = payload.split(".");
+    const tag = Buffer.from(parts[3] ?? "", "base64url");
+    parts[3] = tag.subarray(0, 8).toString("base64url");
+    expect(() => decryptString(parts.join("."), key)).toThrow(/authentication tag length/i);
+  });
+
   it("rejects a key that is not 32 bytes", () => {
     expect(() => encryptString("secret", Buffer.from("short").toString("base64"))).toThrow(/32 bytes/);
   });

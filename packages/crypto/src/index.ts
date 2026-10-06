@@ -154,7 +154,8 @@ export function decryptString(payload: string, encodedKey?: string): string {
   const iv = Buffer.from(segments[0] ?? "", "base64url");
   const tag = Buffer.from(segments[1] ?? "", "base64url");
   const ciphertext = Buffer.from(segments[2] ?? "", "base64url");
-  const decipher = createDecipheriv("aes-256-gcm", key, iv);
+  if (tag.length !== 16) throw new Error("Invalid authentication tag length");
+  const decipher = createDecipheriv("aes-256-gcm", key, iv, { authTagLength: 16 });
   decipher.setAuthTag(tag);
   return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString("utf8");
 }
