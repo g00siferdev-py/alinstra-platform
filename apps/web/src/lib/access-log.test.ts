@@ -9,6 +9,8 @@ const state = vi.hoisted(() => ({
   counts: new Map<string, number>(),
   failInsert: false,
   failCounter: false,
+  notices: [] as Array<{ subject: string; text: string }>,
+  warnings: [] as Array<{ message: string; extra: Record<string, unknown> }>,
   captured: [] as Array<{ error: Error; context: { extra?: Record<string, unknown>; tags?: Record<string, unknown> } }>,
   logged: [] as Array<{ level: string; message: string; fields: Record<string, unknown> }>,
 }));
@@ -16,9 +18,19 @@ const state = vi.hoisted(() => ({
 vi.mock("next/headers", () => ({ headers: async () => new Headers(state.headers) }));
 vi.mock("@sentry/nextjs", () => ({
   captureException: (error: Error, context: { extra?: Record<string, unknown> }) => state.captured.push({ error, context }),
+  captureMessage: (message: string, context: { level?: string; extra?: Record<string, unknown> }) => {
+    expect(context.level).toBe("warning");
+    state.warnings.push({ message, extra: context.extra ?? {} });
+  },
 }));
 vi.mock("@alinstra/config", () => ({
   log: (level: string, message: string, fields: Record<string, unknown>) => state.logged.push({ level, message, fields }),
+  getEnv: () => ({ APP_URL: "https://app.example.test/" }),
+}));
+vi.mock("@alinstra/queue", () => ({
+  enqueueSendAdminNotice: async (notice: { subject: string; text: string }) => {
+    state.notices.push(notice);
+  },
 }));
 vi.mock("@alinstra/auth", () => ({
   clientIp: (request: Request) => request.headers.get("x-real-ip") ?? "local",
@@ -34,6 +46,11 @@ vi.mock("@alinstra/auth", () => ({
   }),
 }));
 vi.mock("@alinstra/db", () => ({
+  BULK_READ_ACTIONS: ["call.transcript.view", "call.recording.stream"],
+  BULK_READ_THRESHOLD: 50,
+  BULK_READ_WINDOW_MS: 600_000,
+  countRecentBulkReads: async (actorUserId: string) =>
+    state.rows.filter((row) => row.actorUserId === actorUserId && (row.action === "call.transcript.view" || row.action === "call.recording.stream")).length,
   recordAccess: async (entry: Entry, options: Options = {}) => {
     const ids = { actorUserId: entry.actorUserId, clientId: entry.clientId, action: entry.action, entityType: entry.entityType, entityId: entry.entityId };
     if (options.shouldWrite) {
@@ -75,6 +92,8 @@ describe("web access logging", () => {
     state.rows.length = 0;
     state.counts.clear();
     state.captured.length = 0;
+    state.notices.length = 0;
+    state.warnings.length = 0;
     state.logged.length = 0;
     state.failInsert = false;
     state.failCounter = false;
@@ -142,6 +161,43 @@ describe("web access logging", () => {
     expect(error.message).not.toMatch(/Jane|4235550198|call me back/);
     expect(context.extra).toEqual({ actorUserId: "owner_1", clientId: "client_1", action: "message.view", entityType: "client_message", entityId: "msg_7" });
     expect(JSON.stringify(state.logged)).not.toMatch(/Jane|4235550198|call me back/);
+  });
+
+  it("alerts once per actor per hour when one actor passes 50 transcript views and recordings in the window (Phase S part 3)", async () => {
+    // 50 reads is the limit: no alert yet.
+    for (let index = 0; index < 50; index += 1) {
+      await logAccess(staff, { action: index % 2 ? "call.recording.stream" : "call.transcript.view", clientId: "client_1", entityType: "call_record", entityId: `call_${index}` });
+    }
+    expect(state.notices).toEqual([]);
+    expect(state.warnings).toEqual([]);
+
+    // The 51st trips it; later reads in the same hour do not repeat it.
+    await logAccess(staff, { action: "call.transcript.view", clientId: "client_1", entityType: "call_record", entityId: "call_50" });
+    await logAccess(staff, { action: "call.transcript.view", clientId: "client_1", entityType: "call_record", entityId: "call_51" });
+    expect(state.notices).toHaveLength(1);
+    expect(state.warnings).toHaveLength(1);
+    expect(state.notices[0]!.text).toContain("staff_1");
+    expect(state.notices[0]!.text).toContain("51");
+    expect(state.notices[0]!.text).toContain("https://app.example.test/admin/access?actor=staff_1");
+    expect(state.warnings[0]!.extra).toEqual({ actorUserId: "staff_1", actorRole: "client_staff", clientId: "client_1", count: 51, windowMinutes: 10 });
+
+    // Other actors are counted separately, and other actions (messages) never count.
+    await logAccess(owner, { action: "call.transcript.view", clientId: "client_1", entityType: "call_record", entityId: "call_1" });
+    for (let index = 0; index < 60; index += 1) {
+      await logAccess(admin, { action: "message.view", clientId: "client_1", entityType: "client_message", entityId: `msg_${index}` });
+    }
+    expect(state.notices).toHaveLength(1);
+  });
+
+  it("serves the page even when the alert queue or counter is down", async () => {
+    for (let index = 0; index < 50; index += 1) {
+      await logAccess(staff, { action: "call.transcript.view", clientId: "client_1", entityType: "call_record", entityId: `call_${index}` });
+    }
+    state.failCounter = true;
+    expect(await logAccess(staff, { action: "call.transcript.view", clientId: "client_1", entityType: "call_record", entityId: "call_x" })).toBe(true);
+    expect(state.notices).toEqual([]);
+    expect(state.logged.some((entry) => entry.message === "bulk read check failed")).toBe(true);
+    expect(state.captured).toEqual([]);
   });
 
   it("ignores users with an unknown role", async () => {

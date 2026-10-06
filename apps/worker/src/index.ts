@@ -15,6 +15,7 @@ import {
   sendInviteEmail,
   sendMessageEmail,
   sendPasswordResetEmail,
+  sendSignInNotice as sendSignInNoticePayload,
   storeRecording,
   syncAgent,
 } from "@alinstra/queue";
@@ -27,6 +28,7 @@ import { runChurnSweep, runMessageEmail, runProvision, runSync } from "./jobs/ph
 import { deliverAdminNotice } from "./jobs/send-admin-notice";
 import { sendInvite } from "./jobs/send-invite-email";
 import { sendPasswordReset } from "./jobs/send-password-reset-email";
+import { sendSignInNotice } from "./jobs/send-signin-notice";
 
 const env = getEnv();
 
@@ -61,6 +63,10 @@ const email = new Worker(
     if (job.name === "send-account-email") {
       const payload = sendAccountEmail.parse(job.data);
       await sendEmail({ to: payload.to, subject: payload.subject, text: payload.text });
+      return;
+    }
+    if (job.name === "send-signin-notice") {
+      await sendSignInNotice(sendSignInNoticePayload.parse(job.data));
       return;
     }
     if (job.name === "send-message-email") {

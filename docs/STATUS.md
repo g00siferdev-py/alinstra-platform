@@ -17,7 +17,19 @@ Phase 2 is merged into `main`. Staging deploy readiness (navigation, port, worke
 - Admin: `/admin/access` (filter by client, actor, action, date range; paginated; CSV at `/admin/access/export`) and an "Access history" link on each client page (`/admin/clients/[id]/access`). Both need admin two-factor, like Services.
 - Owner: `/home/access` ("Who viewed your calls", nav item "Who viewed"). Own client only; staff by name, Alinstra admins as "Alinstra support" with no ids or IPs. Staff get a 404.
 - The nightly `purge-calls` job also deletes `access_log` rows older than 400 days.
-- Not done here: the bulk-read alert (Part 3), rate limits on the recording and document routes (Part 5), and the data inventory in `SECURITY.md` (Part 7).
+- Not done here: rate limits on the recording and document routes (Part 5), and the data inventory in `SECURITY.md` (Part 7). The bulk-read alert is in Part 3 below.
+
+## Phase S Part 3 (branch `phase-s-security`, not merged, not committed)
+
+- Migration `20261006040000_phase_s_login_event` adds the `login_event` table (additive; no foreign keys; nothing in the previous release touches it). Columns: `userId?`, normalized `email`, `at`, `success`, `ip`, `ipPrefix` (/24 IPv4, /48 IPv6), `userAgent` (200 chars).
+- `handleAuthRequest` (`packages/auth/src/handler.ts`) writes one `LoginEvent` for every `POST /sign-in/email`: success, wrong password, unknown email, archived client (403), and attempts refused by the lockout (429). The write sits next to the existing lockout counters and never changes the response.
+- New-network sign-in: a successful sign-in from an `ipPrefix` the user has not signed in from successfully in 90 days, and not their first successful sign-in. Admins get the existing admin notice; client owners get a new "New sign-in to your Alinstra account" email (`newSignInEmail` in `@alinstra/email`, queue job `send-signin-notice`, rendered in the worker in the client's timezone) showing time, browser label ("Chrome on Windows"), and the network masked to its first two octets (`203.0.x.x`). No geo-IP. Staff get nothing.
+- Admin lockout: when a failed sign-in trips the lockout for an admin account, one admin notice (deduped per account per hour with `getCounter()`).
+- Bulk reads: after each `call.transcript.view` or `call.recording.stream` row is written, the web app counts that actor's rows in the last 10 minutes. Above 50 it queues an admin notice and sends a Sentry warning (ids and counts only), once per actor per hour via `getCounter()`.
+- The nightly `purge-calls` job also deletes `login_event` rows older than 180 days.
+- All alerts go through the queue (`enqueueSendAdminNotice`, `enqueueSignInNotice`); each is wrapped so a Redis, database, or mail failure is logged (error name only) and the login or page is served anyway.
+- Tests: `packages/db/src/phase-s-login-events.test.ts`, `packages/auth/src/security-alerts.test.ts` (unit and through the real handler), `apps/web/src/lib/access-log.test.ts` (bulk read), `apps/worker/src/jobs/calls.test.ts` and `send-signin-notice.test.ts`, `packages/email/src/new-signin-email.test.ts`. Lint, typecheck, and all workspace tests pass locally.
+- Not done: Parts 4 to 7. No new env vars. The `/admin/access?actor=<id>` link in the bulk-read notice relies on the Part 2 actor filter accepting a user id.
 
 ## Verified locally
 

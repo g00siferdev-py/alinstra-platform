@@ -213,6 +213,24 @@ Writes: only ciphertext (and the mask); the old plaintext columns are set to nul
 
 **Who sees what.** `accessLogs(ctx)` is the tenant-scoped reader: owners are pinned to their own client whatever filter is passed, staff are refused, admins may filter by client, actor (email or id), action, and dates. In the owner view admin rows show as "Alinstra support" with no id, IP, or browser; owners and staff show by name. `/admin/access`, its CSV export, and the client Access history page use the `requireAdmin` gate (admin plus two-factor). CSV cells that start with `=`, `+`, `-`, or `@` are prefixed with a quote. Viewing or exporting the access log is itself not logged.
 
+## 2026-10-06 — Phase S Part 3: security alerts
+
+**LoginEvent is written in the auth handler, not a Better Auth hook.** `handleAuthRequest` already owns the lockout counters and sees every `POST /sign-in/email`, including attempts refused with 429 and 403 that never reach Better Auth. One place, one row per attempt. Rows hold a normalized email, IP, `/24` or `/48` prefix, and a 200-character user agent; never a password. The 429 path is logged too (useful forensics), at the cost of one small row per refused attempt; they age out with the 180-day purge. No foreign keys, like `AccessLog`.
+
+**"Successful" means the password was accepted.** For an admin with two-factor, `/sign-in/email` returns 200 with `twoFactorRedirect` and the code is checked on a later request. That password step is recorded as the success, so a new-network notice can fire for an attacker who has the password but not the second factor. The trade-off: that network then counts as seen. Moving the check to session creation would need a second code path for 2FA; revisit if it proves noisy.
+
+**New network, defined simply.** A success whose `ipPrefix` has no successful event for that user in the last 90 days, provided the user has at least one earlier successful event (so a first login never alerts). Failed attempts never make a network "seen". Users who last signed in more than 180 days ago have no history left and are treated as first logins; users who existed before this deploy skip their first post-deploy login. Both are accepted. IPs that are not addresses (`local`) have no prefix and never alert.
+
+**Owner email is its own queue job, not `send-account-email`.** `send-signin-notice` carries only the recipient, ISO time, a browser label, and the already-masked network (`203.0.x.x`, `2001:db8:x`); the raw IP never goes through Redis or into the mail. The worker formats the time in the client's timezone. Admin notices (new network, lockout, bulk read) use the existing `send-admin-notice` job and show the masked network too. Browser labels come from a small user-agent classifier ("Chrome on Windows"), not the raw string.
+
+**Everything is enqueue-only and swallowed.** `trackSignIn` and `checkBulkReads` never throw; a failed insert, Redis outage, or mail failure is logged by error name only. Mail itself is sent by the worker with BullMQ retries, so Resend downtime cannot touch a login.
+
+**Dedupe uses `getCounter()`.** Admin lockout: one notice per admin account per hour (`alert:admin-lockout:<userId>`). Bulk reads: one alert per actor per hour (`alert:bulk-read:<actorId>`). If Redis is down the check throws inside the swallow, so the alert is skipped rather than repeated.
+
+**Bulk-read check runs after the access row is written** (`logAccess`), counting `call.transcript.view` plus `call.recording.stream` rows for that actor in the last 10 minutes from `access_log` (indexed on actor and time). Deduped recording rows mean one recording counts once per 10 minutes, so seeking does not trip it. More than 50 triggers; exactly 50 does not. The Sentry warning and the notice carry actor id, role, client id, count, and window only.
+
+**Retention.** The nightly `purge-calls` job now also runs `purgeLoginEvents` (strictly older than 180 days). Like the access-log purge, a failure is logged and does not block the stale-recording requeue.
+
 ## Needs Daniel's review
 
 - Existing AgentConfig rows change `status` when a newer version becomes active. The prompt and settings on that row stay as written. Full immutability, including status, would need a separate "current" pointer.

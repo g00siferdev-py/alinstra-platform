@@ -3,6 +3,7 @@ import { log } from "@alinstra/config";
 import { recordAccess, type AccessAction, type AccessEntry, type AccessFailureIds } from "@alinstra/db";
 import * as Sentry from "@sentry/nextjs";
 import { headers } from "next/headers";
+import { checkBulkReads, isBulkReadAction } from "./bulk-read-alert";
 
 /**
  * Read-access audit logging for the web app (Phase S part 2). Every call here is awaited and best-effort:
@@ -54,7 +55,7 @@ export async function logAccess(user: ActorUser, input: AccessInput, request?: R
   if (!role) return false;
   try {
     const meta = await requestMeta(request);
-    return await recordAccess(
+    const written = await recordAccess(
       {
         actorUserId: user.id,
         actorRole: role,
@@ -69,6 +70,9 @@ export async function logAccess(user: ActorUser, input: AccessInput, request?: R
       },
       { onError: reportAccessFailure, shouldWrite },
     );
+    // Phase S part 3: bulk-read alert, hooked after the row is written. Best-effort; never throws.
+    if (written && isBulkReadAction(input.action)) await checkBulkReads({ id: user.id, role }, input.clientId);
+    return written;
   } catch (error) {
     reportAccessFailure(error, { actorUserId: user.id, clientId: input.clientId, action: input.action, entityType: input.entityType, entityId: input.entityId });
     return false;

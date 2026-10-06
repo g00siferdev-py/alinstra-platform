@@ -6,6 +6,7 @@ import {
   markRecordingStored,
   purgeAccessLogs,
   purgeExpiredCalls,
+  purgeLoginEvents,
   recordingKeyFor,
   recordingTarget,
   type PurgeReport,
@@ -24,6 +25,8 @@ export type PurgeCallsDeps = Pick<CallsDeps, "storage"> & {
   listStale?: (now: Date) => Promise<string[]>;
   /** Deletes AccessLog rows older than 400 days; injectable for tests. */
   purgeAccess?: (now: Date) => Promise<number>;
+  /** Deletes LoginEvent rows older than 180 days; injectable for tests. */
+  purgeLogins?: (now: Date) => Promise<number>;
 };
 
 export function callsDeps(): CallsDeps {
@@ -73,6 +76,14 @@ export async function runPurgeCalls(deps: PurgeCallsDeps = callsDeps(), now = ne
     log("info", "access log purge finished", { removed });
   } catch (error) {
     log("error", "access log purge failed", { error: error instanceof Error ? error.name : "unknown" });
+  }
+
+  // Sign-in attempt log (Phase S part 3): keep 180 days. Same rule: never blocks the rest of the sweep.
+  try {
+    const removed = await (deps.purgeLogins ?? purgeLoginEvents)(now);
+    log("info", "login event purge finished", { removed });
+  } catch (error) {
+    log("error", "login event purge failed", { error: error instanceof Error ? error.name : "unknown" });
   }
 
   const enqueue = deps.enqueueRecording ?? ((retellCallId: string) => enqueueStoreRecording({ retellCallId }));

@@ -8,6 +8,7 @@ const { db, logged } = vi.hoisted(() => ({
     markRecordingMissing: vi.fn(async () => undefined),
     purgeExpiredCalls: vi.fn(),
     purgeAccessLogs: vi.fn(async () => 0),
+    purgeLoginEvents: vi.fn(async () => 0),
     listStalePendingRecordings: vi.fn(async () => [] as string[]),
     recordingKeyFor: (clientId: string, callId: string, contentType: string) => `clients/${clientId}/calls/${callId}.${/mpeg/.test(contentType) ? "mp3" : "wav"}`,
   },
@@ -142,6 +143,33 @@ describe("store-recording job", () => {
       },
     });
     expect(logged.some((row) => row.message === "access log purge failed")).toBe(true);
+    expect(requeued).toEqual(["call_stale"]);
+  });
+
+  it("also purges the sign-in log (180 days) in the nightly sweep, and a failure there never blocks the rest", async () => {
+    const { storage } = fakeStorage();
+    db.purgeExpiredCalls.mockResolvedValue({ clients: 0, purged: 0, recordingsDeleted: 0, failures: [] });
+    const now = new Date("2026-10-06T07:00:00Z");
+    const purgeAccess = vi.fn(async () => 1);
+    const purgeLogins = vi.fn(async () => 4);
+    await runPurgeCalls({ storage, listStale: async () => [], purgeAccess, purgeLogins }, now);
+    expect(purgeAccess).toHaveBeenCalledWith(now);
+    expect(purgeLogins).toHaveBeenCalledWith(now);
+    expect(logged.some((row) => row.message === "login event purge finished" && row.fields.removed === 4)).toBe(true);
+
+    const requeued: string[] = [];
+    await runPurgeCalls({
+      storage,
+      purgeAccess,
+      purgeLogins: async () => {
+        throw new Error("db down");
+      },
+      listStale: async () => ["call_stale"],
+      enqueueRecording: async (id) => {
+        requeued.push(id);
+      },
+    });
+    expect(logged.some((row) => row.message === "login event purge failed")).toBe(true);
     expect(requeued).toEqual(["call_stale"]);
   });
 });

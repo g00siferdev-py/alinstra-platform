@@ -3,6 +3,7 @@ import {
   clearLoginFailures,
   clientIp,
   loginLocked,
+  normalizeEmail,
   passwordResetLimited,
   recordLoginFailure,
   recordPasswordResetRequest,
@@ -10,6 +11,7 @@ import {
 import { ARCHIVED_CLIENT_MESSAGE, sessionBlockedForUser } from "./client-access";
 import { prisma } from "@alinstra/db";
 import { reenrollAdminTwoFactor, sessionRole } from "./two-factor-admin";
+import { trackSignIn, type SignInUser } from "./security-alerts";
 
 function authPath(request: Request): string {
   const { pathname } = new URL(request.url);
@@ -61,6 +63,14 @@ export async function withTrustedClientIp(request: Request, ip: string): Promise
   });
 }
 
+async function findSignInUser(email: string): Promise<SignInUser> {
+  try {
+    return await prisma.user.findUnique({ where: { email: normalizeEmail(email) }, select: { id: true, role: true, clientId: true } });
+  } catch {
+    return null;
+  }
+}
+
 function tooMany(): Response {
   return Response.json({ message: "Too many attempts. Try again later." }, { status: 429 });
 }
@@ -74,16 +84,25 @@ export async function handleAuthRequest(request: Request): Promise<Response> {
     return Response.json({ message: "Email is required." }, { status: 400 });
   }
 
-  if (path === "/sign-in/email" && email && (await loginLocked(email, ip))) {
+  const signIn = path === "/sign-in/email" && request.method === "POST" && email ? email : null;
+  const userAgent = request.headers.get("user-agent");
+  let signInUser: SignInUser = null;
+
+  if (signIn && (await loginLocked(signIn, ip))) {
+    // The user is looked up so the event carries a userId; a lookup failure must not change the 429.
+    signInUser = await findSignInUser(signIn);
+    await trackSignIn({ user: signInUser, email: signIn, success: false, ip, userAgent });
     return tooMany();
   }
 
-  if (path === "/sign-in/email" && email) {
+  if (signIn) {
     const user = await prisma.user.findUnique({
-      where: { email: email.toLowerCase() },
-      select: { id: true },
+      where: { email: normalizeEmail(signIn) },
+      select: { id: true, role: true, clientId: true },
     });
+    signInUser = user;
     if (user && (await sessionBlockedForUser(user.id))) {
+      await trackSignIn({ user, email: signIn, success: false, ip, userAgent });
       return Response.json({ message: ARCHIVED_CLIENT_MESSAGE }, { status: 403 });
     }
   }
@@ -106,6 +125,18 @@ export async function handleAuthRequest(request: Request): Promise<Response> {
   if (path === "/sign-in/email" && email) {
     if (response.status === 401) await recordLoginFailure(email, ip);
     else if (response.status < 400) await clearLoginFailures(email, ip);
+  }
+
+  // Phase S part 3: log the attempt and queue any alert. trackSignIn never throws and never waits on mail.
+  if (signIn) {
+    await trackSignIn({
+      user: signInUser,
+      email: signIn,
+      success: response.status < 400,
+      ip,
+      userAgent,
+      checkLockout: response.status === 401,
+    });
   }
 
   return response;

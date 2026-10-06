@@ -27,6 +27,31 @@ export function provisionFailedEmail(input: {
   };
 }
 
+/**
+ * Plain-text email sent to a client owner after a sign-in from a network they have not used lately
+ * (Phase S part 3). Shows only the time, a browser label, and a masked network prefix. No geo-IP.
+ */
+export function newSignInEmail(input: {
+  whenText: string;
+  browser: string;
+  maskedNetwork: string;
+  securityUrl: string;
+}): Pick<EmailMessage, "subject" | "text"> {
+  return {
+    subject: "New sign-in to your Alinstra account",
+    text: [
+      "Your Alinstra account was just signed in to from a network we have not seen recently.",
+      "",
+      `When: ${input.whenText}`,
+      `Browser: ${input.browser}`,
+      `Network: ${input.maskedNetwork}`,
+      "",
+      "If this was you, there is nothing to do.",
+      `If it was not, reset your password right away: ${input.securityUrl}`,
+    ].join("\n"),
+  };
+}
+
 export async function sendEmail(message: EmailMessage): Promise<void> {
   const env = getEnv();
   if (env.EMAIL_TRANSPORT === "console") {

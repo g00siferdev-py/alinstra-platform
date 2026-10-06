@@ -325,6 +325,27 @@ model AccessLog {
   @@map("access_log")
 }
 
+/// Sign-in attempts (Phase S part 3): feeds new-network alerts and lockout forensics. Ids, a normalized
+/// email, the client IP and its network prefix, and a truncated user agent; never a password. No foreign
+/// keys so rows survive a removed user until the 180-day purge.
+model LoginEvent {
+  id        String   @id @default(cuid())
+  userId    String?
+  /// Trimmed and lowercased.
+  email     String
+  at        DateTime @default(now())
+  success   Boolean
+  ip        String?
+  /// /24 for IPv4, /48 for IPv6, e.g. 203.0.113.0/24.
+  ipPrefix  String?
+  userAgent String?
+
+  @@index([userId, success, at])
+  @@index([email, at])
+  @@index([at])
+  @@map("login_event")
+}
+
 /// Custom invite. Not Better Auth's organization plugin.
 model Invite {
   id          String    @id @default(cuid())

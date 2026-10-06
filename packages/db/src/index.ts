@@ -244,6 +244,22 @@ export {
   type RecordAccessOptions,
 } from "./access-log";
 export {
+  BULK_READ_ACTIONS,
+  BULK_READ_THRESHOLD,
+  BULK_READ_WINDOW_MS,
+  countRecentBulkReads,
+  describeBrowser,
+  ipPrefixOf,
+  LOGIN_EVENT_RETENTION_DAYS,
+  maskIpPrefix,
+  NEW_NETWORK_WINDOW_DAYS,
+  normalizeLoginEmail,
+  purgeLoginEvents,
+  recordLoginEvent,
+  type LoginEventInput,
+  type LoginEventResult,
+} from "./login-events";
+export {
   adminOverview,
   listLiveCalls,
   type AdminClientRow,

@@ -50,6 +50,17 @@ export const sendMessageEmail = z.object({
   timezone: z.string().min(1).optional(),
 });
 
+/** Owner "new sign-in" notice. Only already-masked network text travels through Redis; never the raw IP. */
+export const sendSignInNotice = z.object({
+  to: z.string().email(),
+  /** ISO timestamp of the sign-in. */
+  at: z.string().datetime(),
+  browser: z.string().min(1).max(100),
+  maskedNetwork: z.string().min(1).max(60),
+  timezone: z.string().min(1).optional(),
+});
+export type SendSignInNotice = z.infer<typeof sendSignInNotice>;
+
 export type SyncAgent = z.infer<typeof syncAgent>;
 export type ProvisionClient = z.infer<typeof provisionClient>;
 export type SendAccountEmail = z.infer<typeof sendAccountEmail>;
@@ -228,6 +239,16 @@ export async function schedulePurgeCalls(): Promise<void> {
 export async function enqueueAccountEmail(data: SendAccountEmail): Promise<void> {
   const payload = sendAccountEmail.parse(data);
   await emailJobs().add("send-account-email", payload, {
+    attempts: 5,
+    backoff: { type: "exponential", delay: 2000 },
+    removeOnComplete: 100,
+    removeOnFail: 100,
+  });
+}
+
+export async function enqueueSignInNotice(data: SendSignInNotice): Promise<void> {
+  const payload = sendSignInNotice.parse(data);
+  await emailJobs().add("send-signin-notice", payload, {
     attempts: 5,
     backoff: { type: "exponential", delay: 2000 },
     removeOnComplete: 100,
