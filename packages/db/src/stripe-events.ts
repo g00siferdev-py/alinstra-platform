@@ -4,6 +4,7 @@
 import { getEnv } from "@alinstra/config";
 import { billingResumedOwnerEmail, paymentFailedOwnerEmail } from "@alinstra/email/billing-emails";
 import { buildGreeting, type PromptFeatures } from "@alinstra/agent";
+import type { BillingPlatform } from "@alinstra/providers";
 import { Prisma } from "./generated/prisma/client";
 import { applyScheduledPlanChanges } from "./billing-lifecycle";
 import { recordChange, type Actor } from "./changes";
@@ -11,7 +12,8 @@ import { prisma } from "./client";
 import { officeOpen, formatTransferTargets, type WeeklyHours } from "./domain";
 
 const WEBHOOK_ACTOR: Actor = { id: "provider-webhook", role: "admin" };
-const PAUSED_CALL_MAX_MS = 15_000;
+const PAUSED_CALL_MAX_MS = 12_000;
+const PAUSED_CALL_SILENCE_MS = 3_000;
 
 export type InboundDynamicVariables = { office_open: "yes" | "no"; allowed_targets: string };
 
@@ -19,11 +21,9 @@ export type InboundCallPayload = {
   dynamic_variables: InboundDynamicVariables;
   /** Per-call begin_message so open and closed openings stay one continuous utterance. */
   agent_override?: {
-    agent?: { max_call_duration_ms?: number };
+    agent?: { max_call_duration_ms?: number; end_call_after_silence_ms?: number };
     retell_llm: {
       begin_message: string;
-      general_prompt?: string;
-      general_tools?: Array<{ type: string; name: string; description: string }>;
     };
   };
 };
@@ -60,18 +60,12 @@ export async function inboundCallPayload(toNumber: string, now = new Date()): Pr
     return {
       dynamic_variables: { office_open: "no", allowed_targets: "" },
       agent_override: {
-        agent: { max_call_duration_ms: PAUSED_CALL_MAX_MS },
+        agent: {
+          max_call_duration_ms: PAUSED_CALL_MAX_MS,
+          end_call_after_silence_ms: PAUSED_CALL_SILENCE_MS,
+        },
         retell_llm: {
           begin_message: `Thanks for calling ${client.name}. We can't take your call right now. Please try again later.`,
-          general_prompt:
-            "You already told the caller the office cannot take their call. Call the end_call tool immediately. Do not take a message. Do not ask any questions. Do not transfer.",
-          general_tools: [
-            {
-              type: "end_call",
-              name: "end_call",
-              description: "End the call immediately after the opening message.",
-            },
-          ],
         },
       },
     };
@@ -160,8 +154,17 @@ function appBillingUrl(): string {
 
 type PendingOwnerMail = { clientId: string; portalOwnerEmail: string | null; kind: "payment_failed" | "resumed" };
 type PendingPeriod = { clientId: string; prevStart: Date | null; nextStart: Date | null };
+type PendingCheckoutPeriod = { clientId: string; subscriptionId: string; hadPeriod: boolean };
 
-export async function applyStripeEvent(event: StripeEvent, now = new Date()): Promise<StripeApplyResult> {
+export type ApplyStripeEventDeps = {
+  billing?: BillingPlatform;
+};
+
+export async function applyStripeEvent(
+  event: StripeEvent,
+  now = new Date(),
+  deps: ApplyStripeEventDeps = {},
+): Promise<StripeApplyResult> {
   const eventId = event.id ?? "";
   if (!eventId || !event.type) return {};
   const object = event.data?.object ?? {};
@@ -170,9 +173,14 @@ export async function applyStripeEvent(event: StripeEvent, now = new Date()): Pr
   let notify: StripeApplyResult["notify"];
   const ownerEmails: StripeOwnerEmail[] = [];
   // Object box so assignments inside the transaction callback stay visible to the type checker.
-  const pending: { mail: PendingOwnerMail | null; period: PendingPeriod | null } = {
+  const pending: {
+    mail: PendingOwnerMail | null;
+    period: PendingPeriod | null;
+    checkoutPeriod: PendingCheckoutPeriod | null;
+  } = {
     mail: null,
     period: null,
+    checkoutPeriod: null,
   };
   try {
     await prisma.$transaction(async (tx) => {
@@ -204,6 +212,13 @@ export async function applyStripeEvent(event: StripeEvent, now = new Date()): Pr
           summary: `Payment received for ${client.name}`,
           after: { billingStatus: "paid" },
         });
+        if (subscriptionId) {
+          pending.checkoutPeriod = {
+            clientId,
+            subscriptionId,
+            hadPeriod: Boolean(client.stripeCurrentPeriodStart && client.stripeCurrentPeriodEnd),
+          };
+        }
       }
       if (event.type === "checkout.session.expired" && clientId) {
         await tx.client.updateMany({
@@ -264,7 +279,7 @@ export async function applyStripeEvent(event: StripeEvent, now = new Date()): Pr
           pending.mail = { clientId: client.id, portalOwnerEmail: client.portalOwnerEmail, kind: "resumed" };
         }
       }
-      if (event.type === "customer.subscription.updated") {
+      if (event.type === "customer.subscription.updated" || event.type === "customer.subscription.created") {
         const subscriptionId = typeof object.id === "string" ? object.id : "";
         if (!subscriptionId) return;
         const client = await tx.client.findFirst({ where: { stripeSubscriptionId: subscriptionId, archivedAt: null } });
@@ -349,6 +364,23 @@ export async function applyStripeEvent(event: StripeEvent, now = new Date()): Pr
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") return {};
     throw error;
+  }
+
+  if (pending.checkoutPeriod && !pending.checkoutPeriod.hadPeriod && deps.billing) {
+    const fresh = await prisma.client.findFirst({
+      where: { id: pending.checkoutPeriod.clientId },
+      select: { stripeCurrentPeriodStart: true, stripeCurrentPeriodEnd: true },
+    });
+    if (fresh && !fresh.stripeCurrentPeriodStart && !fresh.stripeCurrentPeriodEnd) {
+      const bounds = await deps.billing.getSubscription(pending.checkoutPeriod.subscriptionId);
+      await prisma.client.update({
+        where: { id: pending.checkoutPeriod.clientId },
+        data: {
+          stripeCurrentPeriodStart: bounds.currentPeriodStart,
+          stripeCurrentPeriodEnd: bounds.currentPeriodEnd,
+        },
+      });
+    }
   }
 
   if (pending.mail) {

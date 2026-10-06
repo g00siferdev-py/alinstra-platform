@@ -7,6 +7,7 @@ import {
   plans,
 } from "@alinstra/db";
 import { requireUser } from "@/lib/session";
+import { redirectUnpaidSelfServeOwner } from "@/lib/self-serve-gate";
 import { notFound } from "next/navigation";
 
 function statusLabel(status: string): string {
@@ -32,6 +33,7 @@ function formatDate(value: Date | null): string {
 export default async function OwnerBillingPage() {
   const session = await requireUser();
   if (session.user.role !== "client_owner" || !session.user.clientId) notFound();
+  await redirectUnpaidSelfServeOwner();
   const actor = { id: session.user.id, role: "client_owner" as const, clientId: session.user.clientId };
   const [billing, catalog, requests] = await Promise.all([
     ownerBillingOverview(actor, session.user.clientId),

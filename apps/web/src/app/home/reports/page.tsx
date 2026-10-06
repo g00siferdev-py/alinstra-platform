@@ -11,6 +11,7 @@ import {
   parseYearMonth,
 } from "@alinstra/db";
 import { requireUser } from "@/lib/session";
+import { redirectUnpaidSelfServeOwner } from "@/lib/self-serve-gate";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
@@ -51,6 +52,7 @@ export default async function OwnerReportsPage({
 }) {
   const session = await requireUser();
   if (session.user.role !== "client_owner" || !session.user.clientId) notFound();
+  await redirectUnpaidSelfServeOwner();
 
   const client = await clients({
     role: "client_owner",

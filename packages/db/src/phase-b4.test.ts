@@ -125,6 +125,69 @@ describe("Phase B Part 4 billing lifecycle", () => {
     expect(undone.serviceEndsAt).toBeNull();
   });
 
+  it("stores period bounds on subscription.created the same as updated", async () => {
+    const client = await seedClient("CreatedPeriod");
+    await prisma.client.update({
+      where: { id: client.id },
+      data: { stripeCurrentPeriodStart: null, stripeCurrentPeriodEnd: null },
+    });
+    const periodEnd = Math.floor(Date.now() / 1000) + 25 * 24 * 60 * 60;
+    const periodStart = periodEnd - 30 * 24 * 60 * 60;
+    await applyStripeEvent({
+      id: "evt_sub_created",
+      type: "customer.subscription.created",
+      data: {
+        object: {
+          id: client.stripeSubscriptionId!,
+          cancel_at_period_end: false,
+          items: { data: [{ current_period_start: periodStart, current_period_end: periodEnd }] },
+        },
+      },
+    });
+    const updated = await prisma.client.findUniqueOrThrow({ where: { id: client.id } });
+    expect(updated.stripeCurrentPeriodStart?.getTime()).toBe(periodStart * 1000);
+    expect(updated.stripeCurrentPeriodEnd?.getTime()).toBe(periodEnd * 1000);
+  });
+
+  it("fetches subscription period on checkout.session.completed when empty", async () => {
+    await seedPlans();
+    const plan = await prisma.plan.findFirstOrThrow({ where: { code: "starter" } });
+    const client = await prisma.client.create({
+      data: {
+        name: "CheckoutPeriod",
+        planId: plan.id,
+        billingStatus: "checkout_open",
+        stripeCustomerId: "cus_checkout_period",
+      },
+    });
+    const billing = new MemoryBilling();
+    const subscriptionId = billing.subscriptionFor(client.id);
+    const start = new Date("2026-10-01T00:00:00.000Z");
+    const end = new Date("2026-10-31T00:00:00.000Z");
+    billing.periodStart.set(subscriptionId, start);
+    billing.periodEnd.set(subscriptionId, end);
+
+    await applyStripeEvent(
+      {
+        id: "evt_checkout_period",
+        type: "checkout.session.completed",
+        data: {
+          object: {
+            payment_status: "paid",
+            subscription: subscriptionId,
+            metadata: { client_id: client.id },
+          },
+        },
+      },
+      new Date("2026-10-01T12:00:00.000Z"),
+      { billing },
+    );
+    const paid = await prisma.client.findUniqueOrThrow({ where: { id: client.id } });
+    expect(paid.billingStatus).toBe("paid");
+    expect(paid.stripeCurrentPeriodStart?.toISOString()).toBe(start.toISOString());
+    expect(paid.stripeCurrentPeriodEnd?.toISOString()).toBe(end.toISOString());
+  });
+
   it("pauses clients whose pastDueSince is more than 7 days old", async () => {
     const client = await seedClient("PauseMe");
     const pastDueSince = new Date("2026-02-01T00:00:00.000Z");
@@ -150,8 +213,10 @@ describe("Phase B Part 4 billing lifecycle", () => {
     expect(payload.agent_override?.retell_llm.begin_message).toBe(
       `Thanks for calling ${client.name}. We can't take your call right now. Please try again later.`,
     );
-    expect(payload.agent_override?.agent?.max_call_duration_ms).toBe(15_000);
-    expect(payload.agent_override?.retell_llm.general_tools?.[0]?.name).toBe("end_call");
+    expect(payload.agent_override?.agent?.max_call_duration_ms).toBe(12_000);
+    expect(payload.agent_override?.agent?.end_call_after_silence_ms).toBe(3_000);
+    expect(payload.agent_override?.retell_llm).not.toHaveProperty("general_prompt");
+    expect(payload.agent_override?.retell_llm).not.toHaveProperty("general_tools");
     expect(payload.dynamic_variables.allowed_targets).toBe("");
   });
 

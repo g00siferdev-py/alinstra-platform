@@ -11,6 +11,10 @@ import { METER_EVENT_NAME, type BillingPlatform } from "@alinstra/providers";
 import { prisma } from "./client";
 
 const FAILURE_NOTICE_MS = 24 * 60 * 60 * 1000;
+/** Stripe rejects meter timestamps older than ~35 days; skip a day early. */
+const TOO_OLD_MS = 34 * 24 * 60 * 60 * 1000;
+/** After a failure, leave the row out of the next batches so newer rows get a turn. */
+const RECENT_FAILURE_MS = 15 * 60 * 1000;
 
 export type ReportUsageDeps = {
   billing: BillingPlatform;
@@ -85,11 +89,44 @@ async function markFailure(row: PendingRow, now: Date, notifyAdmin?: ReportUsage
 }
 
 /**
+ * Mark rows Stripe cannot bill so they never starve the meter queue.
+ * Returns how many rows were newly skipped.
+ */
+async function markUnbillableRows(now: Date): Promise<number> {
+  const tooOldCutoff = new Date(now.getTime() - TOO_OLD_MS);
+  const tooOld = await prisma.usageRecord.updateMany({
+    where: {
+      meterReportedAt: null,
+      meterSkippedAt: null,
+      endedAt: { lt: tooOldCutoff },
+    },
+    data: { meterSkippedAt: now, meterSkipReason: "too_old" },
+  });
+
+  const beforePaid = await prisma.$executeRaw`
+    UPDATE usage_record AS u
+    SET "meterSkippedAt" = ${now}, "meterSkipReason" = 'before_paid'
+    FROM client AS c
+    WHERE c.id = u."clientId"
+      AND u."meterReportedAt" IS NULL
+      AND u."meterSkippedAt" IS NULL
+      AND c."paidAt" IS NOT NULL
+      AND u."endedAt" < c."paidAt"
+  `;
+
+  return tooOld.count + Number(beforePaid);
+}
+
+/**
  * Send meter events for paid, non-internal UsageRecords that still need an initial report
  * or a positive-delta correction after duration changed.
  */
 export async function reportUsageToStripe(deps: ReportUsageDeps): Promise<ReportUsageReport> {
   const now = deps.now ?? new Date();
+  const report: ReportUsageReport = { scanned: 0, reported: 0, corrected: 0, failed: 0, notified: 0, skipped: 0 };
+  report.skipped += await markUnbillableRows(now);
+
+  const recentFailureBefore = new Date(now.getTime() - RECENT_FAILURE_MS);
   const clientFilter = {
     internal: false,
     paidAt: { not: null },
@@ -107,7 +144,13 @@ export async function reportUsageToStripe(deps: ReportUsageDeps): Promise<Report
   } as const;
 
   const unreported = await prisma.usageRecord.findMany({
-    where: { internal: false, meterReportedAt: null, client: clientFilter },
+    where: {
+      internal: false,
+      meterReportedAt: null,
+      meterSkippedAt: null,
+      client: clientFilter,
+      OR: [{ meterReportFailedAt: null }, { meterReportFailedAt: { lt: recentFailureBefore } }],
+    },
     select,
     orderBy: [{ endedAt: "asc" }, { id: "asc" }],
     take: 400,
@@ -135,12 +178,14 @@ export async function reportUsageToStripe(deps: ReportUsageDeps): Promise<Report
     FROM usage_record u
     INNER JOIN client c ON c.id = u."clientId"
     WHERE u.internal = false
+      AND u."meterSkippedAt" IS NULL
       AND c.internal = false
       AND c."paidAt" IS NOT NULL
       AND c."stripeCustomerId" IS NOT NULL
       AND u."meterReportedAt" IS NOT NULL
       AND u."meterReportedMinutes" IS NOT NULL
       AND u."billableMinutes" > u."meterReportedMinutes"
+      AND (u."meterReportFailedAt" IS NULL OR u."meterReportFailedAt" < ${recentFailureBefore})
     ORDER BY u."endedAt" ASC, u.id ASC
     LIMIT 100
   `;
@@ -163,8 +208,6 @@ export async function reportUsageToStripe(deps: ReportUsageDeps): Promise<Report
       },
     })),
   ];
-
-  const report: ReportUsageReport = { scanned: 0, reported: 0, corrected: 0, failed: 0, notified: 0, skipped: 0 };
 
   for (const row of rows) {
     report.scanned += 1;

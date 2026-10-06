@@ -421,7 +421,9 @@ export function httpBilling(secretKey: string, fetchImpl: FetchLike = fetch): Bi
         cancel_url: input.cancelUrl,
         "automatic_tax[enabled]": "true",
         billing_address_collection: "required",
-        "tax_id_collection[enabled]": "true",
+        // Existing Customer: Checkout must write the collected address/name back so Tax can use them.
+        "customer_update[address]": "auto",
+        "customer_update[name]": "auto",
         "metadata[client_id]": input.clientId,
         "subscription_data[metadata][client_id]": input.clientId,
       };
@@ -454,6 +456,10 @@ export function httpBilling(secretKey: string, fetchImpl: FetchLike = fetch): Bi
         }),
       });
       return { url: String(body.url) };
+    },
+    async getSubscription(subscriptionId) {
+      const { body } = await send(`/v1/subscriptions/${subscriptionId}?expand[]=items.data.price`, { method: "GET" });
+      return subscriptionPeriodBounds(body);
     },
     async updateSubscriptionPrices(input: UpdateSubscriptionPricesInput) {
       const listed = await send(`/v1/subscriptions/${input.subscriptionId}?expand[]=items.data.price`, { method: "GET" });

@@ -152,11 +152,14 @@ describe("Phase B full flow (MemoryBilling)", () => {
         },
       },
       paidAt,
+      { billing },
     );
     const afterPay = await prisma.client.findUniqueOrThrow({ where: { id: client.id } });
     expect(afterPay.billingStatus).toBe("paid");
     expect(afterPay.paidAt?.toISOString()).toBe(paidAt.toISOString());
     expect(afterPay.stripeSubscriptionId).toBe(billing.subscriptionFor(client.id));
+    expect(afterPay.stripeCurrentPeriodStart).toBeTruthy();
+    expect(afterPay.stripeCurrentPeriodEnd).toBeTruthy();
 
     // --- 4. interview reachable ---
     const ownerActor = { id: owner.id, role: "client_owner" as const, clientId: client.id };
@@ -205,13 +208,13 @@ describe("Phase B full flow (MemoryBilling)", () => {
     expect(usage.billableMinutes).toBe(2);
     expect(usage.meterReportedAt).toBeNull();
 
-    const firstReport = await reportUsageToStripe({ billing });
+    const firstReport = await reportUsageToStripe({ billing, now: new Date("2026-03-05T16:00:00.000Z") });
     expect(firstReport.reported).toBe(1);
     expect(billing.creates.meterEvent).toBe(1);
     expect(billing.meterEvents[0]?.identifier).toBe(usage.id);
     expect(billing.meterEvents[0]?.value).toBe(2);
 
-    const secondReport = await reportUsageToStripe({ billing });
+    const secondReport = await reportUsageToStripe({ billing, now: new Date("2026-03-05T16:05:00.000Z") });
     expect(secondReport.reported).toBe(0);
     expect(billing.creates.meterEvent).toBe(1);
 
@@ -236,7 +239,8 @@ describe("Phase B full flow (MemoryBilling)", () => {
     expect(inbound.agent_override?.retell_llm.begin_message).toBe(
       "Thanks for calling Flow HVAC. We can't take your call right now. Please try again later.",
     );
-    expect(inbound.agent_override?.agent?.max_call_duration_ms).toBe(15_000);
+    expect(inbound.agent_override?.agent?.max_call_duration_ms).toBe(12_000);
+    expect(inbound.agent_override?.agent?.end_call_after_silence_ms).toBe(3_000);
 
     // --- 8. invoice.paid → resumed ---
     await applyStripeEvent({

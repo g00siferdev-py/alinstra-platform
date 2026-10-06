@@ -3,6 +3,7 @@ import { prisma, recordEmailChange } from "@alinstra/db";
 import { enqueueAccountEmail, enqueueSendPasswordReset, getRedis } from "@alinstra/queue";
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
+import { nextCookies } from "better-auth/next-js";
 import { twoFactor } from "better-auth/plugins";
 import { ADMIN_SESSION_MS, CLIENT_SESSION_SECONDS, CLIENT_SESSION_UPDATE_AGE_SECONDS, MIN_PASSWORD_LENGTH } from "./constants";
 import { redisSecondaryStorage } from "./redis-storage";
@@ -105,6 +106,8 @@ export const auth = betterAuth({
         storeBackupCodes: "encrypted",
       },
     }),
+    // Must stay last so server actions (signup sign-in) can write the session cookie.
+    nextCookies(),
   ],
   databaseHooks: {
     user: {

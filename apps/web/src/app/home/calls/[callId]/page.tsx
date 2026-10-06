@@ -2,6 +2,7 @@ import { CallDetail } from "@/components/call-detail";
 import { logCallDetailView } from "@/lib/access-log";
 import { callViewerFor } from "@/lib/call-viewer";
 import { requireUser } from "@/lib/session";
+import { redirectUnpaidSelfServeOwner } from "@/lib/self-serve-gate";
 import { canSeeCallerNumber, clients, getCall } from "@alinstra/db";
 import { notFound } from "next/navigation";
 
@@ -9,6 +10,7 @@ export const dynamic = "force-dynamic";
 
 export default async function PortalCallDetailPage({ params }: { params: Promise<{ callId: string }> }) {
   const session = await requireUser();
+  await redirectUnpaidSelfServeOwner();
   const viewer = callViewerFor(session.user);
   if (!viewer || viewer.role === "admin" || !viewer.clientId) notFound();
   const { callId } = await params;

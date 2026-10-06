@@ -68,6 +68,7 @@ export async function signupAction(_prev: SignupFormState, formData: FormData): 
     return { ok: false, error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters.` };
   }
 
+  let clientIdForLog: string | null = null;
   try {
     const headerList = await headers();
     const request = new Request("http://localhost/signup", { headers: headerList });
@@ -97,6 +98,7 @@ export async function signupAction(_prev: SignupFormState, formData: FormData): 
         mobilePhone,
         planId,
       }));
+      clientIdForLog = client.id;
     } catch (error) {
       return { ok: false, error: error instanceof Error ? error.message : "Could not create your account. Try again." };
     }
@@ -152,8 +154,14 @@ export async function signupAction(_prev: SignupFormState, formData: FormData): 
     const checkout = await ensureSelfServeCheckout(client.id, billingDeps());
     return { ok: true, checkoutUrl: checkout.url };
   } catch (error) {
-    log("warn", "signup.failed", { error: error instanceof Error ? error.name : "unknown" });
-    return { ok: false, error: error instanceof Error ? error.message : "Could not create your account. Try again." };
+    log("warn", "signup.failed", {
+      clientId: clientIdForLog,
+      error: error instanceof Error ? error.name : "unknown",
+    });
+    return {
+      ok: false,
+      error: "Something went wrong creating your account. Try again, or email hello@alinstra.com.",
+    };
   }
 }
 

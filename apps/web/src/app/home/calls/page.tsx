@@ -3,6 +3,7 @@ import { PageHeader } from "@/components/ui";
 import { parseCallFilters } from "@/lib/call-view";
 import { callViewerFor } from "@/lib/call-viewer";
 import { requireUser } from "@/lib/session";
+import { redirectUnpaidSelfServeOwner } from "@/lib/self-serve-gate";
 import { canViewClientCalls, clients, listCalls } from "@alinstra/db";
 import { notFound } from "next/navigation";
 
@@ -10,6 +11,7 @@ export const dynamic = "force-dynamic";
 
 export default async function PortalCallsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const session = await requireUser();
+  await redirectUnpaidSelfServeOwner();
   const viewer = callViewerFor(session.user);
   // Staff without the grant (and admins, who use the admin screens) get a 404, not a 403.
   if (!viewer || viewer.role === "admin" || !viewer.clientId || !canViewClientCalls(viewer, viewer.clientId)) notFound();

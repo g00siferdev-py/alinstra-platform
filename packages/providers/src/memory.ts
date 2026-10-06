@@ -120,6 +120,9 @@ export class MemoryBilling implements BillingPlatform {
     setupPriceId: string | null;
     meteredPriceId: string | null;
     clientId: string;
+    customerUpdateAddress: "auto";
+    customerUpdateName: "auto";
+    taxIdCollection: false;
   } | null = null;
   canceled = new Set<string>();
   periodEnd = new Map<string, Date>();
@@ -192,6 +195,9 @@ export class MemoryBilling implements BillingPlatform {
       setupPriceId: input.setupPriceId,
       meteredPriceId: input.meteredPriceId ?? null,
       clientId: input.clientId,
+      customerUpdateAddress: "auto",
+      customerUpdateName: "auto",
+      taxIdCollection: false,
     };
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
     const existing = this.checkouts.get(input.idempotencyKey);
@@ -216,6 +222,12 @@ export class MemoryBilling implements BillingPlatform {
     const url = `https://billing.stripe.test/session/${input.customerId}/${this.creates.portal}`;
     this.portalSessions.push({ customerId: input.customerId, returnUrl: input.returnUrl, url });
     return { url };
+  }
+
+  async getSubscription(subscriptionId: string): Promise<SubscriptionPeriodBounds> {
+    const start = this.periodStart.get(subscriptionId) ?? new Date();
+    const end = this.periodEnd.get(subscriptionId) ?? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    return { currentPeriodStart: start, currentPeriodEnd: end };
   }
 
   async updateSubscriptionPrices(input: UpdateSubscriptionPricesInput): Promise<SubscriptionPeriodBounds> {

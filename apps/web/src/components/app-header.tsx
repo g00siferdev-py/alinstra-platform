@@ -2,6 +2,7 @@ import { SignOutControl } from "@/components/account-menu";
 import { AppNav, type AppNavLink } from "@/components/app-nav";
 import { GuardedLink } from "@/components/guarded-link";
 import { WaveformMark } from "@/components/ui";
+import { clients } from "@alinstra/db";
 import { peekSession } from "@/lib/session";
 
 export async function AppHeader({ liveCallCount = 0 }: { liveCallCount?: number }) {
@@ -9,6 +10,12 @@ export async function AppHeader({ liveCallCount = 0 }: { liveCallCount?: number 
   if (!session) return null;
   const role = session.user.role;
   const liveBadge = liveCallCount > 0 ? `${liveCallCount} live` : null;
+
+  let unpaidSelfServe = false;
+  if (role === "client_owner" && session.user.clientId) {
+    const client = await clients({ role: "client_owner", clientId: session.user.clientId }).getById(session.user.clientId);
+    unpaidSelfServe = Boolean(client?.selfServe && !client.paidAt && client.billingStatus !== "paid");
+  }
 
   const links: AppNavLink[] =
     role === "admin"
@@ -23,22 +30,24 @@ export async function AppHeader({ liveCallCount = 0 }: { liveCallCount?: number 
           { href: "/admin/reports", label: "Reports" },
           { href: "/admin/services", label: "Services" },
         ]
-      : role === "client_owner"
-        ? [
-            { href: "/home", label: "Home" },
-            { href: "/home/business", label: "My Business" },
-            { href: "/home/billing", label: "Billing" },
-            { href: "/home/reports", label: "Reports" },
-            { href: "/home/calls", label: "Calls" },
-            { href: "/home/changes", label: "Change Requests" },
-            { href: "/home/team", label: "Team" },
-            { href: "/home/access", label: "Who viewed" },
-          ]
-        : [
-            { href: "/home", label: "Home" },
-            { href: "/home/business", label: "My Business" },
-            ...(session.user.canViewCalls === true ? [{ href: "/home/calls", label: "Calls" }] : []),
-          ];
+      : unpaidSelfServe
+        ? [{ href: "/home", label: "Home" }]
+        : role === "client_owner"
+          ? [
+              { href: "/home", label: "Home" },
+              { href: "/home/business", label: "My Business" },
+              { href: "/home/billing", label: "Billing" },
+              { href: "/home/reports", label: "Reports" },
+              { href: "/home/calls", label: "Calls" },
+              { href: "/home/changes", label: "Change Requests" },
+              { href: "/home/team", label: "Team" },
+              { href: "/home/access", label: "Who viewed" },
+            ]
+          : [
+              { href: "/home", label: "Home" },
+              { href: "/home/business", label: "My Business" },
+              ...(session.user.canViewCalls === true ? [{ href: "/home/calls", label: "Calls" }] : []),
+            ];
 
   return (
     <header className="border-b border-[var(--line)] bg-[var(--surface)]">

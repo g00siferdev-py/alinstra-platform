@@ -4,6 +4,7 @@ import { interviewEnabled } from "@/lib/interview-config";
 import { buildInterviewChecklist } from "@/lib/interview-checklist";
 import { ensureInterviewSession } from "@/lib/interview-server";
 import { requireUser } from "@/lib/session";
+import { redirectUnpaidSelfServeOwner } from "@/lib/self-serve-gate";
 import { clients, type Actor } from "@alinstra/db";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -12,13 +13,11 @@ export default async function OwnerInterviewPage() {
   if (!interviewEnabled()) notFound();
   const session = await requireUser();
   if (session.user.role !== "client_owner" || !session.user.clientId) notFound();
+  await redirectUnpaidSelfServeOwner();
 
   const ctx = { role: "client_owner" as const, clientId: session.user.clientId };
   const client = await clients(ctx).getById(session.user.clientId);
   if (!client || client.wizardSubmittedAt) notFound();
-  if (client.selfServe && !client.paidAt && client.billingStatus !== "paid") {
-    notFound();
-  }
 
   const actor: Actor = { id: session.user.id, role: "client_owner", clientId: session.user.clientId };
   const interview = await ensureInterviewSession(actor, session.user.clientId, client.industry);

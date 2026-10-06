@@ -8,6 +8,7 @@ import {
   type Actor,
   type TenantContext,
 } from "@alinstra/db";
+import { EmailConfirmBanner } from "@/components/email-confirm-banner";
 import { LiveCallBanner } from "@/components/live-call-banner";
 import { ReopenCheckoutButton } from "@/components/reopen-checkout-button";
 import {
@@ -57,6 +58,17 @@ function statusPillTone(status: string): "live" | "warning" | "neutral" | "succe
   if (status === "setting_up" || status === "paused") return "warning";
   if (status === "live") return "success";
   return "neutral";
+}
+
+function receptionistPill(overview: {
+  agentLive: boolean;
+  receptionistStatus: "not_set_up" | "in_review" | "connecting" | "live";
+}): { tone: "live" | "warning" | "neutral" | "success"; label: string } {
+  if (overview.agentLive) return { tone: "live", label: "On a call" };
+  if (overview.receptionistStatus === "live") return { tone: "success", label: "Live" };
+  if (overview.receptionistStatus === "connecting") return { tone: "warning", label: "Connecting your number" };
+  if (overview.receptionistStatus === "in_review") return { tone: "warning", label: "In review" };
+  return { tone: "neutral", label: "Not set up yet" };
 }
 
 export default async function HomePage() {
@@ -322,6 +334,8 @@ export default async function HomePage() {
           </SectionCard>
         ) : null}
 
+        {role === "client_owner" && !session.user.emailVerified ? <EmailConfirmBanner /> : null}
+
         {role === "client_owner" && overview.billingStatus === "paused" ? (
           <Card className="grid gap-3 border-[var(--warning)] bg-[var(--warning-soft)]">
             <h2 className="text-lg font-extrabold text-[var(--ink)]">Ava is paused: update your card</h2>
@@ -427,7 +441,10 @@ export default async function HomePage() {
           <div className="grid gap-2">
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="text-lg font-extrabold text-[var(--ink)]">Your receptionist</h2>
-              {overview.agentLive ? <Pill tone="live">On a call</Pill> : <Pill tone="success">Ready</Pill>}
+              {(() => {
+                const pill = receptionistPill(overview);
+                return <Pill tone={pill.tone}>{pill.label}</Pill>;
+              })()}
             </div>
             <p className="text-sm text-[var(--muted)]">
               {overview.publicPhone ? `Public number · ${overview.publicPhone}` : "No public number yet."}

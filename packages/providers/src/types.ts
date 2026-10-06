@@ -247,6 +247,8 @@ export interface BillingPlatform {
   createCheckout(input: CreateCheckoutInput): Promise<{ sessionId: string; url: string; expiresAt: Date }>;
   /** Stripe Customer Portal (card, invoices, cancel at period end). */
   createPortalSession(input: CreatePortalSessionInput): Promise<{ url: string }>;
+  /** GET /v1/subscriptions/{id} — period bounds from subscription items. */
+  getSubscription(subscriptionId: string): Promise<SubscriptionPeriodBounds>;
   /**
    * Swap the subscription's base recurring and metered prices.
    * Lists current items, replaces matching kinds, leaves unrelated items alone.

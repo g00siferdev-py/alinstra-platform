@@ -6,6 +6,7 @@ import { formatDuration } from "@/lib/call-view";
 import { callViewerFor } from "@/lib/call-viewer";
 import { interviewEnabled } from "@/lib/interview-config";
 import { requireUser } from "@/lib/session";
+import { redirectUnpaidSelfServeOwner } from "@/lib/self-serve-gate";
 import {
   AGENT_AFFECTING_STEPS,
   canViewClientCalls,
@@ -27,7 +28,7 @@ import {
 } from "@alinstra/db";
 import { Card, EmptyState, PageHeader, SectionCard } from "@/components/ui";
 import Link from "next/link";
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 
 function submittedStepSummary(step: number | undefined, payload: Record<string, unknown> | undefined): string {
   if (!step || !payload) return "";
@@ -47,17 +48,10 @@ function submittedStepSummary(step: number | undefined, payload: Record<string, 
 export default async function MyBusinessPage() {
   const session = await requireUser();
   if (session.user.role === "admin" || !session.user.clientId) notFound();
+  await redirectUnpaidSelfServeOwner();
   const ctx = { role: session.user.role as "client_owner" | "client_staff", clientId: session.user.clientId };
   const client = await clients(ctx).getById(session.user.clientId);
   if (!client) notFound();
-  if (
-    session.user.role === "client_owner" &&
-    client.selfServe &&
-    !client.paidAt &&
-    client.billingStatus !== "paid"
-  ) {
-    redirect("/home");
-  }
   const viewer = callViewerFor(session.user);
   const showCalls = Boolean(viewer && canViewClientCalls(viewer, client.id));
   const [plan, knowledge, targets, updates, calls] = await Promise.all([

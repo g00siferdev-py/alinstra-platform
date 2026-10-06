@@ -97,7 +97,7 @@ describe("Phase B Part 3 metering", () => {
         name: "Paid Co",
         planId: plan.id,
         internal: false,
-        paidAt: new Date(),
+        paidAt: new Date("2026-09-01T00:00:00.000Z"),
         stripeCustomerId: "cus_paid",
         billingStatus: "paid",
       },
@@ -107,7 +107,7 @@ describe("Phase B Part 3 metering", () => {
         name: "Internal",
         planId: plan.id,
         internal: true,
-        paidAt: new Date(),
+        paidAt: new Date("2026-09-01T00:00:00.000Z"),
         stripeCustomerId: "cus_internal",
         billingStatus: "paid",
       },
@@ -233,7 +233,7 @@ describe("Phase B Part 3 metering", () => {
       data: {
         name: "Fail Co",
         planId: plan.id,
-        paidAt: new Date(),
+        paidAt: new Date("2026-09-01T00:00:00.000Z"),
         stripeCustomerId: "cus_fail",
         billingStatus: "paid",
       },
@@ -278,5 +278,148 @@ describe("Phase B Part 3 metering", () => {
     expect(result.failed).toBe(1);
     expect(result.notified).toBe(1);
     expect(notices[0]).toMatch(/24h/);
+  });
+
+  it("skips too-old rows and still reports newer ones", async () => {
+    const plan = await seedPlan();
+    const now = new Date("2026-10-06T12:00:00.000Z");
+    const paidAt = new Date("2026-09-01T00:00:00.000Z");
+    const client = await prisma.client.create({
+      data: {
+        name: "Age Co",
+        planId: plan.id,
+        paidAt,
+        stripeCustomerId: "cus_age",
+        billingStatus: "paid",
+      },
+    });
+    const oldEnded = new Date(now.getTime() - 40 * 24 * 60 * 60 * 1000);
+    const newEnded = new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000);
+    const oldCall = await prisma.callRecord.create({
+      data: {
+        clientId: client.id,
+        retellCallId: "retell_old",
+        startedAt: oldEnded,
+        endedAt: oldEnded,
+        durationSeconds: 60,
+        callerMasked: "****0001",
+      },
+    });
+    const newCall = await prisma.callRecord.create({
+      data: {
+        clientId: client.id,
+        retellCallId: "retell_new",
+        startedAt: newEnded,
+        endedAt: newEnded,
+        durationSeconds: 60,
+        callerMasked: "****0002",
+      },
+    });
+    await prisma.$transaction(async (tx) => {
+      await upsertUsageRecord(tx, {
+        clientId: client.id,
+        callRecordId: oldCall.id,
+        retellCallId: oldCall.retellCallId,
+        startedAt: oldCall.startedAt!,
+        endedAt: oldCall.endedAt!,
+        durationSeconds: 60,
+        costCents: null,
+        internal: false,
+      });
+      await upsertUsageRecord(tx, {
+        clientId: client.id,
+        callRecordId: newCall.id,
+        retellCallId: newCall.retellCallId,
+        startedAt: newCall.startedAt!,
+        endedAt: newCall.endedAt!,
+        durationSeconds: 60,
+        costCents: null,
+        internal: false,
+      });
+    });
+
+    const billing = new MemoryBilling();
+    const result = await reportUsageToStripe({ billing, now });
+    expect(result.reported).toBe(1);
+    expect(billing.creates.meterEvent).toBe(1);
+    expect(billing.meterEvents[0]?.identifier).toBe(
+      (await prisma.usageRecord.findUniqueOrThrow({ where: { callRecordId: newCall.id } })).id,
+    );
+    const oldUsage = await prisma.usageRecord.findUniqueOrThrow({ where: { callRecordId: oldCall.id } });
+    expect(oldUsage.meterSkippedAt).toBeTruthy();
+    expect(oldUsage.meterSkipReason).toBe("too_old");
+    expect(oldUsage.meterReportedAt).toBeNull();
+  });
+
+  it("does not let a recently failing row block the next one", async () => {
+    const plan = await seedPlan();
+    const now = new Date("2026-10-06T12:00:00.000Z");
+    const client = await prisma.client.create({
+      data: {
+        name: "Fail Queue Co",
+        planId: plan.id,
+        paidAt: new Date("2026-09-01T00:00:00.000Z"),
+        stripeCustomerId: "cus_fail_queue",
+        billingStatus: "paid",
+      },
+    });
+    const firstEnded = new Date("2026-10-01T10:00:00.000Z");
+    const secondEnded = new Date("2026-10-02T10:00:00.000Z");
+    const firstCall = await prisma.callRecord.create({
+      data: {
+        clientId: client.id,
+        retellCallId: "retell_fail_first",
+        startedAt: firstEnded,
+        endedAt: firstEnded,
+        durationSeconds: 60,
+        callerMasked: "****1001",
+      },
+    });
+    const secondCall = await prisma.callRecord.create({
+      data: {
+        clientId: client.id,
+        retellCallId: "retell_fail_second",
+        startedAt: secondEnded,
+        endedAt: secondEnded,
+        durationSeconds: 120,
+        callerMasked: "****1002",
+      },
+    });
+    await prisma.$transaction(async (tx) => {
+      await upsertUsageRecord(tx, {
+        clientId: client.id,
+        callRecordId: firstCall.id,
+        retellCallId: firstCall.retellCallId,
+        startedAt: firstCall.startedAt!,
+        endedAt: firstCall.endedAt!,
+        durationSeconds: 60,
+        costCents: null,
+        internal: false,
+      });
+      await upsertUsageRecord(tx, {
+        clientId: client.id,
+        callRecordId: secondCall.id,
+        retellCallId: secondCall.retellCallId,
+        startedAt: secondCall.startedAt!,
+        endedAt: secondCall.endedAt!,
+        durationSeconds: 120,
+        costCents: null,
+        internal: false,
+      });
+    });
+    const firstUsage = await prisma.usageRecord.findUniqueOrThrow({ where: { callRecordId: firstCall.id } });
+    await prisma.usageRecord.update({
+      where: { id: firstUsage.id },
+      data: { meterReportFailedAt: new Date(now.getTime() - 5 * 60 * 1000) },
+    });
+
+    const billing = new MemoryBilling();
+    const result = await reportUsageToStripe({ billing, now });
+    expect(result.reported).toBe(1);
+    expect(billing.creates.meterEvent).toBe(1);
+    expect(billing.meterEvents[0]?.identifier).toBe(
+      (await prisma.usageRecord.findUniqueOrThrow({ where: { callRecordId: secondCall.id } })).id,
+    );
+    expect((await prisma.usageRecord.findUniqueOrThrow({ where: { callRecordId: firstCall.id } })).meterReportedAt).toBeNull();
   });
 });

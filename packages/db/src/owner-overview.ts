@@ -14,6 +14,8 @@ export type OwnerOverview = {
   publicPhone: string | null;
   agentLive: boolean;
   liveCallId: string | null;
+  /** Owner-facing receptionist state until live. */
+  receptionistStatus: "not_set_up" | "in_review" | "connecting" | "live";
   billingStatus: string;
   selfServe: boolean;
   paidAt: Date | null;
@@ -79,6 +81,17 @@ export async function ownerOverview(ctx: TenantContext, clientId: string, now = 
 
   const minutesIncluded = client.overrideIncludedMinutes ?? client.plan?.includedMinutes ?? 0;
 
+  let receptionistStatus: OwnerOverview["receptionistStatus"] = "not_set_up";
+  if (client.status === "live") {
+    receptionistStatus = "live";
+  } else if (client.wizardSubmittedAt) {
+    const connecting =
+      Boolean(client.phoneE164) ||
+      Boolean(client.retellAgentId) ||
+      client.agentSyncStatus !== "not_provisioned";
+    receptionistStatus = connecting ? "connecting" : "in_review";
+  }
+
   return {
     clientName: client.name,
     timezone: client.timezone,
@@ -90,6 +103,7 @@ export async function ownerOverview(ctx: TenantContext, clientId: string, now = 
     publicPhone: client.publicPhone ?? client.phoneE164,
     agentLive: Boolean(liveCall),
     liveCallId: liveCall?.id ?? null,
+    receptionistStatus,
     billingStatus: client.billingStatus,
     selfServe: client.selfServe,
     paidAt: client.paidAt,

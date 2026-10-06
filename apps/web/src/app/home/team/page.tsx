@@ -2,12 +2,14 @@ import { CallAccessToggle } from "@/components/call-access-toggle";
 import { InviteStaffForm } from "@/components/home-forms";
 import { Card, EmptyState, PageHeader } from "@/components/ui";
 import { requireUser } from "@/lib/session";
+import { redirectUnpaidSelfServeOwner } from "@/lib/self-serve-gate";
 import { users } from "@alinstra/db";
 import { notFound } from "next/navigation";
 
 export default async function TeamPage() {
   const session = await requireUser();
   if (session.user.role !== "client_owner" || !session.user.clientId) notFound();
+  await redirectUnpaidSelfServeOwner();
   const people = await users({ role: "client_owner", clientId: session.user.clientId }).list();
   const staff = people.filter((person) => person.role === "client_staff");
   return (

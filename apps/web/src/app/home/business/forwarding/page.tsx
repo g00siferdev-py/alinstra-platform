@@ -1,6 +1,7 @@
 import { CopyButton } from "@/components/copy-button";
 import { Card, PageHeader } from "@/components/ui";
 import { requireUser } from "@/lib/session";
+import { redirectUnpaidSelfServeOwner } from "@/lib/self-serve-gate";
 import { clients, formatPhone, needsOwnNumberForwarding } from "@alinstra/db";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -10,6 +11,7 @@ export const dynamic = "force-dynamic";
 export default async function ForwardingPage() {
   const session = await requireUser();
   if (session.user.role === "admin" || !session.user.clientId) notFound();
+  await redirectUnpaidSelfServeOwner();
   const ctx = { role: session.user.role as "client_owner" | "client_staff", clientId: session.user.clientId };
   const client = await clients(ctx).getById(session.user.clientId);
   if (!client) notFound();

@@ -2,6 +2,7 @@ import { OwnerSetupReview } from "@/components/owner-setup-review";
 import { PageHeader } from "@/components/ui";
 import { formPayload } from "@/lib/wizard-form-payload";
 import { requireUser } from "@/lib/session";
+import { redirectUnpaidSelfServeOwner } from "@/lib/self-serve-gate";
 import {
   clients,
   emptyWizardPayload,
@@ -15,13 +16,11 @@ import { notFound, redirect } from "next/navigation";
 export default async function OwnerSetupPage() {
   const session = await requireUser();
   if (session.user.role !== "client_owner" || !session.user.clientId) notFound();
+  await redirectUnpaidSelfServeOwner();
   const ctx = { role: "client_owner" as const, clientId: session.user.clientId };
   const client = await clients(ctx).getById(session.user.clientId);
   if (!client) notFound();
   if (client.wizardSubmittedAt) redirect("/home/business");
-  if (client.selfServe && !client.paidAt && client.billingStatus !== "paid") {
-    redirect("/home");
-  }
 
   const [draft, planRows] = await Promise.all([
     wizardDrafts(ctx).getByClientId(client.id),

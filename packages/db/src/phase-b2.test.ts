@@ -153,6 +153,9 @@ describe("Phase B Part 2 checkout and self-serve", () => {
     expect(billing.creates.customer).toBe(1);
     expect((await prisma.client.findUniqueOrThrow({ where: { id: client.id } })).stripeCustomerId).toBeTruthy();
     expect((await prisma.client.findUniqueOrThrow({ where: { id: client.id } })).billingStatus).toBe("checkout_open");
+    expect(billing.lastCheckout?.customerUpdateAddress).toBe("auto");
+    expect(billing.lastCheckout?.customerUpdateName).toBe("auto");
+    expect(billing.lastCheckout?.taxIdCollection).toBe(false);
   });
 
   it("admin overview lists self-serve signups awaiting review", async () => {

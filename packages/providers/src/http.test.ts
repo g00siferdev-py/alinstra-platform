@@ -224,4 +224,29 @@ describe("provider HTTP clients", () => {
     expect(event.identifier).toBe("evt_1");
     expect(bodies[2]).toContain("payload%5Bvalue%5D=3");
   });
+
+  it("opens Checkout with customer_update auto and without tax_id_collection", async () => {
+    let body = "";
+    const billing = httpBilling("sk_test_local", async (_url, init) => {
+      body = String(init?.body ?? "");
+      return new Response(
+        JSON.stringify({ id: "cs_test", url: "https://checkout.stripe.test/cs", expires_at: Math.floor(Date.now() / 1000) + 3600 }),
+        { status: 200 },
+      );
+    });
+    await billing.createCheckout({
+      customerId: "cus_1",
+      clientId: "client_1",
+      recurringPriceId: "price_monthly",
+      setupPriceId: "price_setup",
+      meteredPriceId: "price_metered",
+      successUrl: "https://app.test/home?welcome=1",
+      cancelUrl: "https://app.test/signup/canceled",
+      idempotencyKey: "checkout_client_1",
+    });
+    expect(body).toContain("customer_update%5Baddress%5D=auto");
+    expect(body).toContain("customer_update%5Bname%5D=auto");
+    expect(body).toContain("automatic_tax%5Benabled%5D=true");
+    expect(body).not.toContain("tax_id_collection");
+  });
 });

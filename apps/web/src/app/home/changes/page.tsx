@@ -2,12 +2,14 @@ import { ChangeRequestForm } from "@/components/change-request-form";
 import { PageHeader } from "@/components/ui";
 import { changeAllowance, changeRequests } from "@alinstra/db";
 import { requireUser } from "@/lib/session";
+import { redirectUnpaidSelfServeOwner } from "@/lib/self-serve-gate";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
 export default async function ChangeRequestsPage() {
   const session = await requireUser();
   if (session.user.role !== "client_owner" || !session.user.clientId) notFound();
+  await redirectUnpaidSelfServeOwner();
   const actor = { id: session.user.id, role: "client_owner" as const, clientId: session.user.clientId };
   const [allowance, requests] = await Promise.all([
     changeAllowance(actor, session.user.clientId),

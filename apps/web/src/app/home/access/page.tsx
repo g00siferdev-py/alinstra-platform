@@ -2,6 +2,7 @@ import { AccessLogTable } from "@/components/access-log-table";
 import { PageHeader } from "@/components/ui";
 import { parseAccessFilters } from "@/lib/access-view";
 import { requireUser } from "@/lib/session";
+import { redirectUnpaidSelfServeOwner } from "@/lib/self-serve-gate";
 import { accessLogs, clients } from "@alinstra/db";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -15,6 +16,7 @@ export const dynamic = "force-dynamic";
 export default async function WhoViewedPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const session = await requireUser();
   if (session.user.role !== "client_owner" || !session.user.clientId) notFound();
+  await redirectUnpaidSelfServeOwner();
   const ctx = { role: "client_owner" as const, clientId: session.user.clientId };
   const client = await clients(ctx).getById(ctx.clientId);
   if (!client) notFound();

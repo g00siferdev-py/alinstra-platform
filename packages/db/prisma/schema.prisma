@@ -589,10 +589,14 @@ model UsageRecord {
   meterReportFailedAt DateTime?
   /// Set when we emailed admin after 24h of failures (once per streak).
   meterFailureNotifiedAt DateTime?
+  /// Permanently skip meter reporting (too old for Stripe, or before paidAt).
+  meterSkippedAt DateTime?
+  meterSkipReason String?
   createdAt       DateTime  @default(now())
 
   @@index([clientId, startedAt])
   @@index([clientId, meterReportedAt])
+  @@index([meterSkippedAt, meterReportedAt, endedAt])
   @@map("usage_record")
 }
 
