@@ -87,4 +87,5 @@ export {
   billingResumedOwnerEmail,
   paymentFailedOwnerEmail,
 } from "./billing-emails";
+export { monthlyReportOwnerEmail } from "./monthly-report-email";
 

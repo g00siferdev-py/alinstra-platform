@@ -15,6 +15,7 @@ import {
   scheduleReconcileCalls,
   scheduleReportUsage,
   schedulePausePastDue,
+  scheduleMonthlyReports,
   sendAccountEmail,
   sendAdminNotice,
   sendInviteEmail,
@@ -33,6 +34,7 @@ import { runIsolatedJob } from "./jobs/run-isolated";
 import { runChurnSweep, runMessageEmail, runProvision, runSync } from "./jobs/phase3";
 import { runReportUsage } from "./jobs/report-usage";
 import { runPausePastDue } from "./jobs/pause-past-due";
+import { runMonthlyReports } from "./jobs/monthly-reports";
 import { deliverAdminNotice } from "./jobs/send-admin-notice";
 import { sendInvite } from "./jobs/send-invite-email";
 import { sendPasswordReset } from "./jobs/send-password-reset-email";
@@ -159,6 +161,10 @@ const calls = new Worker(
       await runPausePastDue();
       return;
     }
+    if (job.name === "monthly-reports") {
+      await runMonthlyReports();
+      return;
+    }
     if (job.name === "backup-db") {
       await runBackupDb();
       return;
@@ -182,6 +188,10 @@ void scheduleReportUsage().catch((error: unknown) => {
 
 void schedulePausePastDue().catch((error: unknown) => {
   log("error", "pause-past-due schedule failed", { error: error instanceof Error ? error.name : "unknown" });
+});
+
+void scheduleMonthlyReports().catch((error: unknown) => {
+  log("error", "monthly-reports schedule failed", { error: error instanceof Error ? error.name : "unknown" });
 });
 
 void scheduleBackupDb().catch((error: unknown) => {

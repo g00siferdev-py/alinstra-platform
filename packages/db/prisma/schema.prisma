@@ -187,6 +187,8 @@ model Client {
   liveAt                          DateTime?
   /// Days a call's transcript, recording, and caller number are kept before the nightly purge. 7–365.
   callRetentionDays               Int       @default(90)
+  /// Owner monthly report email on the 1st (default on). Counts only; no caller content.
+  monthlyReportEmail              Boolean   @default(true)
   lastCallPurgeAt                 DateTime?
   lastCallPurgeCount              Int?
   createdAt                       DateTime  @default(now())

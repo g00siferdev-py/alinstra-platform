@@ -73,6 +73,12 @@ Never put the publishable key in server secrets for this flow — Checkout and t
 
 ---
 
+## 1b. Monthly owner report emails
+
+The worker sends owner monthly report emails on a **single** schedule: **1st of each month at 09:00 America/New_York** (`MONTHLY_REPORTS_CRON` in `@alinstra/queue`). It is not staggered per client local time. Each email covers the previous **calendar month in that client's timezone**, with counts only (no caller names, numbers, or message text), and links to `/home/reports`. Internal clients are skipped; owners can turn the email off under My Business (default on).
+
+---
+
 ## 2. How to run price sync
 
 From the repo (with `STRIPE_SECRET_KEY` set to the mode you want):

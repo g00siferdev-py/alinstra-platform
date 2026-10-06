@@ -89,6 +89,13 @@ export const PAUSE_PAST_DUE_JOB_ID = "pause-past-due-daily";
 /** 09:00 America/New_York daily: pause clients past due more than 7 days. */
 export const PAUSE_PAST_DUE_CRON = "0 9 * * *";
 export const PAUSE_PAST_DUE_TIMEZONE = "America/New_York";
+/**
+ * Monthly owner report emails: 1st of each month at 09:00 America/New_York (single ET run, not per-client local time).
+ * Job sends the previous calendar month in each client's timezone.
+ */
+export const MONTHLY_REPORTS_JOB_ID = "monthly-reports";
+export const MONTHLY_REPORTS_CRON = "0 9 1 * *";
+export const MONTHLY_REPORTS_TIMEZONE = "America/New_York";
 
 let redis: Redis | undefined;
 
@@ -281,6 +288,18 @@ export async function schedulePausePastDue(): Promise<void> {
     PAUSE_PAST_DUE_JOB_ID,
     { pattern: PAUSE_PAST_DUE_CRON, tz: PAUSE_PAST_DUE_TIMEZONE },
     { name: "pause-past-due", data: {}, opts: { removeOnComplete: 30, removeOnFail: 30 } },
+  );
+}
+
+/**
+ * Owner monthly report emails on the 1st at 09:00 America/New_York (single ET run).
+ * Fixed jobId so restarts never double-schedule.
+ */
+export async function scheduleMonthlyReports(): Promise<void> {
+  await callsJobs().upsertJobScheduler(
+    MONTHLY_REPORTS_JOB_ID,
+    { pattern: MONTHLY_REPORTS_CRON, tz: MONTHLY_REPORTS_TIMEZONE },
+    { name: "monthly-reports", data: {}, opts: { removeOnComplete: 30, removeOnFail: 30 } },
   );
 }
 

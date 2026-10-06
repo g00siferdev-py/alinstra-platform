@@ -12,6 +12,7 @@ import {
   saveWizardDraft,
   setCallAccess,
   setCallRetention,
+  setMonthlyReportEmail,
   submitChangeRequest,
   submitWizard,
   type Actor,
@@ -173,6 +174,20 @@ export async function setCallRetentionAction(input: { days: number }) {
     return { ok: true };
   } catch (error) {
     return { error: message(error, "Could not update retention.") };
+  }
+}
+
+/** Owner turns the monthly report email on or off (default on). */
+export async function setMonthlyReportEmailAction(input: { enabled: boolean }) {
+  const session = await requireUser();
+  try {
+    const actor = ownerActor(session);
+    await setMonthlyReportEmail(actor, { clientId: actor.clientId, enabled: input.enabled });
+    revalidatePath("/home/business");
+    revalidatePath("/home/reports");
+    return { ok: true };
+  } catch (error) {
+    return { error: message(error, "Could not update report email settings.") };
   }
 }
 

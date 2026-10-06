@@ -1,4 +1,5 @@
 import { CallRetentionForm } from "@/components/call-retention-form";
+import { MonthlyReportEmailToggle } from "@/components/monthly-report-email-toggle";
 import { OutcomeBadge } from "@/components/calls-list";
 import { QuickUpdateForms } from "@/components/quick-update-forms";
 import { formatDuration } from "@/lib/call-view";
@@ -204,6 +205,12 @@ export default async function MyBusinessPage() {
       {owner && client.wizardSubmittedAt ? (
         <Card>
           <CallRetentionForm days={client.callRetentionDays} />
+        </Card>
+      ) : null}
+
+      {owner && client.wizardSubmittedAt ? (
+        <Card>
+          <MonthlyReportEmailToggle enabled={client.monthlyReportEmail} />
         </Card>
       ) : null}
 
