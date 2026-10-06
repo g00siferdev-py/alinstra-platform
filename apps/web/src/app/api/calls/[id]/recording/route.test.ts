@@ -5,11 +5,18 @@ type Viewer = { id?: string; role: string; clientId?: string | null; canViewCall
 const state = vi.hoisted(() => ({
   user: null as null | { id: string; role: string; clientId?: string | null; canViewCalls?: boolean; twoFactorEnabled?: boolean },
   rangeCalls: [] as Array<[number, number]>,
+  logged: [] as Array<{ userId: string; callId: string; clientId: string; range: string | null }>,
 }));
 
 const BYTES = Buffer.from("0123456789abcdef");
 
 vi.mock("@/lib/session", () => ({ getSession: async () => (state.user ? { user: state.user } : null) }));
+vi.mock("@/lib/access-log", () => ({
+  logRecordingStream: async (user: { id: string }, call: { id: string; clientId: string }, request: Request) => {
+    state.logged.push({ userId: user.id, callId: call.id, clientId: call.clientId, range: request.headers.get("range") });
+    return true;
+  },
+}));
 vi.mock("@alinstra/db", () => ({
   // Mirrors canAccessCall: admin → all, owner → own client, staff → own client with the grant; else null (404).
   recordingForPlayback: async (viewer: Viewer, callId: string) => {
@@ -18,7 +25,7 @@ vi.mock("@alinstra/db", () => ({
     const allowed =
       viewer.role === "admin" ||
       (viewer.clientId === call.clientId && (viewer.role === "client_owner" || (viewer.role === "client_staff" && viewer.canViewCalls === true)));
-    return allowed ? { key: "clients/client_1/calls/call_1.wav", contentType: "audio/wav", bytes: BYTES.byteLength } : null;
+    return allowed ? { key: "clients/client_1/calls/call_1.wav", contentType: "audio/wav", bytes: BYTES.byteLength, callId, clientId: call.clientId } : null;
   },
 }));
 vi.mock("@alinstra/storage", () => ({
@@ -53,6 +60,7 @@ describe("recording playback route", () => {
   beforeEach(() => {
     state.user = null;
     state.rangeCalls.length = 0;
+    state.logged.length = 0;
   });
 
   it("requires a session", async () => {
@@ -99,5 +107,24 @@ describe("recording playback route", () => {
     const bad = await get("call_1", "bytes=16-");
     expect(bad.status).toBe(416);
     expect(bad.headers.get("content-range")).toBe("bytes */16");
+  });
+
+  it("writes an access-log entry for every served recording request (Range included) and none for refusals", async () => {
+    await get("call_1");
+    expect(state.logged).toEqual([]);
+    state.user = roles.staff;
+    expect((await get("call_1")).status).toBe(404);
+    state.user = roles.foreignOwner;
+    expect((await get("call_1")).status).toBe(404);
+    expect(state.logged).toEqual([]);
+
+    state.user = roles.owner;
+    expect((await get("call_1")).status).toBe(200);
+    expect((await get("call_1", "bytes=4-7")).status).toBe(206);
+    expect((await get("call_1", "bytes=16-")).status).toBe(416);
+    expect(state.logged).toEqual([
+      { userId: "o", callId: "call_1", clientId: "client_1", range: null },
+      { userId: "o", callId: "call_1", clientId: "client_1", range: "bytes=4-7" },
+    ]);
   });
 });

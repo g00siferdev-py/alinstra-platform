@@ -301,6 +301,30 @@ model ChangeLog {
   @@map("change_log")
 }
 
+/// Read-access audit log (Phase S part 2): who opened transcripts, recordings, messages, documents.
+/// Ids, counts, and request metadata only; never plaintext call or message content. No foreign keys on
+/// purpose: rows outlive a removed client or user until the 400-day purge, so breach assessment still works.
+model AccessLog {
+  id            String   @id @default(cuid())
+  at            DateTime @default(now())
+  actorUserId   String
+  actorRole     String
+  clientId      String
+  action        String
+  entityType    String
+  entityId      String
+  ip            String?
+  userAgent     String?
+  impersonating Boolean  @default(false)
+  /// List views write one row with the number of items shown.
+  count         Int?
+
+  @@index([clientId, at])
+  @@index([actorUserId, at])
+  @@index([at])
+  @@map("access_log")
+}
+
 /// Custom invite. Not Better Auth's organization plugin.
 model Invite {
   id          String    @id @default(cuid())

@@ -1,5 +1,6 @@
 import { recordingForPlayback } from "@alinstra/db";
 import { getStorage } from "@alinstra/storage";
+import { logRecordingStream } from "@/lib/access-log";
 import { callViewerFor, parseByteRange } from "@/lib/call-viewer";
 import { getSession } from "@/lib/session";
 
@@ -34,6 +35,9 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
   if (range === "unsatisfiable") {
     return new Response(null, { status: 416, headers: { ...baseHeaders, "content-range": `bytes */${size}` } });
   }
+  // Audit trail, written before any audio leaves: one row per call per actor per 10 minutes, so seeking
+  // (Range requests) does not flood the log. Refusals and unsatisfiable ranges serve nothing and log nothing.
+  await logRecordingStream(session.user, { id: recording.callId, clientId: recording.clientId }, request);
   if (range) {
     const bytes = await storage.getRange(recording.key, range.start, range.end);
     return new Response(new Uint8Array(bytes), {

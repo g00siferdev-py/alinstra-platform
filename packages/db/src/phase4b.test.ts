@@ -225,9 +225,9 @@ describe("phase 4b calls", () => {
     await markRecordingStored("call_r", { key, contentType: "audio/wav", bytes: 1234 });
     expect(await recordingTarget("call_r")).toBeNull();
     const viewer = { id: owner.id, role: "client_owner" as const, clientId: client.id };
-    expect(await recordingForPlayback(viewer, callRecordId!)).toEqual({ key, contentType: "audio/wav", bytes: 1234 });
+    expect(await recordingForPlayback(viewer, callRecordId!)).toEqual({ key, contentType: "audio/wav", bytes: 1234, callId: callRecordId!, clientId: client.id });
     expect(await recordingForPlayback({ id: staff.id, role: "client_staff", clientId: client.id, canViewCalls: false }, callRecordId!)).toBeNull();
-    expect(await recordingForPlayback({ id: staff.id, role: "client_staff", clientId: client.id, canViewCalls: true }, callRecordId!)).toEqual({ key, contentType: "audio/wav", bytes: 1234 });
+    expect(await recordingForPlayback({ id: staff.id, role: "client_staff", clientId: client.id, canViewCalls: true }, callRecordId!)).toEqual({ key, contentType: "audio/wav", bytes: 1234, callId: callRecordId!, clientId: client.id });
     const page = await listCalls(viewer, client.id);
     expect(page.rows[0]).toMatchObject({ hasRecording: true, caller: CALLER, outcome: "message_taken" });
   });
@@ -365,7 +365,7 @@ describe("phase 4b calls", () => {
     expect(detail?.message).toMatchObject({ callerName: "Pat", body: "Furnace out" });
     const message = await prisma.clientMessage.findFirstOrThrow({ where: { clientId: client.id } });
     expect(message.retellCallId).toBe("call_link");
-    // Message → call: links only for viewers who may open the call.
+    // Message â†’ call: links only for viewers who may open the call.
     expect(await callLinksFor(ownerActor, client.id, [message.retellCallId, null, "call_unknown"])).toEqual(new Map([["call_link", callRecordId]]));
     expect((await callLinksFor({ id: staff.id, role: "client_staff", clientId: client.id, canViewCalls: false }, client.id, [message.retellCallId])).size).toBe(0);
   });

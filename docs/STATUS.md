@@ -8,7 +8,16 @@ Phase 2 is merged into `main`. Staging deploy readiness (navigation, port, worke
 - Migration `20261006020000_phase_s_cipher_columns` adds cipher columns for `ClientMessage` (caller name, callback number, body, plus `callbackMasked`), `TransferTarget` (`e164Cipher`, `e164Masked`), `KnowledgeBase.staffCipher`, and `KnowledgeDocument.extractedTextCipher`. Plaintext columns are nullable and not dropped yet.
 - New rows are written encrypted only. Older rows are read through the plaintext fallback until `packages/db/scripts/encrypt-backfill.ts` runs. ChangeLog and QuickUpdate JSON mask phone numbers.
 - `packages/db/scripts/rotate-encryption-key.ts` and `docs/KEY-ROTATION.md` cover rotation.
-- Todo before this part is done on each environment: deploy, run the backfill, confirm "Plaintext still present" is 0. Dropping the plaintext columns is a later phase. Parts 2 to 7 of `docs/phase-s-plan.md` are not started.
+- Todo before this part is done on each environment: deploy, run the backfill, confirm "Plaintext still present" is 0. Dropping the plaintext columns is a later phase. Parts 3 to 7 of `docs/phase-s-plan.md` are not started.
+
+## Phase S Part 2 (branch `phase-s-security`, not merged)
+
+- Read-access audit log. Migration `20261006030000_phase_s_access_log` adds the `access_log` table (additive; nothing in the previous release touches it). Every transcript view, recording stream, raw-events view, message list or view, and knowledge document download writes a row: actor, role, client, action, entity id, IP, user agent (200 chars), and `count` for lists. No call or message text is stored or sent to Sentry; a failed insert is reported with ids only and the page is still served.
+- Read points: call detail pages (portal and admin) write `call.transcript.view`, `call.raw.view` (admin) and `message.view`; `/api/calls/[id]/recording` writes `call.recording.stream` (one row per call per actor per 10 minutes via Redis); the owner home and admin client detail message lists write one `message.list` row with a count; `/api/knowledge/documents/[id]` writes `knowledge.document.download`.
+- Admin: `/admin/access` (filter by client, actor, action, date range; paginated; CSV at `/admin/access/export`) and an "Access history" link on each client page (`/admin/clients/[id]/access`). Both need admin two-factor, like Services.
+- Owner: `/home/access` ("Who viewed your calls", nav item "Who viewed"). Own client only; staff by name, Alinstra admins as "Alinstra support" with no ids or IPs. Staff get a 404.
+- The nightly `purge-calls` job also deletes `access_log` rows older than 400 days.
+- Not done here: the bulk-read alert (Part 3), rate limits on the recording and document routes (Part 5), and the data inventory in `SECURITY.md` (Part 7).
 
 ## Verified locally
 

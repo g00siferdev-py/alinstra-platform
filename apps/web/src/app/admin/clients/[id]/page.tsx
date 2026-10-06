@@ -28,6 +28,7 @@ import {
   WIZARD_STEP_TITLES,
 } from "@alinstra/db";
 import { voiceDisplayName } from "@alinstra/providers";
+import { logMessageList } from "@/lib/access-log";
 import { requireAdmin } from "@/lib/session";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -57,6 +58,8 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
     listCalls(viewer, id, { limit: 5 }),
     provisioningRuns({ role: "admin" }).latest(id),
   ]);
+  // Audit trail: one row for the messages list, with how many were shown.
+  await logMessageList(session.user, id, messages.length);
   const callLinks = await callLinksFor(viewer, id, messages.map((row) => row.retellCallId));
   const when = (value: Date) => formatLocalTime(value, client.timezone);
   const clientVoice = client.voice && typeof client.voice === "object" ? (client.voice as { voiceId?: unknown; assistantName?: unknown }) : {};
@@ -92,6 +95,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
         <Link href={`/admin/clients/${client.id}/agent`}>Agent config</Link>
         <Link href={`/admin/clients/${client.id}/calls`}>Calls</Link>
         <Link href={`/admin/clients/${client.id}/changes`}>Change requests</Link>
+        <Link href={`/admin/clients/${client.id}/access`}>Access history</Link>
       </div>
       <ProvisionPanel
         clientId={client.id}

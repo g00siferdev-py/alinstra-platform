@@ -224,6 +224,26 @@ export {
 } from "./interview";
 export { getAppSetting, getAppSettings, setAppSetting } from "./app-settings";
 export {
+  ACCESS_ACTION_LABELS,
+  ACCESS_ACTIONS,
+  ACCESS_LOG_EXPORT_MAX,
+  ACCESS_LOG_PAGE_SIZE,
+  ACCESS_LOG_RETENTION_DAYS,
+  accessActionLabel,
+  accessLogs,
+  isAccessAction,
+  purgeAccessLogs,
+  recordAccess,
+  SUPPORT_LABEL,
+  type AccessAction,
+  type AccessEntry,
+  type AccessFailureIds,
+  type AccessLogFilter,
+  type AccessLogPage,
+  type AccessLogRow,
+  type RecordAccessOptions,
+} from "./access-log";
+export {
   adminOverview,
   listLiveCalls,
   type AdminClientRow,

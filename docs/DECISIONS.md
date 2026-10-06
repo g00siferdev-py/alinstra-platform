@@ -201,6 +201,18 @@ Writes: only ciphertext (and the mask); the old plaintext columns are set to nul
 
 **Backfill and rotation scripts** live in `packages/db/scripts/` and run with `tsx` (a dependency of `@alinstra/db`) from the Railway console. Both are idempotent and resumable (id-ordered batches, optimistic per-row updates so a live write is never overwritten), print counts only, and support `--dry-run`. Rotation covers every cipher column, including the CallRecord ones and `Invite.tokenCipher`, and prints per-column counts by key id before and after.
 
+## 2026-10-06 — Phase S Part 2: read-access audit log
+
+**What is logged.** One `AccessLog` row per read: `call.transcript.view` (call detail page with a transcript or summary, not purged), `call.raw.view` (admin raw events), `message.view` (a call detail page that shows its captured message), `message.list` (owner home and admin client detail, one row with `count` = messages shown; empty lists are skipped), `call.recording.stream`, and `knowledge.document.download`. The call lists, admin Calls page, and the admin home snippets show masked callers and outcomes and are not logged. Rows hold ids, role, IP, a 200-character user agent, and `count`; never text, names, or numbers. `impersonating` is written `false` until admin "view as client" exists.
+
+**Best-effort, awaited.** `recordAccess` awaits the insert, and on failure calls an `onError` hook that the web app points at Sentry with ids only (the database error text can echo values, so only its name and code are reported). The page or file is still served. Recording requests that are refused (404) or unsatisfiable (416) serve nothing and log nothing.
+
+**Recording dedupe.** Seeking sends many Range requests, so the route writes at most one row per call per actor per 10 minutes, claimed with `getCounter().increment` (Redis in production, memory in tests). If Redis is down the row is written anyway; an extra row is better than a missing one.
+
+**No foreign keys.** `access_log.clientId` and `actorUserId` are plain columns so rows survive a removed client or user until the 400-day purge; that is what breach assessment needs. Names are looked up at read time ("Removed user", "Removed client" when gone). The nightly `purge-calls` job runs `purgeAccessLogs` (strictly older than 400 days) and logs only the count; a failure there does not block the stale-recording requeue.
+
+**Who sees what.** `accessLogs(ctx)` is the tenant-scoped reader: owners are pinned to their own client whatever filter is passed, staff are refused, admins may filter by client, actor (email or id), action, and dates. In the owner view admin rows show as "Alinstra support" with no id, IP, or browser; owners and staff show by name. `/admin/access`, its CSV export, and the client Access history page use the `requireAdmin` gate (admin plus two-factor). CSV cells that start with `=`, `+`, `-`, or `@` are prefixed with a quote. Viewing or exporting the access log is itself not logged.
+
 ## Needs Daniel's review
 
 - Existing AgentConfig rows change `status` when a newer version becomes active. The prompt and settings on that row stay as written. Full immutability, including status, would need a separate "current" pointer.

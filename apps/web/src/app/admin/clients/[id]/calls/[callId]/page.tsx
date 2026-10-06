@@ -1,4 +1,5 @@
 import { CallDetail } from "@/components/call-detail";
+import { logCallDetailView } from "@/lib/access-log";
 import { requireAdmin } from "@/lib/session";
 import { clients, getCall } from "@alinstra/db";
 import { notFound } from "next/navigation";
@@ -12,6 +13,7 @@ export default async function AdminCallDetailPage({ params }: { params: Promise<
   if (!client) notFound();
   const call = await getCall({ id: session.user.id, role: "admin" }, callId);
   if (!call || call.clientId !== client.id) notFound();
+  await logCallDetailView(session.user, call);
   const voice = client.voice && typeof client.voice === "object" ? (client.voice as { assistantName?: unknown }) : {};
   const assistantName = typeof voice.assistantName === "string" && voice.assistantName.trim() ? voice.assistantName.trim() : "Ava";
   return (

@@ -1,5 +1,15 @@
 import { getEnv, log } from "@alinstra/config";
-import { listStalePendingRecordings, markRecordingFailed, markRecordingMissing, markRecordingStored, purgeExpiredCalls, recordingKeyFor, recordingTarget, type PurgeReport } from "@alinstra/db";
+import {
+  listStalePendingRecordings,
+  markRecordingFailed,
+  markRecordingMissing,
+  markRecordingStored,
+  purgeAccessLogs,
+  purgeExpiredCalls,
+  recordingKeyFor,
+  recordingTarget,
+  type PurgeReport,
+} from "@alinstra/db";
 import { platformsFor, type RecordingDownload } from "@alinstra/providers";
 import { enqueueStoreRecording } from "@alinstra/queue";
 import { getStorage, type StoredObject } from "@alinstra/storage";
@@ -12,6 +22,8 @@ export type CallsDeps = {
 export type PurgeCallsDeps = Pick<CallsDeps, "storage"> & {
   enqueueRecording?: (retellCallId: string) => Promise<void>;
   listStale?: (now: Date) => Promise<string[]>;
+  /** Deletes AccessLog rows older than 400 days; injectable for tests. */
+  purgeAccess?: (now: Date) => Promise<number>;
 };
 
 export function callsDeps(): CallsDeps {
@@ -54,6 +66,14 @@ export async function runStoreRecording(retellCallId: string, deps: CallsDeps = 
 export async function runPurgeCalls(deps: PurgeCallsDeps = callsDeps(), now = new Date()): Promise<PurgeReport> {
   const report = await purgeExpiredCalls({ deleteObject: (key) => deps.storage.delete(key) }, now);
   log("info", "call purge finished", { clients: report.clients, purged: report.purged, recordingsDeleted: report.recordingsDeleted, failures: report.failures.length });
+
+  // Read-access audit log (Phase S part 2): keep 400 days. A failure here must not block the requeue below.
+  try {
+    const removed = await (deps.purgeAccess ?? purgeAccessLogs)(now);
+    log("info", "access log purge finished", { removed });
+  } catch (error) {
+    log("error", "access log purge failed", { error: error instanceof Error ? error.name : "unknown" });
+  }
 
   const enqueue = deps.enqueueRecording ?? ((retellCallId: string) => enqueueStoreRecording({ retellCallId }));
   const listStale = deps.listStale ?? listStalePendingRecordings;

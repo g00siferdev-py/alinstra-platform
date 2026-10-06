@@ -19,6 +19,7 @@ import {
   SectionCard,
   StatCard,
 } from "@/components/ui";
+import { logMessageList } from "@/lib/access-log";
 import { callViewerFor } from "@/lib/call-viewer";
 import { requireUser } from "@/lib/session";
 import { ClipboardList, Clock3, MessageSquare, Phone } from "lucide-react";
@@ -238,6 +239,8 @@ export default async function HomePage() {
       canViewCalls && viewer ? listCalls(viewer, clientId, { limit: 6 }) : Promise.resolve({ rows: [], nextCursor: null }),
     ]);
     const recentMessages = messageRows.slice(0, 6);
+    // Audit trail: one row for the list, with how many messages were shown.
+    await logMessageList(session.user, clientId, recentMessages.length);
     const callLinks =
       viewer && recentMessages.length > 0
         ? await callLinksFor(

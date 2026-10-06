@@ -411,11 +411,11 @@ export async function callLinksFor(viewer: CallViewer, clientId: string, retellC
 }
 
 /** Storage location for playback, after the same access check as `getCall`. */
-export async function recordingForPlayback(viewer: CallViewer, callId: string): Promise<{ key: string; contentType: string; bytes: number | null } | null> {
+export async function recordingForPlayback(viewer: CallViewer, callId: string): Promise<{ key: string; contentType: string; bytes: number | null; callId: string; clientId: string } | null> {
   assertTenantContext(viewerContext(viewer));
   const row = await prisma.callRecord.findUnique({ where: { id: callId }, select: { clientId: true, recordingKey: true, recordingStatus: true, recordingContentType: true, recordingBytes: true } });
   if (!row || !canAccessCall(viewer, row) || row.recordingStatus !== "stored" || !row.recordingKey) return null;
-  return { key: row.recordingKey, contentType: row.recordingContentType ?? "audio/wav", bytes: row.recordingBytes };
+  return { key: row.recordingKey, contentType: row.recordingContentType ?? "audio/wav", bytes: row.recordingBytes, callId, clientId: row.clientId };
 }
 
 // ---------------------------------------------------------------------------

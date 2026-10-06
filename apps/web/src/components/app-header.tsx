@@ -19,6 +19,7 @@ export async function AppHeader({ liveCallCount = 0 }: { liveCallCount?: number 
           { href: "/admin/leads", label: "Leads" },
           { href: "/admin/plans", label: "Plans" },
           { href: "/admin/interview", label: "Interview" },
+          { href: "/admin/access", label: "Access" },
           { href: "/admin/services", label: "Services" },
         ]
       : role === "client_owner"
@@ -28,6 +29,7 @@ export async function AppHeader({ liveCallCount = 0 }: { liveCallCount?: number 
             { href: "/home/calls", label: "Calls" },
             { href: "/home/changes", label: "Change Requests" },
             { href: "/home/team", label: "Team" },
+            { href: "/home/access", label: "Who viewed" },
           ]
         : [
             { href: "/home", label: "Home" },

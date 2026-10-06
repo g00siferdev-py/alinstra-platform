@@ -1,9 +1,10 @@
 import { knowledgeDocuments, type TenantContext } from "@alinstra/db";
 import { attachmentDisposition, getStorage } from "@alinstra/storage";
+import { logDocumentDownload } from "@/lib/access-log";
 import { getSession } from "@/lib/session";
 import { NextResponse } from "next/server";
 
-export async function GET(_request: Request, context: { params: Promise<{ id: string }> }): Promise<Response> {
+export async function GET(request: Request, context: { params: Promise<{ id: string }> }): Promise<Response> {
   const session = await getSession();
   if (!session) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   if (session.user.role === "admin" && !session.user.twoFactorEnabled) {
@@ -19,6 +20,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
   const { id } = await context.params;
   const document = await knowledgeDocuments(ctx).getById(id);
   if (!document) return NextResponse.json({ message: "Document not found." }, { status: 404 });
+  await logDocumentDownload(session.user, { id: document.id, clientId: document.clientId }, request);
   const disposition = attachmentDisposition(document.originalFilename);
   const signed = await getStorage().presignGet(document.storageKey, disposition);
   if (signed) return NextResponse.redirect(signed);
