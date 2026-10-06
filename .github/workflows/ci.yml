@@ -6,7 +6,8 @@ on:
 
 jobs:
   check:
-    runs-on: ubuntu-latest
+    # Pin the codename so the PGDG apt line stays stable when ubuntu-latest moves (26.04 on Oct 19).
+    runs-on: ubuntu-24.04
     services:
       postgres:
         image: postgres:18-alpine
@@ -56,7 +57,8 @@ jobs:
           echo "ENCRYPTION_KEY=$(node -e "console.log(require('crypto').randomBytes(32).toString('base64'))")" >> "$GITHUB_ENV"
       # pg_dump, pg_restore and psql for the backup restore drill (apps/worker backup.integration.test.ts), which
       # skips itself when they are missing. The client must be >= the postgres service major (18). Install from
-      # the PGDG apt repo — Ubuntu's postgresql-client package is older than 18.
+      # the PGDG apt repo — Ubuntu's postgresql-client package is older than 18. Put the 18 bin dir on PATH so
+      # /usr/bin/pg_dump (pg_wrapper) does not keep using the runner's preinstalled PostgreSQL 16.
       - name: Install PostgreSQL client
         run: |
           sudo apt-get update
@@ -68,7 +70,11 @@ jobs:
           echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends postgresql-client-18
-          pg_dump --version
+          echo "/usr/lib/postgresql/18/bin" >> "$GITHUB_PATH"
+          /usr/lib/postgresql/18/bin/pg_dump --version
+      - name: Check pg_dump is 18
+        run: |
+          pg_dump --version | grep -q "(PostgreSQL) 18" || { pg_dump --version; echo "pg_dump on PATH is not 18"; exit 1; }
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @alinstra/db generate
       - run: pnpm db:migrate:deploy
