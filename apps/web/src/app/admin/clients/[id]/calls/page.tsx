@@ -31,7 +31,7 @@ export default async function AdminClientCallsPage({
         title="Calls"
         description={`Times in ${client.timezone}. Transcripts, recordings, and caller numbers are kept ${client.callRetentionDays} days.`}
       />
-      <CallsList rows={page.rows} nextCursor={page.nextCursor} filters={filters} basePath={basePath} timezone={client.timezone} fullNumbers />
+      <CallsList rows={page.rows} nextCursor={page.nextCursor} filters={filters} basePath={basePath} timezone={client.timezone} />
     </main>
   );
 }

@@ -16,6 +16,7 @@ describe("call view helpers", () => {
   it("labels outcomes and pairs sentiment with a glyph", () => {
     expect(outcomeLabel("message_taken")).toBe("Message taken");
     expect(outcomeLabel(null)).toBe("In progress");
+    expect(outcomeLabel(null, "no_final_report")).toBe("Ended (no final report)");
     expect(outcomeLabel("odd")).toBe("odd");
     expect(sentimentDisplay("Positive")).toEqual({ label: "Positive", icon: "+" });
     expect(sentimentDisplay("Negative").icon).toBe("−");

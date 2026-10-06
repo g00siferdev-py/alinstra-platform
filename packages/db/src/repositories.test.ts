@@ -96,7 +96,7 @@ describe("repository contract", () => {
     }
     const factories = [...source.matchAll(/^export function (\w+)\(ctx: TenantContext\)/gm)];
     expect(factories.map((match) => match[1]).sort()).toEqual(["clients", "users"]);
-    for (const file of ["plans.ts", "knowledge.ts", "wizard.ts", "agent.ts"]) {
+    for (const file of ["plans.ts", "knowledge.ts", "wizard.ts", "agent.ts", "usage.ts"]) {
       const extra = readFileSync(resolve(import.meta.dirname, file), "utf8");
       const exported = [...extra.matchAll(/^export (?:async )?function (\w+)\(([^)]*)\)/gm)];
       expect(exported.length, file).toBeGreaterThan(0);
@@ -109,7 +109,10 @@ describe("repository contract", () => {
           match[1] === "resetPublicPlansCache" ||
           match[1] === "formatPlanCents" ||
           match[1] === "formatOveragePerMinute" ||
-          match[1] === "formatIncludedChanges"
+          match[1] === "formatIncludedChanges" ||
+          match[1] === "billableMinutesOf" ||
+          match[1] === "upsertUsageRecord" ||
+          match[1] === "backfillUsageRecords"
         ) {
           continue;
         }

@@ -17,9 +17,17 @@ import { prisma } from "./client";
 import { CALL_RETENTION_DEFAULT_DAYS, CALL_RETENTION_MAX_DAYS, CALL_RETENTION_MIN_DAYS, maskCaller } from "./domain";
 import { Prisma, type Prisma as PrismaTypes } from "./generated/prisma/client";
 import { assertTenantContext, type TenantContext } from "./tenant";
+import { upsertUsageRecord } from "./usage";
 
 const WEBHOOK_ACTOR: Actor = { id: "provider-webhook", role: "admin" };
 const PURGE_ACTOR: Actor = { id: "retention-purge", role: "admin" };
+const RECONCILE_ACTOR: Actor = { id: "reconcile-calls", role: "admin" };
+
+/** Open calls older than this are fetched from Retell by the reconcile-calls job. */
+export const STALE_OPEN_CALL_MS = 60 * 60 * 1000;
+/** Still-ongoing (or missing) calls older than this are force-ended with endReason no_final_report. */
+export const FORCE_END_OPEN_CALL_MS = 3 * 60 * 60 * 1000;
+export const NO_FINAL_REPORT_REASON = "no_final_report";
 
 export const RECORDING_STATUSES = ["none", "pending", "stored", "failed", "purged"] as const;
 export type RecordingStatus = (typeof RECORDING_STATUSES)[number];
@@ -78,7 +86,7 @@ export async function applyRetellCall(payload: RetellCallEvent): Promise<{ recor
         ...(call.to_number ? [{ phoneE164: call.to_number }] : []),
       ],
     },
-    select: { id: true, name: true },
+    select: { id: true, name: true, internal: true },
   });
   if (!client) return { recordingQueued: false, callRecordId: null };
   const callId = call.call_id;
@@ -100,7 +108,8 @@ export async function applyRetellCall(payload: RetellCallEvent): Promise<{ recor
     const outcome: CallOutcome | null = ended || existing?.endedAt ? deriveOutcome(turns, { disconnection_reason: call.disconnection_reason ?? existing?.endReason ?? undefined }) : null;
     const purged = Boolean(existing?.purgedAt);
     const recordingQueued = !purged && hasRecording && (existing?.recordingStatus ?? "none") === "none";
-    const mergedDuration = existing?.durationSeconds ?? durationSeconds;
+    // Prefer the event's duration when present so later analyzed events can correct an earlier estimate.
+    const mergedDuration = durationSeconds ?? existing?.durationSeconds ?? null;
     const mergedSentiment = normalizeSentiment(analysis?.user_sentiment) ?? existing?.sentiment ?? null;
     const mergedEndReason = (ended ? call.disconnection_reason : undefined) ?? existing?.endReason ?? null;
     const shouldFlag = !purged && ended && (turns.length > 0 || Boolean(mergedSentiment));
@@ -112,11 +121,15 @@ export async function applyRetellCall(payload: RetellCallEvent): Promise<{ recor
         })
       : [];
 
+    const mergedStartedAt = existing?.startedAt ?? startedAt;
+    const mergedEndedAt = existing?.endedAt ?? endedAt;
+    const mergedCost = costCentsOf(call) ?? existing?.costCents ?? null;
+
     const data: PrismaTypes.CallRecordUncheckedUpdateInput & PrismaTypes.CallRecordUncheckedCreateInput = {
       clientId: client.id,
       retellCallId: callId,
-      startedAt: existing?.startedAt ?? startedAt,
-      endedAt: existing?.endedAt ?? endedAt,
+      startedAt: mergedStartedAt,
+      endedAt: mergedEndedAt,
       durationSeconds: mergedDuration,
       callerMasked: existing?.callerMasked || maskCaller(fromNumber),
       callerE164Cipher: purged ? null : existing?.callerE164Cipher ?? (fromNumber ? seal(fromNumber) : null),
@@ -127,13 +140,15 @@ export async function applyRetellCall(payload: RetellCallEvent): Promise<{ recor
       sentiment: mergedSentiment,
       successful: typeof analysis?.call_successful === "boolean" ? analysis.call_successful : existing?.successful ?? null,
       inVoicemail: typeof analysis?.in_voicemail === "boolean" ? analysis.in_voicemail : existing?.inVoicemail ?? null,
-      costCents: costCentsOf(call) ?? existing?.costCents ?? null,
+      costCents: mergedCost,
       outcome: outcome ?? existing?.outcome ?? null,
       flags: purged ? Prisma.DbNull : shouldFlag ? computedFlags : existing?.flags ?? Prisma.DbNull,
       analyzedAt: event === "call_analyzed" ? existing?.analyzedAt ?? new Date() : existing?.analyzedAt ?? null,
       recordingStatus: recordingQueued ? "pending" : existing?.recordingStatus ?? "none",
     };
 
+    let callRecordId: string;
+    let rowCreatedAt: Date;
     if (!existing) {
       const created = await tx.callRecord.create({ data });
       await recordChange(tx, {
@@ -144,10 +159,28 @@ export async function applyRetellCall(payload: RetellCallEvent): Promise<{ recor
         entityId: created.id,
         summary: `Recorded a call for ${client.name}`,
       });
-      return { recordingQueued, callRecordId: created.id };
+      callRecordId = created.id;
+      rowCreatedAt = created.createdAt;
+    } else {
+      await tx.callRecord.update({ where: { id: existing.id }, data });
+      callRecordId = existing.id;
+      rowCreatedAt = existing.createdAt;
     }
-    await tx.callRecord.update({ where: { id: existing.id }, data });
-    return { recordingQueued, callRecordId: existing.id };
+
+    if (mergedEndedAt) {
+      await upsertUsageRecord(tx, {
+        clientId: client.id,
+        callRecordId,
+        retellCallId: callId,
+        startedAt: mergedStartedAt ?? rowCreatedAt,
+        endedAt: mergedEndedAt,
+        durationSeconds: mergedDuration ?? 0,
+        costCents: mergedCost,
+        internal: client.internal,
+      });
+    }
+
+    return { recordingQueued, callRecordId };
   });
 }
 
@@ -221,6 +254,76 @@ export async function listStalePendingRecordings(now = new Date()): Promise<stri
   return rows.map((row) => row.retellCallId);
 }
 
+export type StaleOpenCall = {
+  id: string;
+  retellCallId: string;
+  clientId: string;
+  startedAt: Date | null;
+  createdAt: Date;
+  durationSeconds: number | null;
+};
+
+/** CallRecords with no endedAt whose start (or createdAt) is older than 60 minutes. */
+export async function listStaleOpenCalls(now = new Date(), limit = 100): Promise<StaleOpenCall[]> {
+  const cutoff = new Date(now.getTime() - STALE_OPEN_CALL_MS);
+  return prisma.callRecord.findMany({
+    where: {
+      endedAt: null,
+      OR: [{ startedAt: { lt: cutoff } }, { startedAt: null, createdAt: { lt: cutoff } }],
+    },
+    select: { id: true, retellCallId: true, clientId: true, startedAt: true, createdAt: true, durationSeconds: true },
+    orderBy: { createdAt: "asc" },
+    take: Math.min(Math.max(limit, 1), 500),
+  });
+}
+
+/**
+ * Marks a stuck open call ended with endReason no_final_report. Outcome stays null.
+ * endedAt = startedAt + durationSeconds when both exist, otherwise the start (or createdAt).
+ */
+export async function markCallNoFinalReport(retellCallId: string): Promise<{ updated: boolean; callRecordId: string | null }> {
+  return prisma.$transaction(async (tx) => {
+    const row = await tx.callRecord.findUnique({
+      where: { retellCallId },
+      include: { client: { select: { internal: true, name: true } } },
+    });
+    if (!row || row.endedAt) return { updated: false, callRecordId: row?.id ?? null };
+    const start = row.startedAt ?? row.createdAt;
+    const durationSeconds = row.durationSeconds ?? 0;
+    const endedAt =
+      row.startedAt && row.durationSeconds != null
+        ? new Date(row.startedAt.getTime() + row.durationSeconds * 1000)
+        : start;
+    await tx.callRecord.update({
+      where: { id: row.id },
+      data: {
+        endedAt,
+        endReason: NO_FINAL_REPORT_REASON,
+        durationSeconds: row.durationSeconds ?? 0,
+      },
+    });
+    await upsertUsageRecord(tx, {
+      clientId: row.clientId,
+      callRecordId: row.id,
+      retellCallId: row.retellCallId,
+      startedAt: start,
+      endedAt,
+      durationSeconds,
+      costCents: row.costCents,
+      internal: row.client.internal,
+    });
+    await recordChange(tx, {
+      clientId: row.clientId,
+      actor: RECONCILE_ACTOR,
+      action: "call.no_final_report",
+      entityType: "call_record",
+      entityId: row.id,
+      summary: `Marked a stuck call ended (no final report) for ${row.client.name}`,
+    });
+    return { updated: true, callRecordId: row.id };
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Access
 // ---------------------------------------------------------------------------
@@ -239,9 +342,10 @@ export function canAccessCall(viewer: CallViewer, call: { clientId: string }): b
   return canViewClientCalls(viewer, call.clientId);
 }
 
-/** Admin and owner see the full number; staff see the mask. */
+/** Admin and owner always see the full number on detail; staff only with canViewCalls. Lists always use the mask. */
 export function canSeeCallerNumber(viewer: CallViewer): boolean {
-  return viewer.role === "admin" || viewer.role === "client_owner";
+  if (viewer.role === "admin" || viewer.role === "client_owner") return true;
+  return viewer.role === "client_staff" && viewer.canViewCalls === true;
 }
 
 function viewerContext(viewer: CallViewer): TenantContext {
@@ -352,7 +456,7 @@ export async function listCalls(viewer: CallViewer, clientId: string, filter: Ca
   const page = rows.slice(0, limit);
   const last = page[page.length - 1];
   return {
-    rows: page.map((row) => summaryRow(row, canSeeCallerNumber(viewer))),
+    rows: page.map((row) => summaryRow(row, false)),
     nextCursor: rows.length > limit && last ? encodeCursor(last) : null,
   };
 }

@@ -3,7 +3,7 @@ import { PageHeader } from "@/components/ui";
 import { parseCallFilters } from "@/lib/call-view";
 import { callViewerFor } from "@/lib/call-viewer";
 import { requireUser } from "@/lib/session";
-import { canSeeCallerNumber, canViewClientCalls, clients, listCalls } from "@alinstra/db";
+import { canViewClientCalls, clients, listCalls } from "@alinstra/db";
 import { notFound } from "next/navigation";
 
 export const dynamic = "force-dynamic";
@@ -23,7 +23,7 @@ export default async function PortalCallsPage({ searchParams }: { searchParams: 
         title="Calls"
         description={`Times in ${client.timezone}. Transcripts, recordings, and caller numbers are kept ${client.callRetentionDays} days, then purged.`}
       />
-      <CallsList rows={page.rows} nextCursor={page.nextCursor} filters={filters} basePath="/home/calls" timezone={client.timezone} fullNumbers={canSeeCallerNumber(viewer)} />
+      <CallsList rows={page.rows} nextCursor={page.nextCursor} filters={filters} basePath="/home/calls" timezone={client.timezone} />
     </main>
   );
 }

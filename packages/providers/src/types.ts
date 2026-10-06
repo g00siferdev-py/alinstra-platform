@@ -118,6 +118,31 @@ export type NumberRequest = {
   areaCode: number | null;
 };
 
+/** Subset of Retell GET /v2/get-call used by reconcile-calls and recording fetch. */
+export type RetellCallSnapshot = {
+  call_id: string;
+  call_status?: string;
+  agent_id?: string;
+  from_number?: string;
+  to_number?: string;
+  direction?: string;
+  start_timestamp?: number;
+  end_timestamp?: number;
+  duration_ms?: number;
+  disconnection_reason?: string;
+  transcript?: string;
+  transcript_object?: unknown;
+  transcript_with_tool_calls?: unknown;
+  recording_url?: string;
+  call_analysis?: {
+    call_summary?: string;
+    in_voicemail?: boolean;
+    user_sentiment?: string;
+    call_successful?: boolean;
+  };
+  call_cost?: { combined_cost?: number };
+};
+
 export interface VoicePlatform {
   createLlm(input: { clientId: string; prompt: string; beginMessage: string; tools: PublishedTool[] }): Promise<{ llmId: string }>;
   findAgentId(clientId: string): Promise<string | null>;
@@ -133,6 +158,8 @@ export interface VoicePlatform {
    * platform and never returned, so nothing outside this call sees it. `null` when the call has no recording.
    */
   fetchRecording(retellCallId: string): Promise<RecordingDownload | null>;
+  /** GET /v2/get-call/{id}. Returns null when Retell says the call was not found. */
+  getCall(retellCallId: string): Promise<RetellCallSnapshot | null>;
 }
 
 export type RecordingDownload = { bytes: Buffer; contentType: string };

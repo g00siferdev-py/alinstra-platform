@@ -187,6 +187,7 @@ model Client {
   transferTargets                 TransferTarget[]
   messages                        ClientMessage[]
   callRecords                     CallRecord[]
+  usageRecords                    UsageRecord[]
   provisioningRuns                ProvisioningRun[]
   leads                           Lead[]
   interviewSessions               InterviewSession[]
@@ -512,11 +513,37 @@ model CallRecord {
   flags                Json?
   analyzedAt           DateTime?
   purgedAt             DateTime?
+  usageRecord          UsageRecord?
 
   @@index([clientId, createdAt])
   @@index([clientId, startedAt(sort: Desc)])
   @@index([clientId, outcome])
   @@map("call_record")
+}
+
+/// One row per ended call for billing and reports. No caller data or content. Survives retention purge.
+model UsageRecord {
+  id              String    @id @default(cuid())
+  clientId        String
+  client          Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  callRecordId    String    @unique
+  callRecord      CallRecord @relation(fields: [callRecordId], references: [id], onDelete: Cascade)
+  retellCallId    String    @unique
+  startedAt       DateTime
+  endedAt         DateTime
+  durationSeconds Int
+  billableMinutes Int
+  /// Retell call_cost.combined_cost, rounded to whole cents.
+  costCents       Int?
+  /// Copied from Client.internal at write time; internal clients are never metered.
+  internal        Boolean
+  meterReportedAt DateTime?
+  meterEventId    String?
+  createdAt       DateTime  @default(now())
+
+  @@index([clientId, startedAt])
+  @@index([clientId, meterReportedAt])
+  @@map("usage_record")
 }
 
 model ProvisioningRun {

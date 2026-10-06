@@ -175,9 +175,9 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
                 {call.startedAt ? when(call.startedAt) : "—"}
               </Link>
               <span>
-                · {formatPhone(call.caller) || call.caller} · {formatDuration(call.durationSeconds)}
+                · {call.caller} · {formatDuration(call.durationSeconds)}
               </span>
-              <OutcomeBadge outcome={call.outcome} />
+              <OutcomeBadge outcome={call.outcome} endReason={call.endReason} />
             </div>
           ))
         )}

@@ -1,4 +1,4 @@
-import { retellTiming, type AgentPublish, type BillingPlatform, type CallTiming, type PriceKind, type PublishedTool, type RecordingDownload, type RetellTiming, type VoicePlatform } from "./types";
+import { retellTiming, type AgentPublish, type BillingPlatform, type CallTiming, type PriceKind, type PublishedTool, type RecordingDownload, type RetellCallSnapshot, type RetellTiming, type VoicePlatform } from "./types";
 
 type StoredLlm = { clientId: string; prompt: string; tools: PublishedTool[]; beginMessage: string };
 /** Mirrors what httpVoice sends: the agent carries the clamped Retell timing fields. */
@@ -18,6 +18,9 @@ export class MemoryVoice implements VoicePlatform {
   recordingFetches = 0;
   /** Number of upcoming fetchRecording calls that should throw. */
   recordingFailures = 0;
+  /** Fake Retell call snapshots by call id; tests seed these. Missing → null (not found). */
+  calls = new Map<string, RetellCallSnapshot>();
+  getCallFetches = 0;
 
   async createLlm(input: { clientId: string; prompt: string; beginMessage: string; tools: PublishedTool[] }): Promise<{ llmId: string }> {
     this.creates.llm += 1;
@@ -93,6 +96,11 @@ export class MemoryVoice implements VoicePlatform {
     }
     const bytes = this.recordings.get(retellCallId);
     return bytes ? { bytes, contentType: "audio/wav" } : null;
+  }
+
+  async getCall(retellCallId: string): Promise<RetellCallSnapshot | null> {
+    this.getCallFetches += 1;
+    return this.calls.get(retellCallId) ?? null;
   }
 }
 

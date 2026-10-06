@@ -1,6 +1,6 @@
 import { Button, Card, EmptyState, Input, Label, Pill, Select } from "@/components/ui";
 import { filterQuery, formatDuration, OUTCOME_OPTIONS, outcomeLabel, sentimentDisplay, type CallFilters } from "@/lib/call-view";
-import { formatLocalTime, formatPhone, type CallSummaryRow } from "@alinstra/db";
+import { formatLocalTime, type CallSummaryRow } from "@alinstra/db";
 import Link from "next/link";
 
 type Props = {
@@ -10,12 +10,10 @@ type Props = {
   /** Path of the list page; detail links are `${basePath}/${id}`. */
   basePath: string;
   timezone: string;
-  /** Whether rows carry a full number (owner/admin) or a mask (staff). Only affects formatting. */
-  fullNumbers: boolean;
 };
 
-export function OutcomeBadge({ outcome }: { outcome: string | null }) {
-  return <Pill tone="neutral">{outcomeLabel(outcome)}</Pill>;
+export function OutcomeBadge({ outcome, endReason }: { outcome: string | null; endReason?: string | null }) {
+  return <Pill tone="neutral">{outcomeLabel(outcome, endReason)}</Pill>;
 }
 
 export function SentimentLabel({ sentiment }: { sentiment: string | null }) {
@@ -30,7 +28,7 @@ export function SentimentLabel({ sentiment }: { sentiment: string | null }) {
   );
 }
 
-export function CallsList({ rows, nextCursor, filters, basePath, timezone, fullNumbers }: Props) {
+export function CallsList({ rows, nextCursor, filters, basePath, timezone }: Props) {
   const filtered = Boolean(filters.fromText || filters.toText || filters.outcome);
   return (
     <div className="grid gap-4">
@@ -86,9 +84,9 @@ export function CallsList({ rows, nextCursor, filters, basePath, timezone, fullN
                   {row.startedAt ? formatLocalTime(row.startedAt, timezone) : "—"}
                 </span>
                 <span className="tabular-nums text-[var(--muted)]">{formatDuration(row.durationSeconds)}</span>
-                <span className="truncate">{fullNumbers ? formatPhone(row.caller) || row.caller : row.caller}</span>
+                <span className="truncate">{row.caller}</span>
                 <span className="flex flex-wrap items-center gap-1">
-                  <OutcomeBadge outcome={row.outcome} />
+                  <OutcomeBadge outcome={row.outcome} endReason={row.endReason} />
                   {row.flagged ? <Pill tone="warning">Flagged</Pill> : null}
                 </span>
                 <span className="text-xs text-[var(--muted)]">

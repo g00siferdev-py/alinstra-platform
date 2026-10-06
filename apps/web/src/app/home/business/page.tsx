@@ -7,12 +7,10 @@ import { interviewEnabled } from "@/lib/interview-config";
 import { requireUser } from "@/lib/session";
 import {
   AGENT_AFFECTING_STEPS,
-  canSeeCallerNumber,
   canViewClientCalls,
   clients,
   faqItems,
   formatLocalTime,
-  formatPhone,
   formatTransferTargets,
   knowledgeBases,
   listCalls,
@@ -63,7 +61,6 @@ export default async function MyBusinessPage() {
   const owner = session.user.role === "client_owner";
   const faqs = faqItems(knowledge?.faqs);
   const reviewRows = updates.filter((row) => row.status === "held" || (row.status === "rejected" && row.kind === OWNER_STEP_HOLD_KIND)).slice(0, 10);
-  const fullNumbers = viewer ? canSeeCallerNumber(viewer) : false;
   return (
     <main className="grid gap-6">
       <Link className="text-sm text-[var(--muted)]" href="/home">
@@ -127,9 +124,9 @@ export default async function MyBusinessPage() {
                   {call.startedAt ? formatLocalTime(call.startedAt, client.timezone) : "—"}
                 </Link>
                 <span>
-                  · {fullNumbers ? formatPhone(call.caller) || call.caller : call.caller} · {formatDuration(call.durationSeconds)}
+                  · {call.caller} · {formatDuration(call.durationSeconds)}
                 </span>
-                <OutcomeBadge outcome={call.outcome} />
+                <OutcomeBadge outcome={call.outcome} endReason={call.endReason} />
               </div>
             ))
           )}

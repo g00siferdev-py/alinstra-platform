@@ -12,6 +12,7 @@ import {
   provisionClient,
   scheduleBackupDb,
   schedulePurgeCalls,
+  scheduleReconcileCalls,
   sendAccountEmail,
   sendAdminNotice,
   sendInviteEmail,
@@ -24,7 +25,7 @@ import {
 import * as Sentry from "@sentry/node";
 import { UnrecoverableError, Worker } from "bullmq";
 import { runBackupDb } from "./jobs/backup";
-import { runPurgeCalls, runStoreRecording } from "./jobs/calls";
+import { runPurgeCalls, runReconcileCalls, runStoreRecording } from "./jobs/calls";
 import { markExtractionFailed } from "./jobs/extract-knowledge-text";
 import { runIsolatedJob } from "./jobs/run-isolated";
 import { runChurnSweep, runMessageEmail, runProvision, runSync } from "./jobs/phase3";
@@ -142,6 +143,10 @@ const calls = new Worker(
       await runPurgeCalls();
       return;
     }
+    if (job.name === "reconcile-calls") {
+      await runReconcileCalls();
+      return;
+    }
     if (job.name === "backup-db") {
       await runBackupDb();
       return;
@@ -153,6 +158,10 @@ const calls = new Worker(
 
 void schedulePurgeCalls().catch((error: unknown) => {
   log("error", "purge schedule failed", { error: error instanceof Error ? error.name : "unknown" });
+});
+
+void scheduleReconcileCalls().catch((error: unknown) => {
+  log("error", "reconcile schedule failed", { error: error instanceof Error ? error.name : "unknown" });
 });
 
 void scheduleBackupDb().catch((error: unknown) => {

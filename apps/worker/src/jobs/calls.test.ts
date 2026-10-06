@@ -10,6 +10,10 @@ const { db, logged } = vi.hoisted(() => ({
     purgeAccessLogs: vi.fn(async () => 0),
     purgeLoginEvents: vi.fn(async () => 0),
     listStalePendingRecordings: vi.fn(async () => [] as string[]),
+    listStaleOpenCalls: vi.fn(async () => []),
+    applyRetellCall: vi.fn(),
+    markCallNoFinalReport: vi.fn(),
+    FORCE_END_OPEN_CALL_MS: 3 * 60 * 60 * 1000,
     recordingKeyFor: (clientId: string, callId: string, contentType: string) => `clients/${clientId}/calls/${callId}.${/mpeg/.test(contentType) ? "mp3" : "wav"}`,
   },
   logged: [] as Array<{ level: string; message: string; fields: Record<string, unknown> }>,
@@ -24,7 +28,7 @@ vi.mock("@alinstra/providers", () => ({ platformsFor: () => ({ voice: {} }) }));
 vi.mock("@alinstra/queue", () => ({ enqueueStoreRecording: vi.fn(async () => undefined) }));
 vi.mock("@alinstra/storage", () => ({ getStorage: () => ({}) }));
 
-import { runPurgeCalls, runStoreRecording } from "./calls";
+import { runPurgeCalls, runReconcileCalls, runStoreRecording } from "./calls";
 
 const SECRET_URL = "https://retell-recordings.example/private/abc.wav";
 
@@ -171,5 +175,77 @@ describe("store-recording job", () => {
     });
     expect(logged.some((row) => row.message === "login event purge failed")).toBe(true);
     expect(requeued).toEqual(["call_stale"]);
+  });
+});
+
+describe("reconcile-calls job", () => {
+  it("applies ended Retell calls and force-ends missing or long-running ones", async () => {
+    const now = new Date("2026-10-06T15:00:00.000Z");
+    const applied: string[] = [];
+    const forced: string[] = [];
+    const report = await runReconcileCalls(
+      {
+        listStale: async () => [
+          {
+            id: "cr_ended",
+            retellCallId: "call_ended",
+            clientId: "c1",
+            startedAt: new Date(now.getTime() - 90 * 60_000),
+            createdAt: new Date(now.getTime() - 90 * 60_000),
+            durationSeconds: null,
+          },
+          {
+            id: "cr_missing",
+            retellCallId: "call_missing",
+            clientId: "c1",
+            startedAt: new Date(now.getTime() - 90 * 60_000),
+            createdAt: new Date(now.getTime() - 90 * 60_000),
+            durationSeconds: null,
+          },
+          {
+            id: "cr_long",
+            retellCallId: "call_long",
+            clientId: "c1",
+            startedAt: new Date(now.getTime() - 4 * 60 * 60_000),
+            createdAt: new Date(now.getTime() - 4 * 60 * 60_000),
+            durationSeconds: null,
+          },
+          {
+            id: "cr_wait",
+            retellCallId: "call_wait",
+            clientId: "c1",
+            startedAt: new Date(now.getTime() - 90 * 60_000),
+            createdAt: new Date(now.getTime() - 90 * 60_000),
+            durationSeconds: null,
+          },
+        ],
+        getCall: async (id) => {
+          if (id === "call_ended") {
+            return {
+              call_id: id,
+              call_status: "ended",
+              agent_id: "agent_1",
+              start_timestamp: now.getTime() - 90 * 60_000,
+              end_timestamp: now.getTime() - 89 * 60_000,
+              duration_ms: 60_000,
+            };
+          }
+          if (id === "call_missing") return null;
+          return { call_id: id, call_status: "ongoing", start_timestamp: now.getTime() - 90 * 60_000 };
+        },
+        applyEnded: async (payload) => {
+          applied.push(payload.call?.call_id ?? "");
+          return { recordingQueued: false, callRecordId: "cr_ended" };
+        },
+        markNoFinal: async (id) => {
+          forced.push(id);
+          return { updated: true, callRecordId: id };
+        },
+      },
+      now,
+    );
+    expect(report).toMatchObject({ checked: 4, applied: 1, forced: 2, skipped: 1, failures: 0 });
+    expect(applied).toEqual(["call_ended"]);
+    expect(forced.sort()).toEqual(["call_long", "call_missing"]);
   });
 });

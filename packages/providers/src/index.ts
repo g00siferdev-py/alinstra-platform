@@ -38,6 +38,7 @@ export {
   type PriceKind,
   type PublishedTool,
   type RecordingDownload,
+  type RetellCallSnapshot,
   type RetellTiming,
   type TextCompleteInput,
   type TextCompleteResult,

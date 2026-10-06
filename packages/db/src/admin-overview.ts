@@ -128,9 +128,9 @@ export async function adminOverview(ctx: Actor, now = new Date()): Promise<Admin
   ] = await Promise.all([
     prisma.callRecord.count({ where: { startedAt: { gte: dayStart }, purgedAt: null } }),
     prisma.clientMessage.count({ where: { createdAt: { gte: dayStart } } }),
-    prisma.callRecord.findMany({
-      where: { startedAt: { gte: monthStart }, purgedAt: null, durationSeconds: { not: null } },
-      select: { clientId: true, durationSeconds: true },
+    prisma.usageRecord.findMany({
+      where: { startedAt: { gte: monthStart } },
+      select: { clientId: true, billableMinutes: true },
     }),
     prisma.quickUpdate.findMany({
       where: { status: "held" },
@@ -185,9 +185,8 @@ export async function adminOverview(ctx: Actor, now = new Date()): Promise<Admin
   const minutesByClient = new Map<string, number>();
   let minutesThisMonth = 0;
   for (const row of monthDurations) {
-    const mins = Math.ceil((row.durationSeconds ?? 0) / 60);
-    minutesThisMonth += mins;
-    minutesByClient.set(row.clientId, (minutesByClient.get(row.clientId) ?? 0) + mins);
+    minutesThisMonth += row.billableMinutes;
+    minutesByClient.set(row.clientId, (minutesByClient.get(row.clientId) ?? 0) + row.billableMinutes);
   }
 
   const interviewByClient = new Map<string, number>();

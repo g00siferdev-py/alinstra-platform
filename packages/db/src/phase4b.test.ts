@@ -170,6 +170,16 @@ describe("phase 4b calls", () => {
     expect(asAdmin?.costCents).toBe(70);
     expect(asAdmin?.rawEvents?.map((row) => (row as { event: string }).event)).toEqual(["call_started", "call_ended", "call_analyzed"]);
     expect(JSON.stringify(asAdmin?.rawEvents)).not.toContain("recording_url");
+
+    const usage = await prisma.usageRecord.findUniqueOrThrow({ where: { callRecordId: rows[0]!.id } });
+    expect(usage).toMatchObject({
+      clientId: client.id,
+      retellCallId: "call_a",
+      durationSeconds: 45,
+      billableMinutes: 1,
+      costCents: 70,
+      internal: false,
+    });
   });
 
   it("converges when call_analyzed arrives before call_ended", async () => {
@@ -229,7 +239,7 @@ describe("phase 4b calls", () => {
     expect(await recordingForPlayback({ id: staff.id, role: "client_staff", clientId: client.id, canViewCalls: false }, callRecordId!)).toBeNull();
     expect(await recordingForPlayback({ id: staff.id, role: "client_staff", clientId: client.id, canViewCalls: true }, callRecordId!)).toEqual({ key, contentType: "audio/wav", bytes: 1234, callId: callRecordId!, clientId: client.id });
     const page = await listCalls(viewer, client.id);
-    expect(page.rows[0]).toMatchObject({ hasRecording: true, caller: CALLER, outcome: "message_taken" });
+    expect(page.rows[0]).toMatchObject({ hasRecording: true, caller: maskCaller(CALLER), outcome: "message_taken" });
   });
 
   it("lists newest first with filters, pagination, and per-role caller display", async () => {
@@ -254,7 +264,8 @@ describe("phase 4b calls", () => {
 
     expect((await listCalls(ownerView, client.id, { outcome: "hung_up" })).rows.map((row) => row.retellCallId)).toEqual(["call_quiet"]);
     expect((await listCalls(ownerView, client.id, { from: new Date(startMs + 2 * 3_600_000), to: new Date(startMs + 3 * 3_600_000) })).rows.map((row) => row.retellCallId)).toEqual(["call_3", "call_2"]);
-    expect(first.rows[0]?.caller).toBe(CALLER);
+    // Lists always show the mask — full number is detail-only.
+    expect(first.rows[0]?.caller).toBe(maskCaller(CALLER));
     const staffView = { id: staff.id, role: "client_staff" as const, clientId: client.id, canViewCalls: true };
     expect((await listCalls(staffView, client.id, { limit: 1 })).rows[0]?.caller).toBe(maskCaller(CALLER));
     expect((await listCalls({ ...staffView, canViewCalls: false }, client.id)).rows).toEqual([]);
@@ -275,7 +286,7 @@ describe("phase 4b calls", () => {
     expect(await getCall({ id: other.owner.id, role: "client_owner", clientId: other.client.id }, callRecordId!)).toBeNull();
     expect(await getCall({ id: staff.id, role: "client_staff", clientId: client.id, canViewCalls: false }, callRecordId!)).toBeNull();
     const staffDetail = await getCall({ id: staff.id, role: "client_staff", clientId: client.id, canViewCalls: true }, callRecordId!);
-    expect(staffDetail?.caller).toBe(maskCaller(CALLER));
+    expect(staffDetail?.caller).toBe(CALLER);
     expect(staffDetail?.transcript?.turns.length).toBeGreaterThan(0);
   });
 

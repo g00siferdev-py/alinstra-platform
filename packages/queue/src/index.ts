@@ -79,6 +79,9 @@ export const PURGE_CALLS_CRON = "15 3 * * *";
 export const BACKUP_DB_JOB_ID = "backup-db-daily";
 export const BACKUP_DB_CRON = "30 3 * * *";
 export const BACKUP_DB_TIMEZONE = "America/New_York";
+export const RECONCILE_CALLS_JOB_ID = "reconcile-calls";
+/** Every 15 minutes. */
+export const RECONCILE_CALLS_EVERY_MS = 15 * 60 * 1000;
 
 let redis: Redis | undefined;
 
@@ -233,6 +236,15 @@ export async function schedulePurgeCalls(): Promise<void> {
     data: {},
     opts: { removeOnComplete: 30, removeOnFail: 30 },
   });
+}
+
+/** Every 15 minutes: resolve CallRecords stuck without endedAt via Retell get-call. */
+export async function scheduleReconcileCalls(): Promise<void> {
+  await callsJobs().upsertJobScheduler(
+    RECONCILE_CALLS_JOB_ID,
+    { every: RECONCILE_CALLS_EVERY_MS },
+    { name: "reconcile-calls", data: {}, opts: { removeOnComplete: 30, removeOnFail: 30 } },
+  );
 }
 
 /**

@@ -10,8 +10,11 @@ export const OUTCOME_OPTIONS = [
 
 export type OutcomeKey = (typeof OUTCOME_OPTIONS)[number][0];
 
-export function outcomeLabel(outcome: string | null | undefined): string {
-  if (!outcome) return "In progress";
+export function outcomeLabel(outcome: string | null | undefined, endReason?: string | null): string {
+  if (!outcome) {
+    if (endReason === "no_final_report") return "Ended (no final report)";
+    return "In progress";
+  }
   return OUTCOME_OPTIONS.find(([key]) => key === outcome)?.[1] ?? outcome;
 }
 

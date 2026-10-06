@@ -20,6 +20,7 @@ import {
   StatCard,
 } from "@/components/ui";
 import { logMessageList } from "@/lib/access-log";
+import { outcomeLabel } from "@/lib/call-view";
 import { callViewerFor } from "@/lib/call-viewer";
 import { requireUser } from "@/lib/session";
 import { ClipboardList, Clock3, MessageSquare, Phone } from "lucide-react";
@@ -318,7 +319,7 @@ export default async function HomePage() {
                   >
                     <span className="text-[var(--muted)]">{formatTime(call.startedAt)}</span>
                     <span className="truncate font-semibold">{call.caller}</span>
-                    <Pill tone="neutral">{call.outcome?.replaceAll("_", " ") ?? "No action"}</Pill>
+                    <Pill tone="neutral">{outcomeLabel(call.outcome, call.endReason)}</Pill>
                     <span className="text-right tabular-nums text-[var(--muted)]">
                       {formatDuration(call.durationSeconds)}
                     </span>

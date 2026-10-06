@@ -1,4 +1,4 @@
-import { ProviderRequestError, RECORDING_MAX_BYTES, retellTiming, STRIPE_API_VERSION, type AgentPublish, type BillingPlatform, type PriceKind, type PublishedTool, type VoicePlatform } from "./types";
+import { ProviderRequestError, RECORDING_MAX_BYTES, retellTiming, STRIPE_API_VERSION, type AgentPublish, type BillingPlatform, type PriceKind, type PublishedTool, type RetellCallSnapshot, type VoicePlatform } from "./types";
 
 type FetchLike = (url: string, init?: RequestInit) => Promise<Response>;
 
@@ -110,7 +110,7 @@ export function httpVoice(apiKey: string, fetchImpl: FetchLike = fetch): VoicePl
     return { status: response.status, body: json ?? {} };
   }
 
-  return {
+  const voice: VoicePlatform = {
     async createLlm(input) {
       const { body } = await send("/create-retell-llm", {
         method: "POST",
@@ -239,11 +239,22 @@ export function httpVoice(apiKey: string, fetchImpl: FetchLike = fetch): VoicePl
         throw error;
       }
     },
+    async getCall(retellCallId) {
+      try {
+        const { body } = await send(`/v2/get-call/${encodeURIComponent(retellCallId)}`, { method: "GET" });
+        const callId = typeof body.call_id === "string" ? body.call_id : retellCallId;
+        return { ...body, call_id: callId } as RetellCallSnapshot;
+      } catch (error) {
+        if (error instanceof ProviderRequestError && error.status === 404) return null;
+        throw error;
+      }
+    },
     async fetchRecording(retellCallId) {
       // GET /v2/get-call/{call_id} returns `recording_url` (https://docs.retellai.com/api-references/get-call).
       // The URL stays inside this function: it is fetched and the bytes are returned, nothing else.
-      const { body } = await send(`/v2/get-call/${encodeURIComponent(retellCallId)}`, { method: "GET" });
-      const url = typeof body.recording_url === "string" ? body.recording_url : "";
+      const call = await voice.getCall(retellCallId);
+      if (!call) return null;
+      const url = typeof call.recording_url === "string" ? call.recording_url : "";
       if (!url) return null;
       const response = await fetchImpl(url, { method: "GET" });
       if (!response.ok) throw new ProviderRequestError(`Recording download failed (${response.status})`, response.status);
@@ -255,6 +266,7 @@ export function httpVoice(apiKey: string, fetchImpl: FetchLike = fetch): VoicePl
       return { bytes, contentType };
     },
   };
+  return voice;
 }
 
 function formBody(fields: Record<string, string | null | undefined>): string {

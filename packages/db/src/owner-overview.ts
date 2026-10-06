@@ -39,7 +39,7 @@ export async function ownerOverview(ctx: TenantContext, clientId: string, now = 
   const monthStart = startOfMonth(now);
   const liveSince = new Date(now.getTime() - LIVE_WINDOW_MS);
 
-  const [client, callsThisWeek, messagesThisWeek, monthDurations, liveCall] = await Promise.all([
+  const [client, callsThisWeek, messagesThisWeek, minutesUsed, liveCall] = await Promise.all([
     prisma.client.findFirstOrThrow({
       where: { id: clientId, archivedAt: null },
       include: { plan: { select: { name: true, includedMinutes: true } } },
@@ -50,10 +50,12 @@ export async function ownerOverview(ctx: TenantContext, clientId: string, now = 
     prisma.clientMessage.count({
       where: { clientId, createdAt: { gte: weekStart } },
     }),
-    prisma.callRecord.findMany({
-      where: { clientId, startedAt: { gte: monthStart }, purgedAt: null, durationSeconds: { not: null } },
-      select: { durationSeconds: true },
-    }),
+    prisma.usageRecord
+      .findMany({
+        where: { clientId, startedAt: { gte: monthStart } },
+        select: { billableMinutes: true },
+      })
+      .then((rows) => rows.reduce((sum, row) => sum + row.billableMinutes, 0)),
     prisma.callRecord.findFirst({
       where: {
         clientId,
@@ -66,7 +68,6 @@ export async function ownerOverview(ctx: TenantContext, clientId: string, now = 
     }),
   ]);
 
-  const minutesUsed = monthDurations.reduce((sum, row) => sum + Math.ceil((row.durationSeconds ?? 0) / 60), 0);
   const minutesIncluded = client.overrideIncludedMinutes ?? client.plan?.includedMinutes ?? 0;
 
   return {

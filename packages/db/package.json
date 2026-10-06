@@ -13,6 +13,7 @@
     "lint": "pnpm -w exec eslint packages/db/src packages/db/scripts packages/db/prisma.config.ts",
     "encrypt:backfill": "tsx scripts/encrypt-backfill.ts",
     "encrypt:rotate": "tsx scripts/rotate-encryption-key.ts",
+    "usage:backfill": "tsx scripts/usage-backfill.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "build": "prisma generate"

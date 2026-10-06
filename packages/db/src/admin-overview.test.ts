@@ -74,6 +74,33 @@ describe("adminOverview", () => {
     expect(overview.clients[0]?.status).toBe("on_a_call");
     expect(overview.startInterviewHref).toBeTruthy();
 
+    await prisma.callRecord.create({
+      data: {
+        clientId: client.id,
+        retellCallId: "ended_1",
+        startedAt: new Date(now.getFullYear(), now.getMonth(), 2, 12, 0, 0),
+        endedAt: new Date(now.getFullYear(), now.getMonth(), 2, 12, 1, 30),
+        durationSeconds: 90,
+        callerMasked: "(423) •••-1111",
+      },
+    });
+    const ended = await prisma.callRecord.findUniqueOrThrow({ where: { retellCallId: "ended_1" } });
+    await prisma.usageRecord.create({
+      data: {
+        clientId: client.id,
+        callRecordId: ended.id,
+        retellCallId: "ended_1",
+        startedAt: ended.startedAt!,
+        endedAt: ended.endedAt!,
+        durationSeconds: 90,
+        billableMinutes: 2,
+        internal: false,
+      },
+    });
+    const withMinutes = await adminOverview(admin, now);
+    expect(withMinutes.stats.minutesThisMonth).toBe(2);
+    expect(withMinutes.clients[0]?.minutesUsed).toBe(2);
+
     await expect(listLiveCalls({ id: "x", role: "client_owner", clientId: client.id }, now)).rejects.toThrow(/admin/i);
   });
 });
