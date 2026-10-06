@@ -2,7 +2,7 @@
  * Phase B Part 4 Stripe webhook handlers (extends Phase 3 applyStripeEvent).
  */
 import { getEnv } from "@alinstra/config";
-import { billingResumedOwnerEmail, paymentFailedOwnerEmail } from "@alinstra/email";
+import { billingResumedOwnerEmail, paymentFailedOwnerEmail } from "@alinstra/email/billing-emails";
 import { buildGreeting, type PromptFeatures } from "@alinstra/agent";
 import { Prisma } from "./generated/prisma/client";
 import { applyScheduledPlanChanges } from "./billing-lifecycle";

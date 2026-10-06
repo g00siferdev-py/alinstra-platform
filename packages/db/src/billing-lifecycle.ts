@@ -2,7 +2,7 @@
  * Phase B Part 4: pause after 7 days past due, owner billing overview, plan-change requests.
  */
 import { getEnv } from "@alinstra/config";
-import { billingPausedOwnerEmail } from "@alinstra/email";
+import { billingPausedOwnerEmail } from "@alinstra/email/billing-emails";
 import {
   clientOverageLookupKey,
   overageLookupKey,

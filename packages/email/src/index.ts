@@ -1,5 +1,4 @@
 import { getEnv } from "@alinstra/config";
-import { Resend } from "resend";
 
 export type EmailMessage = {
   to: string;
@@ -70,6 +69,8 @@ export async function sendEmail(message: EmailMessage): Promise<void> {
     throw new Error("RESEND_API_KEY is required when EMAIL_TRANSPORT=resend");
   }
 
+  // Dynamic import so template-only consumers (and next build) do not pull Resend's optional peers.
+  const { Resend } = await import("resend");
   const resend = new Resend(env.RESEND_API_KEY);
   const result = await resend.emails.send({
     from: env.EMAIL_FROM,

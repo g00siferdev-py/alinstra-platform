@@ -4,7 +4,7 @@
  */
 import { calendarMonthRange } from "@alinstra/agent";
 import { getEnv } from "@alinstra/config";
-import { monthlyReportOwnerEmail } from "@alinstra/email";
+import { monthlyReportOwnerEmail } from "@alinstra/email/monthly-report-email";
 import type { Actor } from "./changes";
 import { recordChange } from "./changes";
 import { parseCallFlags } from "./call-flags";

@@ -4,7 +4,9 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./billing-emails": "./src/billing-emails.ts",
+    "./monthly-report-email": "./src/monthly-report-email.ts"
   },
   "scripts": {
     "lint": "pnpm -w exec eslint packages/email/src",
@@ -14,6 +16,7 @@
   },
   "dependencies": {
     "@alinstra/config": "workspace:*",
+    "@react-email/render": "^2.1.0",
     "resend": "6.1.2"
   },
   "devDependencies": {

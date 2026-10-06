@@ -8,4 +8,5 @@ export const MARKETING_EMAIL = "hello@alinstra.com";
 export const MARKETING_LOCATION = "Morristown, Tennessee";
 export const SITE_URL = "https://alinstra.com";
 
-export { FOUNDING_OFFER, TERMS_VERSION } from "@alinstra/db";
+// Leaf export only — never import `@alinstra/db` here (client components use this file).
+export { FOUNDING_OFFER, TERMS_VERSION } from "@alinstra/db/founding";
