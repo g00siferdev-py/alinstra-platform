@@ -19,6 +19,8 @@ export type SyncStripePricesReport = {
   meterId: string;
   plans: number;
   prices: number;
+  /** Existing prices whose tax_behavior was unspecified and patched to exclusive. */
+  taxBehaviorUpdated: number;
 };
 
 async function rememberPrice(lookupKey: string, stripePriceId: string, planCode: string, kind: string, amountCents: number) {
@@ -70,6 +72,7 @@ export async function syncStripePrices(
 
   const plans = await prisma.plan.findMany({ where: { active: true }, orderBy: { sortOrder: "asc" } });
   let prices = 0;
+  let taxBehaviorUpdated = 0;
 
   for (const plan of plans) {
     const monthlyKey = `plan_${plan.code}_monthly`;
@@ -82,6 +85,7 @@ export async function syncStripePrices(
     });
     await rememberPrice(monthlyKey, monthly.priceId, plan.code, "recurring", plan.monthlyPriceCents);
     prices += 1;
+    if (monthly.taxBehaviorUpdated) taxBehaviorUpdated += 1;
 
     if (plan.setupFeeCents > 0) {
       const setupKey = `plan_${plan.code}_setup`;
@@ -94,6 +98,7 @@ export async function syncStripePrices(
       });
       await rememberPrice(setupKey, setup.priceId, plan.code, "setup", plan.setupFeeCents);
       prices += 1;
+      if (setup.taxBehaviorUpdated) taxBehaviorUpdated += 1;
     }
 
     const meteredKey = overageLookupKey(plan.code, plan.includedMinutes, plan.overagePerMinuteCents);
@@ -109,6 +114,7 @@ export async function syncStripePrices(
     });
     await rememberPrice(meteredKey, metered.priceId, plan.code, "metered_overage", plan.overagePerMinuteCents);
     prices += 1;
+    if (metered.taxBehaviorUpdated) taxBehaviorUpdated += 1;
   }
 
   if (options.includeClientOverrides) {
@@ -140,6 +146,7 @@ export async function syncStripePrices(
         });
         await rememberPrice(key, price.priceId, plan.code, "recurring", amount);
         prices += 1;
+        if (price.taxBehaviorUpdated) taxBehaviorUpdated += 1;
       }
       if (client.overrideSetupFeeCents != null && client.overrideSetupFeeCents > 0 && !client.setupFeeWaived) {
         const key = `client_${client.id}_setup`;
@@ -153,6 +160,7 @@ export async function syncStripePrices(
         });
         await rememberPrice(key, price.priceId, plan.code, "setup", amount);
         prices += 1;
+        if (price.taxBehaviorUpdated) taxBehaviorUpdated += 1;
       }
       // Per-client metered price when either included minutes or overage rate is overridden.
       if (client.overrideIncludedMinutes != null || client.overrideOveragePerMinuteCents != null) {
@@ -171,9 +179,14 @@ export async function syncStripePrices(
         });
         await rememberPrice(key, price.priceId, plan.code, "metered_overage", overage);
         prices += 1;
+        if (price.taxBehaviorUpdated) taxBehaviorUpdated += 1;
       }
     }
   }
 
-  return { meterId: meter.meterId, plans: plans.length, prices };
+  if (taxBehaviorUpdated > 0) {
+    console.info(`stripe-sync: patched tax_behavior to exclusive on ${taxBehaviorUpdated} existing price(s)`);
+  }
+
+  return { meterId: meter.meterId, plans: plans.length, prices, taxBehaviorUpdated };
 }

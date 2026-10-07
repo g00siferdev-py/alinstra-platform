@@ -15,7 +15,9 @@ async function main(): Promise<void> {
   const withOverrides = process.argv.includes("--with-overrides");
   const { billing } = platformsFor(getEnv());
   const result = await syncStripePrices(billing, { includeClientOverrides: withOverrides });
-  console.log(`Synced meter ${result.meterId}; ${result.plans} plan(s); ${result.prices} price(s).`);
+  console.log(
+    `Synced meter ${result.meterId}; ${result.plans} plan(s); ${result.prices} price(s); tax_behavior patched ${result.taxBehaviorUpdated}.`,
+  );
 }
 
 main()

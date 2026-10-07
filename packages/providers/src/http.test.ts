@@ -225,6 +225,26 @@ describe("provider HTTP clients", () => {
     expect(bodies[2]).toContain("payload%5Bvalue%5D=3");
   });
 
+  it("creates prices with exclusive tax_behavior and SaaS tax_code", async () => {
+    let createBody = "";
+    const billing = httpBilling("sk_test_local", async (url, init) => {
+      if (String(url).includes("/v1/prices?") && (!init?.method || init.method === "GET")) {
+        return new Response(JSON.stringify({ data: [] }), { status: 200 });
+      }
+      createBody = String(init?.body ?? "");
+      return new Response(JSON.stringify({ id: "price_tax" }), { status: 200 });
+    });
+    await billing.ensurePrice({
+      lookupKey: "plan_solo_monthly",
+      amountCents: 9900,
+      kind: "recurring",
+      productName: "Solo monthly",
+      idempotencyKey: "price_solo_monthly_9900",
+    });
+    expect(createBody).toContain("tax_behavior=exclusive");
+    expect(createBody).toContain("product_data%5Btax_code%5D=txcd_10103001");
+  });
+
   it("opens Checkout with customer_update auto and without tax_id_collection", async () => {
     let body = "";
     const billing = httpBilling("sk_test_local", async (_url, init) => {

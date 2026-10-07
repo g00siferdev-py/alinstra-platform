@@ -1,4 +1,4 @@
-import { ProviderRequestError, RECORDING_MAX_BYTES, retellTiming, STRIPE_API_VERSION, type AgentPublish, type BillingPlatform, type EnsurePriceInput, type PublishedTool, type ReportMeterEventInput, type RetellCallSnapshot, type UpdateSubscriptionPricesInput, type VoicePlatform } from "./types";
+import { ProviderRequestError, RECORDING_MAX_BYTES, retellTiming, STRIPE_API_VERSION, STRIPE_PRODUCT_TAX_CODE, type AgentPublish, type BillingPlatform, type EnsurePriceInput, type PublishedTool, type ReportMeterEventInput, type RetellCallSnapshot, type UpdateSubscriptionPricesInput, type VoicePlatform } from "./types";
 
 type FetchLike = (url: string, init?: RequestInit) => Promise<Response>;
 
@@ -347,10 +347,44 @@ export function httpBilling(secretKey: string, fetchImpl: FetchLike = fetch): Bi
     async ensurePrice(input: EnsurePriceInput) {
       const listed = await send(`/v1/prices?lookup_keys[]=${encodeURIComponent(input.lookupKey)}&active=true`, { method: "GET" });
       const data = Array.isArray(listed.body.data) ? listed.body.data : [];
-      const current = data[0] as { id?: string; unit_amount?: number | null; billing_scheme?: string } | undefined;
+      const current = data[0] as {
+        id?: string;
+        unit_amount?: number | null;
+        billing_scheme?: string;
+        tax_behavior?: string | null;
+        product?: string | { id?: string };
+      } | undefined;
+
+      async function patchTaxIfNeeded(price: NonNullable<typeof current>): Promise<boolean> {
+        const productId =
+          typeof price.product === "string"
+            ? price.product
+            : price.product && typeof price.product === "object" && typeof price.product.id === "string"
+              ? price.product.id
+              : null;
+        if (productId) {
+          await send(`/v1/products/${encodeURIComponent(productId)}`, {
+            method: "POST",
+            body: formBody({ tax_code: STRIPE_PRODUCT_TAX_CODE }),
+          });
+        }
+        const behavior = price.tax_behavior ?? "unspecified";
+        if (behavior === "exclusive" || behavior === "inclusive") return false;
+        if (!price.id) return false;
+        // Stripe allows unspecified → exclusive once.
+        await send(`/v1/prices/${encodeURIComponent(price.id)}`, {
+          method: "POST",
+          body: formBody({ tax_behavior: "exclusive" }),
+        });
+        return true;
+      }
+
       if (input.kind === "metered_overage") {
         // Lookup key encodes included + overage amounts; an active row with that key is the current price.
-        if (current?.id) return { priceId: current.id };
+        if (current?.id) {
+          const taxBehaviorUpdated = await patchTaxIfNeeded(current);
+          return { priceId: current.id, taxBehaviorUpdated };
+        }
         if (!input.meterId) throw new Error("meterId is required for metered_overage prices.");
         const included = input.includedMinutes ?? 0;
         const overage = input.overagePerMinuteCents ?? input.amountCents;
@@ -360,7 +394,9 @@ export function httpBilling(secretKey: string, fetchImpl: FetchLike = fetch): Bi
           body: formBody({
             currency: "usd",
             lookup_key: input.lookupKey,
+            tax_behavior: "exclusive",
             "product_data[name]": input.productName,
+            "product_data[tax_code]": STRIPE_PRODUCT_TAX_CODE,
             billing_scheme: "tiered",
             tiers_mode: "graduated",
             "recurring[interval]": "month",
@@ -372,9 +408,12 @@ export function httpBilling(secretKey: string, fetchImpl: FetchLike = fetch): Bi
             "tiers[1][unit_amount]": String(overage),
           }),
         });
-        return { priceId: String(body.id) };
+        return { priceId: String(body.id), taxBehaviorUpdated: false };
       }
-      if (current?.id && current.unit_amount === input.amountCents) return { priceId: current.id };
+      if (current?.id && current.unit_amount === input.amountCents) {
+        const taxBehaviorUpdated = await patchTaxIfNeeded(current);
+        return { priceId: current.id, taxBehaviorUpdated };
+      }
       const { body } = await send("/v1/prices", {
         method: "POST",
         idempotencyKey: input.idempotencyKey,
@@ -382,12 +421,14 @@ export function httpBilling(secretKey: string, fetchImpl: FetchLike = fetch): Bi
           currency: "usd",
           unit_amount: String(input.amountCents),
           lookup_key: input.lookupKey,
+          tax_behavior: "exclusive",
           transfer_lookup_key: current?.id ? "true" : null,
           "product_data[name]": input.productName,
+          "product_data[tax_code]": STRIPE_PRODUCT_TAX_CODE,
           "recurring[interval]": input.kind === "recurring" ? "month" : null,
         }),
       });
-      return { priceId: String(body.id) };
+      return { priceId: String(body.id), taxBehaviorUpdated: false };
     },
     async reportMeterEvent(input: ReportMeterEventInput) {
       const { body } = await send("/v1/billing/meter_events", {

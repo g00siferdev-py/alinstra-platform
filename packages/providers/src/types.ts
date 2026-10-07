@@ -172,6 +172,11 @@ export type PriceKind = "recurring" | "setup" | "metered_overage";
 /** Stripe Billing Meter event name (sum aggregation). Created once by price sync. */
 export const METER_EVENT_NAME = "alinstra_minutes";
 
+/**
+ * Confirm with the accountant before live; Stripe's exact name: "Software as a service (SaaS) - business use".
+ */
+export const STRIPE_PRODUCT_TAX_CODE = "txcd_10103001";
+
 export type EnsurePriceInput = {
   lookupKey: string;
   amountCents: number;
@@ -253,7 +258,12 @@ export interface BillingPlatform {
    * Store the returned meterId in AppSetting (see stripe-sync).
    */
   ensureMeter(input: { eventName: string; displayName: string; idempotencyKey: string }): Promise<{ meterId: string }>;
-  ensurePrice(input: EnsurePriceInput): Promise<{ priceId: string }>;
+  /**
+   * Create or reuse a catalog price. New prices use `tax_behavior: exclusive` and
+   * `product_data[tax_code]=STRIPE_PRODUCT_TAX_CODE`. Existing prices with
+   * `tax_behavior: unspecified` are patched once to `exclusive`.
+   */
+  ensurePrice(input: EnsurePriceInput): Promise<{ priceId: string; taxBehaviorUpdated: boolean }>;
   /** POST /v1/billing/meter_events. Returns the identifier Stripe accepted (no separate id). */
   reportMeterEvent(input: ReportMeterEventInput): Promise<{ identifier: string }>;
   createCheckout(input: CreateCheckoutInput): Promise<{ sessionId: string; url: string; expiresAt: Date }>;

@@ -99,6 +99,7 @@ What it does:
 1. Ensures the `alinstra_minutes` Billing Meter (sum aggregation) and stores its id in `AppSetting` key `stripe.meter.alinstra_minutes`.
 2. Creates/refreshes catalog Prices for every active plan: base monthly, setup, and graduated metered overage (first N minutes at $0, then overage cents/min).
 3. Lookup keys include amounts so changing a plan amount creates a new Price instead of mutating an old one.
+4. Owns **Stripe Tax fields on catalog objects**: each product gets `tax_code` `txcd_10103001` (SaaS — business use; confirm with the accountant before live), and every new price is created with `tax_behavior: exclusive`. Existing prices still on `unspecified` are patched to `exclusive` once (Stripe allows that). Dashboard Tax defaults are only a backstop.
 
 Run sync in **test** after deploy, and again in **live** after you switch keys.
 

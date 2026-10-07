@@ -67,6 +67,25 @@ describe("Phase B Part 3 metering", () => {
     const again = await syncStripePrices(billing);
     expect(again.meterId).toBe(result.meterId);
     expect(billing.creates.meter).toBe(1);
+    expect(again.taxBehaviorUpdated).toBe(0);
+    for (const row of billing.prices.values()) {
+      expect(row.taxBehavior).toBe("exclusive");
+      expect(row.taxCode).toBe("txcd_10103001");
+    }
+  });
+
+  it("syncStripePrices patches unspecified tax_behavior to exclusive", async () => {
+    await seedPlan("solo");
+    const billing = new MemoryBilling();
+    await syncStripePrices(billing);
+    for (const row of billing.prices.values()) {
+      row.taxBehavior = "unspecified";
+    }
+    const again = await syncStripePrices(billing);
+    expect(again.taxBehaviorUpdated).toBeGreaterThan(0);
+    for (const row of billing.prices.values()) {
+      expect(row.taxBehavior).toBe("exclusive");
+    }
   });
 
   it("openCheckout uses client_* metered lookup when overage overrides are set", async () => {

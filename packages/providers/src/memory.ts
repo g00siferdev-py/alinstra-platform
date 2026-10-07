@@ -1,4 +1,4 @@
-import { retellTiming, type AgentPublish, type BillingPlatform, type CallTiming, type CreateCheckoutInput, type CreatePortalSessionInput, type EnsurePriceInput, type ListInvoicesInput, type PriceKind, type PublishedTool, type RecordingDownload, type ReportMeterEventInput, type RetellCallSnapshot, type RetellTiming, type StripeInvoiceSummary, type SubscriptionPeriodBounds, type UpdateSubscriptionPricesInput, type VoicePlatform } from "./types";
+import { retellTiming, STRIPE_PRODUCT_TAX_CODE, type AgentPublish, type BillingPlatform, type CallTiming, type CreateCheckoutInput, type CreatePortalSessionInput, type EnsurePriceInput, type ListInvoicesInput, type PriceKind, type PublishedTool, type RecordingDownload, type ReportMeterEventInput, type RetellCallSnapshot, type RetellTiming, type StripeInvoiceSummary, type SubscriptionPeriodBounds, type UpdateSubscriptionPricesInput, type VoicePlatform } from "./types";
 
 type StoredLlm = { clientId: string; prompt: string; tools: PublishedTool[]; beginMessage: string };
 /** Mirrors what httpVoice sends: the agent carries the clamped Retell timing fields. */
@@ -106,7 +106,18 @@ export class MemoryVoice implements VoicePlatform {
 
 export class MemoryBilling implements BillingPlatform {
   customers = new Map<string, string>();
-  prices = new Map<string, { priceId: string; amountCents: number; kind: PriceKind; meterId?: string; includedMinutes?: number }>();
+  prices = new Map<
+    string,
+    {
+      priceId: string;
+      amountCents: number;
+      kind: PriceKind;
+      meterId?: string;
+      includedMinutes?: number;
+      taxBehavior: "exclusive" | "inclusive" | "unspecified";
+      taxCode: string;
+    }
+  >();
   meters = new Map<string, string>();
   meterEvents: Array<ReportMeterEventInput & { reportedAt: Date }> = [];
   /** Next reportMeterEvent calls that should throw (for retry tests). */
@@ -157,24 +168,50 @@ export class MemoryBilling implements BillingPlatform {
     return { meterId };
   }
 
-  async ensurePrice(input: EnsurePriceInput): Promise<{ priceId: string }> {
+  async ensurePrice(input: EnsurePriceInput): Promise<{ priceId: string; taxBehaviorUpdated: boolean }> {
     const current = this.prices.get(input.lookupKey);
     if (input.kind === "metered_overage") {
       const included = input.includedMinutes ?? 0;
       const overage = input.overagePerMinuteCents ?? input.amountCents;
       if (current && current.kind === input.kind && current.amountCents === overage && current.includedMinutes === included && current.meterId === input.meterId) {
-        return { priceId: current.priceId };
+        const taxBehaviorUpdated = current.taxBehavior === "unspecified";
+        if (taxBehaviorUpdated) {
+          current.taxBehavior = "exclusive";
+          current.taxCode = STRIPE_PRODUCT_TAX_CODE;
+        }
+        return { priceId: current.priceId, taxBehaviorUpdated };
       }
       this.creates.price += 1;
       const priceId = `price_${input.lookupKey}`;
-      this.prices.set(input.lookupKey, { priceId, amountCents: overage, kind: input.kind, meterId: input.meterId, includedMinutes: included });
-      return { priceId };
+      this.prices.set(input.lookupKey, {
+        priceId,
+        amountCents: overage,
+        kind: input.kind,
+        meterId: input.meterId,
+        includedMinutes: included,
+        taxBehavior: "exclusive",
+        taxCode: STRIPE_PRODUCT_TAX_CODE,
+      });
+      return { priceId, taxBehaviorUpdated: false };
     }
-    if (current && current.amountCents === input.amountCents && current.kind === input.kind) return { priceId: current.priceId };
+    if (current && current.amountCents === input.amountCents && current.kind === input.kind) {
+      const taxBehaviorUpdated = current.taxBehavior === "unspecified";
+      if (taxBehaviorUpdated) {
+        current.taxBehavior = "exclusive";
+        current.taxCode = STRIPE_PRODUCT_TAX_CODE;
+      }
+      return { priceId: current.priceId, taxBehaviorUpdated };
+    }
     this.creates.price += 1;
     const priceId = `price_${input.lookupKey}_${input.amountCents}`;
-    this.prices.set(input.lookupKey, { priceId, amountCents: input.amountCents, kind: input.kind });
-    return { priceId };
+    this.prices.set(input.lookupKey, {
+      priceId,
+      amountCents: input.amountCents,
+      kind: input.kind,
+      taxBehavior: "exclusive",
+      taxCode: STRIPE_PRODUCT_TAX_CODE,
+    });
+    return { priceId, taxBehaviorUpdated: false };
   }
 
   async reportMeterEvent(input: ReportMeterEventInput): Promise<{ identifier: string }> {
