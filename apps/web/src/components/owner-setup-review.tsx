@@ -5,10 +5,13 @@ import { resendVerificationAction } from "@/app/(marketing)/signup/actions";
 import { TransferTargetsEditor } from "@/components/transfer-targets-editor";
 import { Button, Card, ErrorText } from "@/components/ui";
 import { WeeklyHoursEditor } from "@/components/weekly-hours-editor";
-import { HOURS_CONFLICT_MESSAGE, HOURS_CONFLICT_REVIEW } from "@alinstra/db";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { WizardFormPayload } from "@/components/wizard-form";
+
+/** Keep in sync with @alinstra/agent HOURS_CONFLICT_* (client must not import the db barrel). */
+const HOURS_CONFLICT_REVIEW = "hours_conflict";
+const HOURS_CONFLICT_MESSAGE = "Hours and after-hours/on-call times don't match — check them";
 
 type PlanRow = { id: string; name: string; monthlyPriceCents: number };
 

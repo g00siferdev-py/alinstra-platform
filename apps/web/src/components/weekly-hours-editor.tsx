@@ -1,7 +1,7 @@
 "use client";
 
 import { ErrorText } from "@/components/ui";
-import { formatWeeklyHours, parseWeeklyHours, type WeeklyHours } from "@alinstra/db";
+import { formatWeeklyHours, parseWeeklyHours, type WeeklyHours } from "@alinstra/db/domain";
 import { useEffect, useMemo, useState } from "react";
 
 const DAY_KEYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;

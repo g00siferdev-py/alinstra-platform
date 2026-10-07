@@ -7,7 +7,7 @@ import {
   LIVE_TRANSFER_TARGETS_ERROR,
   normalizeTransferNumber,
   parseTransferTargets,
-} from "@alinstra/db";
+} from "@alinstra/db/domain";
 import { useEffect, useState } from "react";
 
 export type TransferRow = { id: string; label: string; phone: string };
