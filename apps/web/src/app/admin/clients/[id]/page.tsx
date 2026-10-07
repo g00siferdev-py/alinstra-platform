@@ -128,6 +128,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
         numberApproved={Boolean(run?.numberApprovedAt)}
         numberPurchase={numberPurchase}
         voiceName={voiceDisplayName(clientVoice.voiceId)}
+        appEnv={env.APP_ENV}
       />
       {client.wizardSubmittedAt ? (
         <Card className="grid gap-3">

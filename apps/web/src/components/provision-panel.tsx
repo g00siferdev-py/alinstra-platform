@@ -58,6 +58,7 @@ export function ProvisionPanel({
   numberApproved,
   numberPurchase,
   voiceName,
+  appEnv = "",
 }: {
   clientId: string;
   status: string;
@@ -75,17 +76,21 @@ export function ProvisionPanel({
   numberApproved: boolean;
   numberPurchase: NumberPurchaseView;
   voiceName: string;
+  /** From APP_ENV; non-production shows an extra staging warning on confirm. */
+  appEnv?: string;
 }) {
   const router = useRouter();
   const toast = useToast();
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [confirmNumber, setConfirmNumber] = useState<"start" | "approve" | null>(null);
+  const [confirmProvision, setConfirmProvision] = useState(false);
   const syncLabel = syncStatus === "in_sync" ? "In sync" : syncStatus === "syncing" ? "Syncing" : syncStatus === "failed" ? "Sync failed — retry" : "Not on Retell yet";
   const awaitingApproval = steps.some((step) => step.status === AWAITING_APPROVAL);
   const polling = (runStatus === "running" && !awaitingApproval) || syncStatus === "syncing";
   const headline = provisionHeadline({ status, phoneDisplay, runStatus, runKind, steps });
   const needsNumber = !phone;
+  const isProduction = appEnv === "production";
 
   useEffect(() => {
     if (!polling) return;
@@ -108,9 +113,13 @@ export function ProvisionPanel({
   }
 
   function startProvisioning() {
-    // Starting a run buys a number unless the client already has one, so confirm first.
-    if (needsNumber && !numberApproved) setConfirmNumber("start");
-    else void run("Provisioning started", () => startProvisioningAction(clientId, { numberApproved }));
+    // Always confirm: Retell has no test mode, so this buys a real number on Alinstra's account.
+    setConfirmProvision(true);
+  }
+
+  function confirmAndProvision() {
+    setConfirmProvision(false);
+    void run("Provisioning started", () => startProvisioningAction(clientId, { numberApproved: numberApproved || needsNumber }));
   }
 
   const toneClass =
@@ -173,9 +182,11 @@ export function ProvisionPanel({
       {error ? <ErrorText>{error}</ErrorText> : null}
       <div className="flex flex-wrap gap-2">
         {runStatus === "failed" && runKind === "provision" ? (
-          <Button disabled={pending} onClick={startProvisioning}>Retry provisioning</Button>
+          <Button disabled={pending || confirmProvision} onClick={startProvisioning}>Retry provisioning</Button>
         ) : status !== "live" && status !== "churned" ? (
-          <Button disabled={pending || (runStatus === "running")} onClick={startProvisioning}>Start provisioning</Button>
+          <Button disabled={pending || confirmProvision || runStatus === "running"} onClick={startProvisioning}>
+            Start provisioning
+          </Button>
         ) : null}
         {syncStatus === "failed" || syncStatus === "syncing" || status === "live" ? (
           <Button tone="secondary" disabled={pending} onClick={() => void run("Retell sync finished", () => retrySyncAction(clientId))}>
@@ -188,6 +199,25 @@ export function ProvisionPanel({
           void run("Service ended", () => endServiceNowAction(clientId));
         }}>End service now</Button>
       </div>
+      {confirmProvision ? (
+        <div className="grid gap-2 rounded-md border border-[var(--danger-text)] bg-[var(--danger-soft)] p-3">
+          <p>
+            This creates a live Retell agent and <strong>buys a real phone number</strong> on Alinstra&apos;s Retell
+            account (about $2/month). Continue?
+          </p>
+          {!isProduction ? (
+            <p className="text-[var(--muted)]">This is staging. Only provision a test client on purpose.</p>
+          ) : null}
+          <div className="flex flex-wrap gap-2">
+            <Button variant="danger" disabled={pending} onClick={confirmAndProvision}>
+              Buy number and provision
+            </Button>
+            <Button variant="secondary" disabled={pending} onClick={() => setConfirmProvision(false)}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      ) : null}
       <form className="grid gap-2" onSubmit={(event) => event.preventDefault()}>
         <label className="font-medium" htmlFor="targets">Transfer targets</label>
         <textarea id="targets" name="targets" className="min-h-20 w-full rounded-md border border-[var(--line)] px-3 py-2 text-sm" defaultValue={targets} />
