@@ -124,9 +124,9 @@ export function WeeklyHoursEditor({
           return (
             <div
               key={day}
-              className="grid grid-cols-[auto_1fr] items-center gap-2 sm:grid-cols-[7rem_auto_1fr_1fr] sm:gap-3"
+              className="flex items-center gap-1.5 sm:gap-3"
             >
-              <label className="flex cursor-pointer items-center gap-2 text-sm font-medium">
+              <label className="flex w-[6.5rem] shrink-0 cursor-pointer items-center gap-2 text-sm font-medium sm:w-28">
                 <input
                   type="checkbox"
                   checked={row.open}
@@ -136,10 +136,10 @@ export function WeeklyHoursEditor({
               </label>
               {row.open ? (
                 <>
-                  <span className="hidden text-xs text-[var(--muted)] sm:inline">Opens</span>
+                  <span className="hidden shrink-0 text-xs text-[var(--muted)] sm:inline">Opens</span>
                   <select
                     aria-label={`${DAY_LABELS[day]} opens`}
-                    className="w-full rounded-xl border border-[var(--line)] bg-[var(--surface-subtle)] px-3 py-2.5 text-sm"
+                    className="min-w-0 flex-1 rounded-xl border border-[var(--line)] bg-[var(--surface-subtle)] px-2 py-2 text-sm sm:px-3 sm:py-2.5"
                     value={row.start}
                     onChange={(event) => patchDay(day, { start: event.target.value })}
                   >
@@ -149,9 +149,13 @@ export function WeeklyHoursEditor({
                       </option>
                     ))}
                   </select>
+                  <span className="shrink-0 text-sm text-[var(--muted)]" aria-hidden="true">
+                    –
+                  </span>
+                  <span className="sr-only">Closes</span>
                   <select
                     aria-label={`${DAY_LABELS[day]} closes`}
-                    className="w-full rounded-xl border border-[var(--line)] bg-[var(--surface-subtle)] px-3 py-2.5 text-sm"
+                    className="min-w-0 flex-1 rounded-xl border border-[var(--line)] bg-[var(--surface-subtle)] px-2 py-2 text-sm sm:px-3 sm:py-2.5"
                     value={row.end}
                     onChange={(event) => patchDay(day, { end: event.target.value })}
                   >
@@ -163,7 +167,7 @@ export function WeeklyHoursEditor({
                   </select>
                 </>
               ) : (
-                <span className="text-sm text-[var(--muted)] sm:col-span-3">Closed</span>
+                <span className="text-sm text-[var(--muted)]">Closed</span>
               )}
             </div>
           );

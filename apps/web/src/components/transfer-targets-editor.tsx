@@ -95,6 +95,7 @@ export function TransferTargetsEditor({
   const [rows, setRows] = useState<TransferRow[]>(() =>
     rowsFromText(transferTargetsText, contactName ?? ""),
   );
+  const [touchedPhones, setTouchedPhones] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     const serialized = serializeTransferTargets(liveTransfer, rows);
@@ -107,8 +108,18 @@ export function TransferTargetsEditor({
   }
 
   function blurPhone(id: string, value: string) {
+    setTouchedPhones((current) => ({ ...current, [id]: true }));
     const e164 = normalizeTransferNumber(value.trim());
     updateRow(id, { phone: e164 ? formatTransferPhoneDisplay(e164) : value });
+  }
+
+  function shouldShowRowError(row: TransferRow, err: string | null): boolean {
+    if (!err) return false;
+    if (err === "Add a name or role for this number") {
+      return Boolean(row.phone.trim());
+    }
+    // Phone errors: only after the field has been blurred (touched).
+    return Boolean(touchedPhones[row.id]);
   }
 
   const formError = transferTargetsEditorError(liveTransfer, rows);
@@ -150,6 +161,7 @@ export function TransferTargetsEditor({
           </p>
           {rows.map((row) => {
             const err = rowError(row);
+            const showErr = shouldShowRowError(row, err);
             return (
               <div key={row.id} className="grid gap-2 sm:grid-cols-[1fr_1fr_auto] sm:items-start">
                 <div>
@@ -164,6 +176,7 @@ export function TransferTargetsEditor({
                   <Input
                     aria-label="Phone number"
                     placeholder="(423) 555-0142"
+                    type="tel"
                     inputMode="tel"
                     value={row.phone}
                     onChange={(event) => updateRow(row.id, { phone: event.target.value })}
@@ -178,7 +191,7 @@ export function TransferTargetsEditor({
                 >
                   Remove
                 </Button>
-                {err && (row.label.trim() || row.phone.trim()) ? (
+                {showErr ? (
                   <div className="sm:col-span-3">
                     <ErrorText>{err}</ErrorText>
                   </div>

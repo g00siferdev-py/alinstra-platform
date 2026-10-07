@@ -72,4 +72,22 @@ describe("WizardForm step 5 audience", () => {
     expect(screen.getByText("Text reminders")).toBeTruthy();
     expect(screen.getByText("Recall add-on")).toBeTruthy();
   });
+
+  it("locks owners to request_only without a Direct to calendar option", () => {
+    renderStep5("owner");
+    expect(
+      screen.getByText("Appointment requests: Ava takes them and emails them to you to confirm."),
+    ).toBeTruthy();
+    expect(screen.queryByText("Direct to calendar")).toBeNull();
+    expect(screen.queryByLabelText("Booking mode")).toBeNull();
+  });
+
+  it("keeps the booking mode dropdown for admins", () => {
+    renderStep5("admin");
+    expect(screen.getByText("Direct to calendar")).toBeTruthy();
+    expect(screen.getByText("Request only")).toBeTruthy();
+    expect(
+      screen.queryByText("Appointment requests: Ava takes them and emails them to you to confirm."),
+    ).toBeNull();
+  });
 });

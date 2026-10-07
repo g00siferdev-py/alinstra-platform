@@ -38,4 +38,15 @@ describe("WeeklyHoursEditor", () => {
       "mon 08:00-17:00",
     );
   });
+
+  it("keeps opens and closes on one row with a visually hidden Closes label", () => {
+    const text = "mon 08:00-17:00";
+    const { container } = render(<WeeklyHoursEditor weeklyHoursText={text} onChange={() => undefined} />);
+    expect(screen.getByLabelText("Monday opens")).toBeTruthy();
+    expect(screen.getByLabelText("Monday closes")).toBeTruthy();
+    expect(container.textContent).toContain("Closes");
+    const row = screen.getByLabelText("Monday opens").closest("div");
+    expect(row?.className).toMatch(/flex/);
+    expect(row?.className).not.toMatch(/grid-cols/);
+  });
 });

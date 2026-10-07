@@ -200,6 +200,15 @@ export function WizardForm({
     }
   }, [payload.business.industry, payload.compliance.healthcareTouched, payload.compliance.healthcareSensitive]);
 
+  useEffect(() => {
+    if (!ownerFacing) return;
+    if (payload.features.bookingMode === "request_only") return;
+    setPayload((current) => ({
+      ...current,
+      features: { ...current.features, bookingMode: "request_only" },
+    }));
+  }, [ownerFacing, payload.features.bookingMode]);
+
   function enqueueSave(): Promise<boolean> {
     const run = chain.current.then(() => writeDraft(), () => writeDraft());
     chain.current = run.catch(() => false);
@@ -518,12 +527,23 @@ export function WizardForm({
       {step === 5 ? (
         <div className="grid gap-3">
           <div>
-            <FieldLabel label="Booking mode" hint="Direct to calendar books a time. Request only takes a message for the office to confirm. Calendar booking is not connected yet." />
-            <select className="w-full cursor-pointer rounded-md border border-[var(--line)] px-3 py-2 text-sm" value={String(payload.features.bookingMode ?? "")} onChange={(event) => setPayload({ ...payload, features: { ...payload.features, bookingMode: event.target.value } })}>
-              <option value="">Choose</option>
-              <option value="direct_calendar">Direct to calendar</option>
-              <option value="request_only">Request only</option>
-            </select>
+            {ownerFacing ? (
+              <>
+                <FieldLabel label="Booking mode" hint="Calendar booking is not connected yet." />
+                <p className="text-sm text-[var(--ink)]">
+                  Appointment requests: Ava takes them and emails them to you to confirm.
+                </p>
+              </>
+            ) : (
+              <>
+                <FieldLabel label="Booking mode" hint="Direct to calendar books a time. Request only takes a message for the office to confirm. Calendar booking is not connected yet." />
+                <select className="w-full cursor-pointer rounded-md border border-[var(--line)] px-3 py-2 text-sm" value={String(payload.features.bookingMode ?? "")} onChange={(event) => setPayload({ ...payload, features: { ...payload.features, bookingMode: event.target.value } })}>
+                  <option value="">Choose</option>
+                  <option value="direct_calendar">Direct to calendar</option>
+                  <option value="request_only">Request only</option>
+                </select>
+              </>
+            )}
           </div>
           <div>
             <FieldLabel label="Messages" hint="What Ava should collect when she takes a message, for example name, number, address and reason." />
