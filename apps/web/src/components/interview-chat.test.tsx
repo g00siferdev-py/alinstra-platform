@@ -21,7 +21,9 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-function renderChat(sendMessage: (sessionId: string, message: string) => Promise<InterviewSendResult>) {
+function renderChat(
+  sendMessage: (sessionId: string, message: string, clientMessageId: string) => Promise<InterviewSendResult>,
+) {
   return render(
     <InterviewChat
       sessionId="sess_1"
@@ -62,7 +64,7 @@ describe("InterviewChat send UX", () => {
     expect((screen.getByRole("button", { name: "Waiting…" }) as HTMLButtonElement).disabled).toBe(true);
     expect((input as HTMLTextAreaElement).disabled).toBe(true);
     expect((input as HTMLTextAreaElement).value).toBe("");
-    expect(sendMessage).toHaveBeenCalledWith("sess_1", "Open 9 to 5 weekdays");
+    expect(sendMessage).toHaveBeenCalledWith("sess_1", "Open 9 to 5 weekdays", expect.any(String));
 
     await act(async () => {
       resolveSend({ ok: true, reply: "Got it — what services do you offer?" });
@@ -93,11 +95,10 @@ describe("InterviewChat send UX", () => {
     expect(screen.getByText(/That didn't go through/i)).toBeTruthy();
     expect(screen.queryByTestId("interview-thinking")).toBeNull();
     expect((screen.getByLabelText("Interview answer") as HTMLTextAreaElement).disabled).toBe(false);
-    // Empty after optimistic clear — Send stays disabled until they type again.
     expect((screen.getByRole("button", { name: "Send" }) as HTMLButtonElement).disabled).toBe(true);
   });
 
-  it("shows the disclaimer and escalates the thinking label over time", async () => {
+  it("shows still/slow labels without Try again while pending, even after 20s", async () => {
     vi.useFakeTimers();
     let resolveSend!: (value: { ok: true; reply: string }) => void;
     const sendMessage = vi.fn(
@@ -117,18 +118,46 @@ describe("InterviewChat send UX", () => {
 
     expect(screen.getByText("Thinking…")).toBeTruthy();
     await act(async () => {
-      vi.advanceTimersByTime(8_000);
+      vi.advanceTimersByTime(6_000);
     });
     expect(screen.getByText("Still thinking…")).toBeTruthy();
     await act(async () => {
-      vi.advanceTimersByTime(22_000);
+      vi.advanceTimersByTime(14_000);
     });
-    expect(screen.getByText("This is taking longer than usual")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Try again" })).toBeTruthy();
+    expect(screen.getByText("This is taking longer than usual…")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
 
     await act(async () => {
       resolveSend({ ok: true, reply: "Thanks — noted." });
     });
+  });
+
+  it("shows Try again after ok:false and retries with the same clientMessageId", async () => {
+    const sendMessage = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: false as const, error: "boom" })
+      .mockResolvedValueOnce({ ok: true as const, reply: "Recovered." });
+
+    renderChat(sendMessage);
+
+    fireEvent.change(screen.getByLabelText("Interview answer"), {
+      target: { value: "Open Saturdays" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Try again" })).toBeTruthy();
+    });
+
+    const firstId = sendMessage.mock.calls[0]?.[2] as string;
+    expect(firstId).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Recovered.")).toBeTruthy();
+    });
+    expect(sendMessage.mock.calls[1]?.[2]).toBe(firstId);
   });
 
   it("sends on Enter and allows Shift+Enter for a new line", () => {
@@ -146,6 +175,6 @@ describe("InterviewChat send UX", () => {
     expect(sendMessage).not.toHaveBeenCalled();
 
     fireEvent.keyDown(input, { key: "Enter", shiftKey: false });
-    expect(sendMessage).toHaveBeenCalledWith("sess_1", "line one");
+    expect(sendMessage).toHaveBeenCalledWith("sess_1", "line one", expect.any(String));
   });
 });

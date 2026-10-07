@@ -19,8 +19,21 @@ export type InterviewChatTurn = { role: "user" | "assistant"; content: string };
 export type InterviewChatAudience = "admin" | "owner";
 
 export type InterviewSendResult =
-  | { ok: true; reply?: string; captured?: Record<string, unknown>; done?: boolean }
-  | { ok: false; error: string };
+  | {
+      ok: true;
+      reply?: string;
+      captured?: Record<string, unknown>;
+      done?: boolean;
+      transcript?: InterviewChatTurn[];
+    }
+  | {
+      ok: false;
+      error?: string;
+      conflict?: boolean;
+      transcript?: InterviewChatTurn[];
+      captured?: Record<string, unknown>;
+      done?: boolean;
+    };
 
 export type InterviewChecklistItem = {
   id: string;
@@ -33,15 +46,13 @@ export const INTERVIEW_DISCLAIMER =
 
 type ThinkingPhase = "thinking" | "still" | "slow";
 
-function ThinkingBubble({
-  phase,
-  onRetry,
-}: {
-  phase: ThinkingPhase;
-  onRetry: () => void;
-}) {
+function ThinkingBubble({ phase }: { phase: ThinkingPhase }) {
   const label =
-    phase === "slow" ? "This is taking longer than usual" : phase === "still" ? "Still thinking…" : "Thinking…";
+    phase === "slow"
+      ? "This is taking longer than usual…"
+      : phase === "still"
+        ? "Still thinking…"
+        : "Thinking…";
   return (
     <div className="flex items-end gap-2" data-testid="interview-thinking">
       <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[var(--primary-soft)] text-[var(--primary)]">
@@ -55,15 +66,17 @@ function ThinkingBubble({
             <span />
           </span>
           <span>{label}</span>
-          {phase === "slow" ? (
-            <button type="button" className="font-semibold underline" onClick={onRetry}>
-              Try again
-            </button>
-          ) : null}
         </div>
       </div>
     </div>
   );
+}
+
+function newClientMessageId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `msg_${Date.now()}_${Math.random().toString(16).slice(2)}`;
 }
 
 export function InterviewChat({
@@ -86,7 +99,11 @@ export function InterviewChat({
   checklist: InterviewChecklistItem[];
   exitHref: string;
   /** Test seam — defaults to the real admin/owner server actions. */
-  sendMessage?: (sessionId: string, message: string) => Promise<InterviewSendResult>;
+  sendMessage?: (
+    sessionId: string,
+    message: string,
+    clientMessageId: string,
+  ) => Promise<InterviewSendResult>;
 }) {
   const [transcript, setTranscript] = useState(initialTranscript);
   const [captured, setCaptured] = useState(initialCaptured);
@@ -98,13 +115,22 @@ export function InterviewChat({
   const [sendFailed, setSendFailed] = useState(false);
   const [thinkingPhase, setThinkingPhase] = useState<ThinkingPhase>("thinking");
   const lastSentRef = useRef<string | null>(null);
+  const lastClientMessageIdRef = useRef<string | null>(null);
   const sendGenerationRef = useRef(0);
   const transcriptEndRef = useRef<HTMLDivElement | null>(null);
   const scrollAreaRef = useRef<HTMLDivElement | null>(null);
 
-  const defaultSend = async (sid: string, text: string): Promise<InterviewSendResult> => {
-    if (audience === "admin") return adminSendInterviewMessage(sid, text);
-    return ownerSendInterviewMessage(sid, text);
+  const defaultSend = async (
+    sid: string,
+    text: string,
+    clientMessageId: string,
+  ): Promise<InterviewSendResult> => {
+    const result =
+      audience === "admin"
+        ? await adminSendInterviewMessage(sid, text, clientMessageId)
+        : await ownerSendInterviewMessage(sid, text, clientMessageId);
+    if (!result) return { ok: false, error: "Could not send that." };
+    return result;
   };
   const send = sendMessage ?? defaultSend;
 
@@ -128,29 +154,39 @@ export function InterviewChat({
       return;
     }
     setThinkingPhase("thinking");
-    const still = window.setTimeout(() => setThinkingPhase("still"), 8_000);
-    const slow = window.setTimeout(() => setThinkingPhase("slow"), 30_000);
+    const still = window.setTimeout(() => setThinkingPhase("still"), 6_000);
+    const slow = window.setTimeout(() => setThinkingPhase("slow"), 20_000);
     return () => {
       window.clearTimeout(still);
       window.clearTimeout(slow);
     };
   }, [sending]);
 
-  async function runSend(text: string) {
+  async function runSend(text: string, clientMessageId: string) {
     lastSentRef.current = text;
+    lastClientMessageIdRef.current = clientMessageId;
     setSending(true);
     setSendFailed(false);
     setError(null);
     const generation = ++sendGenerationRef.current;
     try {
-      const result = await send(sessionId, text);
+      const result = await send(sessionId, text, clientMessageId);
       if (generation !== sendGenerationRef.current) return;
       if (!result.ok) {
+        if (result.conflict && result.transcript) {
+          setTranscript(result.transcript);
+          if (result.captured) setCaptured(result.captured);
+          if (result.done) setDone(true);
+          setSending(false);
+          return;
+        }
         setSendFailed(true);
         setSending(false);
         return;
       }
-      if (result.reply) {
+      if (result.transcript) {
+        setTranscript(result.transcript);
+      } else if (result.reply) {
         setTranscript((rows) => [...rows, { role: "assistant", content: result.reply! }]);
       }
       if (result.captured) setCaptured(result.captured);
@@ -167,15 +203,17 @@ export function InterviewChat({
     event?.preventDefault();
     const text = message.trim();
     if (!text || sending || actionPending) return;
+    const clientMessageId = newClientMessageId();
     setTranscript((rows) => [...rows, { role: "user", content: text }]);
     setMessage("");
-    void runSend(text);
+    void runSend(text, clientMessageId);
   }
 
   function retrySend() {
     const text = lastSentRef.current;
-    if (!text || actionPending) return;
-    void runSend(text);
+    const clientMessageId = lastClientMessageIdRef.current;
+    if (!text || !clientMessageId || actionPending) return;
+    void runSend(text, clientMessageId);
   }
 
   const doneCount = checklist.filter((item) => item.status === "done").length;
@@ -224,7 +262,7 @@ export function InterviewChat({
               </div>
             );
           })}
-          {sending ? <ThinkingBubble phase={thinkingPhase} onRetry={retrySend} /> : null}
+          {sending ? <ThinkingBubble phase={thinkingPhase} /> : null}
           <div ref={transcriptEndRef} />
         </div>
 

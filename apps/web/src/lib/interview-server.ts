@@ -26,6 +26,19 @@ function rethrowRedirect(error: unknown): void {
   }
 }
 
+function transcriptFromState(state: unknown): Array<{ role: "user" | "assistant"; content: string }> {
+  const row = state as { transcript?: Array<{ role: string; content: string }> };
+  if (!Array.isArray(row?.transcript)) return [];
+  return row.transcript
+    .filter((turn) => turn.role === "user" || turn.role === "assistant")
+    .map((turn) => ({ role: turn.role as "user" | "assistant", content: turn.content }));
+}
+
+function capturedFromState(state: unknown): Record<string, unknown> {
+  const row = state as { collected?: Record<string, unknown> };
+  return row.collected ?? {};
+}
+
 async function configAndText() {
   const config = await resolveTextInterviewConfig(getEnv());
   const text = textPlatformFor(config);
@@ -46,16 +59,34 @@ export async function sendInterviewMessageAction(
   actor: Actor,
   sessionId: string,
   message: string,
+  clientMessageId: string,
 ): Promise<InterviewActionState> {
   try {
     const { config, text } = await configAndText();
     const result = await postInterviewMessage(actor, {
       sessionId,
       message,
+      clientMessageId,
       text,
       budget: { inputTokens: config.budgetInputTokens, outputTokens: config.budgetOutputTokens },
     });
-    return { ok: true, reply: result.reply, done: result.done, sessionId: result.session.id };
+    if (!result.ok) {
+      return {
+        ok: false,
+        conflict: true,
+        transcript: transcriptFromState(result.session.state),
+        captured: capturedFromState(result.session.state),
+        done: (result.session.state as { done?: boolean }).done === true || result.session.status !== "active",
+      };
+    }
+    return {
+      ok: true,
+      reply: result.reply,
+      done: result.done,
+      sessionId: result.session.id,
+      transcript: transcriptFromState(result.session.state),
+      captured: capturedFromState(result.session.state),
+    };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : "Could not send that." };
   }

@@ -229,6 +229,8 @@ model InterviewSession {
   model      String
   tokensIn   Int       @default(0)
   tokensOut  Int       @default(0)
+  /// Optimistic concurrency for postInterviewMessage.
+  version    Int       @default(0)
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
   finishedAt DateTime?

@@ -24,6 +24,7 @@ export default async function AdminInterviewPage({ params }: { params: Promise<{
     answeredQuestions?: string[];
     openQuestions?: string[];
     skippedQuestions?: string[];
+    currentQuestionId?: string | null;
     industry?: string;
   };
   const checklist = buildInterviewChecklist({
@@ -31,6 +32,7 @@ export default async function AdminInterviewPage({ params }: { params: Promise<{
     answeredQuestions: state.answeredQuestions,
     openQuestions: state.openQuestions,
     skippedQuestions: state.skippedQuestions,
+    currentQuestionId: state.currentQuestionId,
   });
   const exitHref = `/admin/clients/${id}/wizard`;
 

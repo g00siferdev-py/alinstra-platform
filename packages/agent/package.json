@@ -10,11 +10,13 @@
     "lint": "pnpm -w exec eslint packages/agent/src",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "build": "tsc --noEmit"
+    "build": "tsc --noEmit",
+    "interview:replay": "tsx scripts/interview-replay.ts"
   },
   "devDependencies": {
     "@alinstra/tsconfig": "workspace:*",
     "@types/node": "22.19.1",
+    "tsx": "4.20.6",
     "typescript": "5.9.3",
     "vitest": "4.1.0"
   },

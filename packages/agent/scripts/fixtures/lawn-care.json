@@ -1,0 +1,19 @@
+{
+  "industry": "general",
+  "planCode": "solo",
+  "answers": [
+    "Test Account",
+    "We're a lawn care business — mowing, edging, leaf cleanup, and seasonal cleanups.",
+    "Callers ask about pricing, how often we come, and whether we bring our own equipment. We say we give on-site estimates and usually weekly or biweekly.",
+    "We don't quote prices on the phone.",
+    "Transfer sales questions to the owner. Otherwise take a message.",
+    "If nobody picks up, take a message and email me.",
+    "Schedule a call back for the next business day",
+    "Same thing.",
+    "You are asking me the same thing over and over",
+    "You seem to be stuck!",
+    "For emergencies, tell them to call 911 if someone is hurt; otherwise leave a message for next business day.",
+    "Messages go to me, the owner.",
+    "Hi, thanks for calling GreenSide Lawn. This is Ava — how can I help today?"
+  ]
+}

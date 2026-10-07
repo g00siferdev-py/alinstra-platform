@@ -36,11 +36,9 @@ export type InterviewCollected = {
     messageRecipients?: string;
     weeklyHoursText?: string;
     transferTargetsText?: string;
-    bookingMode?: "direct_calendar" | "request_only";
+    bookingMode?: "request_only";
     liveTransfer?: boolean;
     emergencyHandling?: string;
-    textConfirmations?: boolean;
-    textReminders?: boolean;
   };
   voice?: {
     voiceId?: "voice_1" | "voice_2" | "voice_3" | "voice_4";
@@ -68,14 +66,34 @@ export type TokenUsage = {
   outputTokens: number;
 };
 
+export type AnswerStatus = "answered" | "skipped" | "unclear" | "off_topic";
+
+export type InterviewTurnError =
+  | "timeout"
+  | "http_401"
+  | "http_402"
+  | "http_429"
+  | "http_4xx"
+  | "http_5xx"
+  | "network"
+  | "unknown";
+
 /** Per-turn diagnostics persisted on the session for admin review. */
 export type InterviewTurnLogEntry = {
   finishReason: string | null;
   parseOk: boolean;
   droppedPaths: string[];
+  /** Reasons only — e.g. `transferTargetsText: expected string, got array`. Never values. */
+  droppedReasons?: string[];
   model: string;
   tokensIn: number;
   tokensOut: number;
+  currentQuestionId?: string | null;
+  askCount?: number;
+  answerStatus?: AnswerStatus | null;
+  fallback?: "raw" | "same" | null;
+  error?: InterviewTurnError | null;
+  capabilityFlag?: boolean;
 };
 
 export type InterviewState = {
@@ -89,6 +107,18 @@ export type InterviewState = {
   skippedQuestions: string[];
   /** Bank item ids marked satisfied. */
   answeredQuestions: string[];
+  /** Skipped required items that need a form answer before go-live. */
+  needsReviewQuestions: string[];
+  /** Question the engine is currently asking. */
+  currentQuestionId: string | null;
+  /** How many times each bank item has been asked. Cap is 2. */
+  askCounts: Record<string, number>;
+  /** Client plan code at session start; null → most conservative wording. */
+  planCode: string | null;
+  /** Last successful client message id (idempotency). */
+  lastClientMessageId?: string | null;
+  /** Last assistant reply returned for that client message id. */
+  lastAssistantReply?: string | null;
   tokenUsage: TokenUsage;
   done: boolean;
   /** Paths dropped from the last model updates object (forgiving parse). */
@@ -98,10 +128,10 @@ export type InterviewState = {
 };
 
 export type ModelTurnJson = {
-  reply: string;
+  confirmation: string;
   updates: InterviewCollected;
-  askedId: string | null;
-  done: boolean;
+  answerStatus: AnswerStatus;
+  followUp: string | null;
 };
 
 export type InterviewTurnResult = {

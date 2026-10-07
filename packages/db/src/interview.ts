@@ -3,11 +3,14 @@ import {
   interviewGreeting,
   interviewTurn,
   mergeIntoDraft,
+  normalizeInterviewState,
   resolveInterviewIndustry,
   type InterviewCollected,
   type InterviewIndustry,
   type InterviewState,
+  type InterviewTurnError,
 } from "@alinstra/agent";
+import { log } from "@alinstra/config";
 import {
   DEFAULT_TEXT_API_BASE,
   DEFAULT_TEXT_MODEL,
@@ -21,6 +24,9 @@ import { prisma } from "./client";
 import { emptyWizardPayload, wizardPayloadSchema, type WizardPayload } from "./domain";
 import { recordChange, type Actor } from "./changes";
 import { assertTenantContext } from "./tenant";
+
+/** Interview text calls get 40s; keep "no retry after a timeout" in httpText. */
+const INTERVIEW_TEXT_TIMEOUT_MS = 40_000;
 
 function json(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
@@ -49,7 +55,7 @@ export type TextInterviewConfig = {
   fallbackModel: string;
   budgetInputTokens: number;
   budgetOutputTokens: number;
-  /** OpenRouter reasoning. default = omit field. */
+  /** OpenRouter reasoning. default = omit field. Code default is off. */
   reasoningEffort: "off" | "low" | "default";
 };
 
@@ -71,7 +77,7 @@ export function textInterviewConfig(env: {
     fallbackModel: env.TEXT_FALLBACK_MODEL?.trim() || "",
     budgetInputTokens: env.TEXT_BUDGET_INPUT_TOKENS ?? DEFAULT_TEXT_TOKEN_BUDGET.inputTokens,
     budgetOutputTokens: env.TEXT_BUDGET_OUTPUT_TOKENS ?? DEFAULT_TEXT_TOKEN_BUDGET.outputTokens,
-    reasoningEffort: "default",
+    reasoningEffort: "off",
   };
 }
 
@@ -129,7 +135,7 @@ export async function saveInterviewSettings(
   await setAppSetting(ctx, INTERVIEW_SETTING_KEYS.textFallbackModel, input.textFallbackModel.trim());
   await setAppSetting(ctx, INTERVIEW_SETTING_KEYS.budgetInputTokens, input.budgetInputTokens);
   await setAppSetting(ctx, INTERVIEW_SETTING_KEYS.budgetOutputTokens, input.budgetOutputTokens);
-  const effort = settingReasoningEffort(input.reasoningEffort) ?? "default";
+  const effort = settingReasoningEffort(input.reasoningEffort) ?? "off";
   await setAppSetting(ctx, INTERVIEW_SETTING_KEYS.reasoningEffort, effort);
 }
 
@@ -141,6 +147,7 @@ export function textPlatformFor(config: TextInterviewConfig): TextPlatform | nul
     model: config.model,
     fallbackModel: config.fallbackModel || undefined,
     reasoningEffort: config.reasoningEffort,
+    timeoutMs: INTERVIEW_TEXT_TIMEOUT_MS,
   });
 }
 
@@ -149,7 +156,7 @@ function asState(value: unknown): InterviewState {
   if (!row || typeof row !== "object" || !Array.isArray(row.transcript)) {
     throw new Error("Interview state is invalid.");
   }
-  return row;
+  return normalizeInterviewState(row);
 }
 
 function actorCanAccessClient(ctx: Actor, clientId: string, client: { id: string }): void {
@@ -167,6 +174,8 @@ async function loadClientForInterview(ctx: Actor, clientId: string) {
       name: true,
       industry: true,
       wizardSubmittedAt: true,
+      planId: true,
+      plan: { select: { code: true } },
       wizardDraft: { select: { id: true, payload: true, currentStep: true, discardedAt: true, updatedAt: true } },
     },
   });
@@ -187,7 +196,8 @@ export async function startInterviewSession(
   if (!draft || draft.discardedAt) throw new Error("Start the wizard draft before the interview.");
 
   const industry: InterviewIndustry = resolveInterviewIndustry(input.industry ?? client.industry);
-  const state = initialInterviewState(industry);
+  const planCode = client.plan?.code ?? null;
+  const state = initialInterviewState(industry, { planCode });
   const greeting = interviewGreeting(industry);
   state.transcript = [{ role: "assistant", content: greeting }];
   state.stage = "intro";
@@ -211,6 +221,7 @@ export async function startInterviewSession(
       model: input.model,
       tokensIn: 0,
       tokensOut: 0,
+      version: 0,
     },
   });
 }
@@ -231,19 +242,49 @@ export async function activeInterviewForClient(ctx: Actor, clientId: string) {
   });
 }
 
+export type PostInterviewMessageResult =
+  | {
+      ok: true;
+      session: Awaited<ReturnType<typeof getInterviewSession>>;
+      reply: string;
+      done: boolean;
+      budgetExceeded: boolean;
+    }
+  | {
+      ok: false;
+      conflict: true;
+      session: Awaited<ReturnType<typeof getInterviewSession>>;
+    };
+
 export async function postInterviewMessage(
   ctx: Actor,
   input: {
     sessionId: string;
     message: string;
+    clientMessageId: string;
     text: TextPlatform;
     budget: { inputTokens: number; outputTokens: number };
   },
-) {
+): Promise<PostInterviewMessageResult> {
   const session = await getInterviewSession(ctx, input.sessionId);
   if (session.status !== INTERVIEW_STATUS.active) throw new Error("This interview is no longer active.");
 
+  const clientMessageId = input.clientMessageId.trim();
+  if (!clientMessageId) throw new Error("clientMessageId is required.");
+
   const state = asState(session.state);
+
+  // Idempotency: same client message id → return stored reply without calling the model.
+  if (state.lastClientMessageId === clientMessageId && state.lastAssistantReply) {
+    return {
+      ok: true,
+      session,
+      reply: state.lastAssistantReply,
+      done: state.done,
+      budgetExceeded: false,
+    };
+  }
+
   const result = await interviewTurn({
     state,
     userMessage: input.message,
@@ -251,18 +292,49 @@ export async function postInterviewMessage(
     budget: input.budget,
   });
 
-  const updated = await prisma.interviewSession.update({
-    where: { id: session.id },
+  const lastLog = result.state.turnLog?.[result.state.turnLog.length - 1];
+  if (lastLog?.error) {
+    log("warn", "interview.turn_failed", {
+      sessionId: session.id,
+      error: lastLog.error as InterviewTurnError,
+      model: lastLog.model,
+    });
+  }
+  if (lastLog?.capabilityFlag) {
+    log("warn", "interview.capability_claim", {
+      sessionId: session.id,
+      questionId: lastLog.currentQuestionId ?? null,
+    });
+  }
+
+  result.state.lastClientMessageId = clientMessageId;
+  result.state.lastAssistantReply = result.reply;
+
+  const updatedCount = await prisma.interviewSession.updateMany({
+    where: { id: session.id, version: session.version },
     data: {
       state: json(result.state),
       tokensIn: result.state.tokenUsage.inputTokens,
       tokensOut: result.state.tokenUsage.outputTokens,
       status: result.done ? INTERVIEW_STATUS.finished : INTERVIEW_STATUS.active,
       finishedAt: result.done ? new Date() : null,
+      version: { increment: 1 },
     },
   });
 
-  return { session: updated, reply: result.reply, done: result.done, budgetExceeded: result.budgetExceeded === true };
+  if (updatedCount.count === 0) {
+    const fresh = await getInterviewSession(ctx, session.id);
+    return { ok: false, conflict: true, session: fresh };
+  }
+
+  const updated = await getInterviewSession(ctx, session.id);
+  return {
+    ok: true,
+    session: updated,
+    reply: result.reply,
+    done: result.done,
+    budgetExceeded: result.budgetExceeded === true,
+  };
 }
 
 export async function discardInterviewSession(ctx: Actor, sessionId: string) {

@@ -1,5 +1,5 @@
 import { InterviewSettingsForm } from "@/components/interview-settings-form";
-import { Card, EmptyState, PageHeader, SectionCard } from "@/components/ui";
+import { Card, EmptyState, PageHeader, Pill, SectionCard } from "@/components/ui";
 import { requireAdmin } from "@/lib/session";
 import { getEnv } from "@alinstra/config";
 import {
@@ -9,6 +9,22 @@ import {
   resolveTextInterviewConfig,
 } from "@alinstra/db";
 import Link from "next/link";
+
+type TurnLogEntry = {
+  finishReason: string | null;
+  parseOk: boolean;
+  droppedPaths: string[];
+  droppedReasons?: string[];
+  model: string;
+  tokensIn: number;
+  tokensOut: number;
+  currentQuestionId?: string | null;
+  askCount?: number;
+  answerStatus?: string | null;
+  fallback?: string | null;
+  error?: string | null;
+  capabilityFlag?: boolean;
+};
 
 export default async function AdminInterviewPage({
   searchParams,
@@ -24,15 +40,10 @@ export default async function AdminInterviewPage({
   const sessionRows = sessions.map((row) => {
     const state = row.state as {
       transcript?: Array<{ role: string; content: string }>;
-      turnLog?: Array<{
-        finishReason: string | null;
-        parseOk: boolean;
-        droppedPaths: string[];
-        model: string;
-        tokensIn: number;
-        tokensOut: number;
-      }>;
+      turnLog?: TurnLogEntry[];
+      needsReviewQuestions?: string[];
     };
+    const needsReview = state.needsReviewQuestions?.length ?? 0;
     return {
       id: row.id,
       industry: row.industry,
@@ -43,6 +54,7 @@ export default async function AdminInterviewPage({
       clientName: row.client?.name ?? "—",
       startedAt: row.createdAt.toISOString().slice(0, 16),
       finishedAt: row.finishedAt ? row.finishedAt.toISOString().slice(0, 16) : "—",
+      needsReview,
       transcript: focusId === row.id ? (state.transcript ?? []) : [],
       turnLog: focusId === row.id ? (state.turnLog ?? []) : [],
     };
@@ -104,6 +116,7 @@ export default async function AdminInterviewPage({
                   <th className="px-5 py-3 font-semibold">Client</th>
                   <th className="px-5 py-3 font-semibold">Industry</th>
                   <th className="px-5 py-3 font-semibold">Status</th>
+                  <th className="px-5 py-3 font-semibold">Needs review</th>
                   <th className="px-5 py-3 font-semibold">Model</th>
                   <th className="px-5 py-3 font-semibold">Tokens</th>
                   <th className="px-5 py-3 font-semibold">Started</th>
@@ -120,6 +133,7 @@ export default async function AdminInterviewPage({
                     </td>
                     <td className="px-5 py-3">{row.industry}</td>
                     <td className="px-5 py-3">{row.status}</td>
+                    <td className="px-5 py-3">{row.needsReview}</td>
                     <td className="px-5 py-3">{row.model}</td>
                     <td className="px-5 py-3">
                       {row.tokensIn}/{row.tokensOut}
@@ -135,6 +149,9 @@ export default async function AdminInterviewPage({
         {focused ? (
           <div className="grid gap-2 border-t border-[var(--divider)] px-5 py-4">
             <h3 className="font-extrabold text-[var(--ink)]">Transcript · {focused.clientName}</h3>
+            {focused.needsReview > 0 ? (
+              <p className="text-sm text-[var(--muted)]">Needs review: {focused.needsReview}</p>
+            ) : null}
             {focused.transcript.length === 0 ? (
               <p className="text-sm text-[var(--muted)]">Empty transcript.</p>
             ) : (
@@ -146,16 +163,28 @@ export default async function AdminInterviewPage({
                   turn.role === "assistant" && assistantOrdinal > 0
                     ? focused.turnLog[assistantOrdinal - 1]
                     : null;
+                const dropped =
+                  diag?.droppedReasons && diag.droppedReasons.length > 0
+                    ? diag.droppedReasons
+                    : diag?.droppedPaths ?? [];
                 return (
                   <div key={`${turn.role}-${index}`} className="text-sm">
                     <p className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">{turn.role}</p>
                     <p className="whitespace-pre-wrap">{turn.content}</p>
                     {diag ? (
-                      <p className="mt-1 font-mono text-[11px] text-[var(--muted)]">
-                        parseOk={String(diag.parseOk)} finish={diag.finishReason ?? "—"} model={diag.model}{" "}
-                        tokens={diag.tokensIn}/{diag.tokensOut}
-                        {diag.droppedPaths.length > 0 ? ` dropped=[${diag.droppedPaths.join(", ")}]` : ""}
-                      </p>
+                      <div className="mt-1 flex flex-wrap items-center gap-2">
+                        <p className="font-mono text-[11px] text-[var(--muted)]">
+                          parseOk={String(diag.parseOk)} finish={diag.finishReason ?? "—"} model={diag.model}{" "}
+                          tokens={diag.tokensIn}/{diag.tokensOut}
+                          {diag.currentQuestionId ? ` q=${diag.currentQuestionId}` : ""}
+                          {diag.askCount != null ? ` asked=${diag.askCount}` : ""}
+                          {diag.answerStatus ? ` status=${diag.answerStatus}` : ""}
+                          {diag.fallback ? ` fallback=${diag.fallback}` : ""}
+                          {diag.error ? ` error=${diag.error}` : ""}
+                          {dropped.length > 0 ? ` dropped=[${dropped.join(", ")}]` : ""}
+                        </p>
+                        {diag.capabilityFlag ? <Pill tone="danger">capability</Pill> : null}
+                      </div>
                     ) : null}
                   </div>
                 );

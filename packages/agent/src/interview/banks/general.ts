@@ -79,7 +79,7 @@ export const generalBank: QuestionBank = {
       question: "Should Ava book on a calendar directly, or only take appointment requests for the office to confirm?",
       required: true,
       fields: ["features.bookingMode"],
-      done: (c) => c.features?.bookingMode === "direct_calendar" || c.features?.bookingMode === "request_only",
+      done: (c) => c.features?.bookingMode === "request_only",
     },
     {
       id: "gen.greeting",

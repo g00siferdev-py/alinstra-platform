@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { InterviewCollected, ModelTurnJson } from "./types";
+import type { AnswerStatus, InterviewCollected, ModelTurnJson } from "./types";
 
 const optionalText = z.string().max(10_000).optional();
 const shortText = z.string().max(500).optional();
@@ -45,11 +45,9 @@ const featuresFields = z
     messageRecipients: shortText,
     weeklyHoursText: optionalText,
     transferTargetsText: optionalText,
-    bookingMode: z.enum(["direct_calendar", "request_only"]).optional(),
+    bookingMode: z.enum(["request_only"]).optional(),
     liveTransfer: z.boolean().optional(),
     emergencyHandling: optionalText,
-    textConfirmations: z.boolean().optional(),
-    textReminders: z.boolean().optional(),
   })
   .partial();
 const voiceFields = z
@@ -115,11 +113,9 @@ export const INTERVIEW_UPDATES_SHAPE = `{
     "messageRecipients": "string",
     "weeklyHoursText": "string",
     "transferTargetsText": "string (labels/situations only, no phone numbers)",
-    "bookingMode": "direct_calendar | request_only",
+    "bookingMode": "request_only",
     "liveTransfer": "boolean",
-    "emergencyHandling": "string",
-    "textConfirmations": "boolean",
-    "textReminders": "boolean"
+    "emergencyHandling": "string"
   },
   "voice": {
     "voiceId": "voice_1 | voice_2 | voice_3 | voice_4",
@@ -148,6 +144,12 @@ type SectionName = keyof typeof SECTION_SCHEMAS;
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function describeValueType(value: unknown): string {
+  if (value === null) return "null";
+  if (Array.isArray(value)) return "array";
+  return typeof value;
 }
 
 function objectToReadableLines(value: Record<string, unknown>): string {
@@ -207,13 +209,7 @@ function coerceToNumber(value: unknown): number | undefined {
 
 function coerceFieldValue(section: SectionName, field: string, value: unknown): unknown {
   if (field === "unansweredAfterRings") return coerceToNumber(value);
-  if (
-    field === "liveTransfer" ||
-    field === "textConfirmations" ||
-    field === "textReminders" ||
-    field === "healthcareSensitive" ||
-    field === "healthcareTouched"
-  ) {
+  if (field === "liveTransfer" || field === "healthcareSensitive" || field === "healthcareTouched") {
     return coerceToBoolean(value);
   }
   if (field === "bookingMode" || field === "voiceId" || field === "disclosureMode") {
@@ -222,9 +218,18 @@ function coerceFieldValue(section: SectionName, field: string, value: unknown): 
   return coerceToString(value, field);
 }
 
+function expectedTypeForField(section: SectionName, field: string): string {
+  if (field === "unansweredAfterRings") return "number";
+  if (field === "liveTransfer" || field === "healthcareSensitive" || field === "healthcareTouched") return "boolean";
+  if (field === "bookingMode") return "request_only";
+  if (field === "voiceId" || field === "disclosureMode") return "string enum";
+  return "string";
+}
+
 export type ForgivingUpdatesResult = {
   value: InterviewCollected;
   droppedPaths: string[];
+  droppedReasons: string[];
 };
 
 /**
@@ -233,22 +238,29 @@ export type ForgivingUpdatesResult = {
  */
 export function forgiveInterviewUpdates(raw: unknown): ForgivingUpdatesResult {
   const droppedPaths: string[] = [];
+  const droppedReasons: string[] = [];
   const out: InterviewCollected = {};
-  if (raw === undefined || raw === null) return { value: out, droppedPaths };
+
+  const drop = (path: string, reason: string) => {
+    droppedPaths.push(path);
+    droppedReasons.push(`${path}: ${reason}`);
+  };
+
+  if (raw === undefined || raw === null) return { value: out, droppedPaths, droppedReasons };
   if (!isPlainObject(raw)) {
-    droppedPaths.push("updates");
-    return { value: out, droppedPaths };
+    drop("updates", `expected object, got ${describeValueType(raw)}`);
+    return { value: out, droppedPaths, droppedReasons };
   }
 
   for (const [sectionKey, sectionValue] of Object.entries(raw)) {
     if (!(sectionKey in SECTION_SCHEMAS)) {
-      droppedPaths.push(sectionKey);
+      drop(sectionKey, "unknown section");
       continue;
     }
     const section = sectionKey as SectionName;
     if (sectionValue === undefined || sectionValue === null) continue;
     if (!isPlainObject(sectionValue)) {
-      droppedPaths.push(section);
+      drop(section, `expected object, got ${describeValueType(sectionValue)}`);
       continue;
     }
 
@@ -259,18 +271,19 @@ export function forgiveInterviewUpdates(raw: unknown): ForgivingUpdatesResult {
       const path = `${section}.${field}`;
       const zodField = shape[field];
       if (!zodField) {
-        droppedPaths.push(path);
+        // Interview cannot set wizard-only fields (textConfirmations, textReminders, direct_calendar, …).
+        drop(path, "unknown or disallowed field");
         continue;
       }
       if (fieldValue === undefined) continue;
       const coerced = coerceFieldValue(section, field, fieldValue);
       if (coerced === undefined) {
-        droppedPaths.push(path);
+        drop(path, `expected ${expectedTypeForField(section, field)}, got ${describeValueType(fieldValue)}`);
         continue;
       }
       const single = zodField.safeParse(coerced);
       if (!single.success) {
-        droppedPaths.push(path);
+        drop(path, `expected ${expectedTypeForField(section, field)}, got ${describeValueType(fieldValue)}`);
         continue;
       }
       kept[field] = single.data;
@@ -281,7 +294,7 @@ export function forgiveInterviewUpdates(raw: unknown): ForgivingUpdatesResult {
     }
   }
 
-  return { value: out, droppedPaths };
+  return { value: out, droppedPaths, droppedReasons };
 }
 
 export type ValidateUpdatesResult =
@@ -298,70 +311,90 @@ export function validateInterviewUpdates(raw: unknown): ValidateUpdatesResult {
   return { ok: true, value: parsed.data };
 }
 
+const ANSWER_STATUSES = new Set<AnswerStatus>(["answered", "skipped", "unclear", "off_topic"]);
+
 export type ForgivingTurnResult = {
-  /** Non-empty spoken reply when present. */
-  reply: string | null;
+  /** Non-empty confirmation when present. */
+  confirmation: string | null;
   updates: InterviewCollected;
-  askedId: string | null;
-  done: boolean;
+  answerStatus: AnswerStatus;
+  followUp: string | null;
   droppedPaths: string[];
-  /** True when a usable reply was recovered (updates may still be partial). */
+  droppedReasons: string[];
+  /** True when a usable confirmation was recovered (updates may still be partial). */
   parseOk: boolean;
   error?: string;
 };
 
-function readAskedId(raw: unknown): string | null {
+function readAnswerStatus(raw: unknown): AnswerStatus {
+  if (typeof raw === "string" && ANSWER_STATUSES.has(raw as AnswerStatus)) return raw as AnswerStatus;
+  return "answered";
+}
+
+function readFollowUp(raw: unknown): string | null {
   if (raw === null || raw === undefined) return null;
   if (typeof raw !== "string") return null;
   const trimmed = raw.trim();
-  if (!trimmed || trimmed.length > 80) return null;
-  return trimmed;
+  if (!trimmed) return null;
+  return trimmed.slice(0, 1000);
 }
 
 /**
- * Parse envelope fields independently so a bad `updates` never discards `reply`.
+ * Parse envelope fields independently so a bad `updates` never discards `confirmation`.
+ * Back-compat: if the model still sends `reply`, treat it as `confirmation`.
  */
 export function parseModelTurnForgiving(raw: unknown): ForgivingTurnResult {
   if (!isPlainObject(raw)) {
     return {
-      reply: null,
+      confirmation: null,
       updates: {},
-      askedId: null,
-      done: false,
+      answerStatus: "unclear",
+      followUp: null,
       droppedPaths: [],
+      droppedReasons: [],
       parseOk: false,
       error: "Model output was not a JSON object",
     };
   }
 
-  const replyRaw = raw.reply;
-  const reply =
-    typeof replyRaw === "string" && replyRaw.trim().length > 0
-      ? replyRaw.trim().slice(0, 4000)
+  const confirmationRaw =
+    typeof raw.confirmation === "string"
+      ? raw.confirmation
+      : typeof raw.reply === "string"
+        ? raw.reply
+        : null;
+  const confirmation =
+    typeof confirmationRaw === "string" && confirmationRaw.trim().length > 0
+      ? confirmationRaw.trim().slice(0, 4000)
       : null;
 
-  const done = raw.done === true;
-  const askedId = readAskedId(raw.askedId);
+  const answerStatus = readAnswerStatus(raw.answerStatus);
+  const followUp = readFollowUp(raw.followUp);
   const forgiven = forgiveInterviewUpdates(raw.updates ?? {});
 
-  if (!reply) {
+  if (!confirmation) {
     return {
-      reply: null,
+      confirmation: null,
       updates: forgiven.value,
-      askedId,
-      done,
+      answerStatus,
+      followUp,
       droppedPaths: forgiven.droppedPaths,
+      droppedReasons: forgiven.droppedReasons,
       parseOk: false,
-      error: typeof replyRaw === "string" ? "reply was empty" : "reply missing or not a string",
+      error:
+        typeof confirmationRaw === "string"
+          ? "confirmation was empty"
+          : "confirmation missing or not a string",
     };
   }
 
   return {
-    reply,
+    confirmation,
     updates: forgiven.value,
-    askedId,
-    done,
+    answerStatus,
+    followUp,
     droppedPaths: forgiven.droppedPaths,
+    droppedReasons: forgiven.droppedReasons,
     parseOk: true,
   };
 }
@@ -373,16 +406,16 @@ export type ParseTurnResult =
 /** Strict parse kept for tests/callers; engine uses parseModelTurnForgiving. */
 export function parseModelTurn(raw: unknown): ParseTurnResult {
   const forgiven = parseModelTurnForgiving(raw);
-  if (!forgiven.parseOk || !forgiven.reply) {
+  if (!forgiven.parseOk || !forgiven.confirmation) {
     return { ok: false, error: forgiven.error ?? "invalid turn" };
   }
   return {
     ok: true,
     value: {
-      reply: forgiven.reply,
+      confirmation: forgiven.confirmation,
       updates: forgiven.updates,
-      askedId: forgiven.askedId,
-      done: forgiven.done,
+      answerStatus: forgiven.answerStatus,
+      followUp: forgiven.followUp,
     },
   };
 }

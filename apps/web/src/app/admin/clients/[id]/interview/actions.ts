@@ -12,14 +12,13 @@ function actor(session: { user: { id: string } }): Actor {
   return { id: session.user.id, role: "admin" };
 }
 
-export async function adminSendInterviewMessage(sessionId: string, message: string) {
+export async function adminSendInterviewMessage(
+  sessionId: string,
+  message: string,
+  clientMessageId: string,
+) {
   const session = await requireAdmin();
-  const result = await sendInterviewMessageAction(actor(session), sessionId, message);
-  if (!result || !result.ok) return result ?? { ok: false as const, error: "Could not send that." };
-  const { getInterviewSession } = await import("@alinstra/db");
-  const row = await getInterviewSession(actor(session), sessionId);
-  const state = row.state as { collected?: Record<string, unknown> };
-  return { ok: true as const, reply: result.reply, done: result.done, captured: state.collected ?? {} };
+  return sendInterviewMessageAction(actor(session), sessionId, message, clientMessageId);
 }
 
 export async function adminFinishInterview(sessionId: string, clientId: string) {

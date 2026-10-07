@@ -9,12 +9,17 @@ import type { WizardFormPayload } from "@/components/wizard-form";
 
 type PlanRow = { id: string; name: string; monthlyPriceCents: number };
 
-function line(label: string, value: string | undefined | null) {
-  if (!value) return null;
+function line(label: string, value: string | undefined | null, opts?: { required?: boolean }) {
+  const trimmed = value?.trim() ?? "";
+  if (!trimmed && !opts?.required) return null;
   return (
     <p className="text-sm">
       <span className="font-semibold text-[var(--ink)]">{label}: </span>
-      <span className="text-[var(--body)]">{value}</span>
+      {trimmed ? (
+        <span className="text-[var(--body)]">{trimmed}</span>
+      ) : (
+        <span className="text-[var(--muted)]">Needs an answer</span>
+      )}
     </p>
   );
 }
@@ -101,13 +106,16 @@ export function OwnerSetupReview({
 
       <Card className="grid gap-3">
         <h2 className="text-lg font-extrabold">Review your setup</h2>
-        {line("Business", payload.business?.name)}
+        {line("Business", payload.business?.name, { required: true })}
         {line("Contact", [payload.business?.contactName, payload.business?.contactEmail, payload.business?.contactPhone].filter(Boolean).join(" · "))}
         {line("Plan", plan ? `${plan.name} ($${(plan.monthlyPriceCents / 100).toFixed(0)}/mo)` : undefined)}
-        {line("Hours", payload.knowledge?.hours)}
-        {line("Services", payload.knowledge?.services)}
+        {line("Hours", payload.knowledge?.hours, { required: true })}
+        {line("Services", payload.knowledge?.services, { required: true })}
+        {line("FAQs", payload.knowledge?.faqs, { required: true })}
         {line("Policies", payload.knowledge?.policies)}
-        {line("Messages go to", String(payload.features?.messageRecipients ?? ""))}
+        {line("After hours", payload.coverage?.afterHours, { required: true })}
+        {line("Emergencies", typeof payload.features?.emergencyHandling === "string" ? payload.features.emergencyHandling : undefined, { required: true })}
+        {line("Messages go to", String(payload.features?.messageRecipients ?? ""), { required: true })}
         <p className="text-sm text-[var(--muted)]">
           Need changes?{" "}
           <a className="font-semibold underline" href="/home/business/interview">

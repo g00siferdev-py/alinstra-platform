@@ -266,6 +266,7 @@ export {
   startInterviewSession,
   textInterviewConfig,
   textPlatformFor,
+  type PostInterviewMessageResult,
   type TextInterviewConfig,
 } from "./interview";
 export { getAppSetting, getAppSettings, setAppSetting } from "./app-settings";

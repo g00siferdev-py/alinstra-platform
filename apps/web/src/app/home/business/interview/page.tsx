@@ -28,6 +28,7 @@ export default async function OwnerInterviewPage() {
     answeredQuestions?: string[];
     openQuestions?: string[];
     skippedQuestions?: string[];
+    currentQuestionId?: string | null;
     industry?: string;
   };
   const checklist = buildInterviewChecklist({
@@ -35,6 +36,7 @@ export default async function OwnerInterviewPage() {
     answeredQuestions: state.answeredQuestions,
     openQuestions: state.openQuestions,
     skippedQuestions: state.skippedQuestions,
+    currentQuestionId: state.currentQuestionId,
   });
   const exitHref = "/home/business/setup";
 

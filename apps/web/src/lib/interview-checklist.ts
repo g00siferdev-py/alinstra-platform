@@ -30,13 +30,14 @@ export function buildInterviewChecklist(input: {
   answeredQuestions?: string[];
   openQuestions?: string[];
   skippedQuestions?: string[];
+  currentQuestionId?: string | null;
 }): InterviewChecklistItem[] {
   const industry = resolveInterviewIndustry(input.industry);
   const items = banksFor(industry);
   const answered = new Set(input.answeredQuestions ?? []);
   const skipped = new Set(input.skippedQuestions ?? []);
   const open = input.openQuestions ?? [];
-  const currentId = open[0] ?? null;
+  const currentId = input.currentQuestionId ?? open[0] ?? null;
 
   return items.map((item) => {
     let status: InterviewChecklistItem["status"] = "todo";

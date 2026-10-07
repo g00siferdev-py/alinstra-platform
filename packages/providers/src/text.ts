@@ -9,7 +9,7 @@ import {
 
 type FetchLike = (url: string, init?: RequestInit) => Promise<Response>;
 
-const TIMEOUT_MS = 30_000;
+const DEFAULT_TIMEOUT_MS = 30_000;
 const MAX_RETRIES = 3;
 const RETRYABLE = new Set([429, 500, 502, 503, 504]);
 
@@ -23,6 +23,8 @@ export type HttpTextOptions = {
    * `reasoning: { effort: "low" | "none" }`. Ignored for non-OpenRouter bases.
    */
   reasoningEffort?: "off" | "low" | "default";
+  /** Per-request abort timeout. Defaults to 30s. Interview uses 40s. */
+  timeoutMs?: number;
   fetchImpl?: FetchLike;
   /** Injected for tests; defaults to real wall clock. */
   sleep?: (ms: number) => Promise<void>;
@@ -156,6 +158,7 @@ export function httpText(options: HttpTextOptions): TextPlatform {
   const primaryModel = options.model?.trim() || DEFAULT_TEXT_MODEL;
   const fallbackModel = options.fallbackModel?.trim() || "";
   const reasoningEffort = options.reasoningEffort ?? "default";
+  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const fetchImpl = options.fetchImpl ?? fetch;
   const sleep = options.sleep ?? defaultSleep;
   const openRouter = isOpenRouter(baseUrl);
@@ -173,7 +176,7 @@ export function httpText(options: HttpTextOptions): TextPlatform {
 
     for (let attempt = 0; attempt < MAX_RETRIES; attempt += 1) {
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
       try {
         const headers: Record<string, string> = {
           authorization: `Bearer ${apiKey}`,

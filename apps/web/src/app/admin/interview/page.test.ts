@@ -12,5 +12,8 @@ describe("admin interview settings page", () => {
     expect(source).toContain("<InterviewSettingsForm");
     expect(source).not.toMatch(/InterviewSettingsForm[\s\S]{0,200}=\{\s*\(/);
     expect(source).toContain("sessionRows");
+    expect(source).toContain("needsReview");
+    expect(source).toContain("capability");
+    expect(source).toContain("q=");
   });
 });
