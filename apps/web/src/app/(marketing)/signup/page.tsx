@@ -1,6 +1,8 @@
+import { SignedInSignupCard } from "@/components/signed-in-signup-card";
 import { SignupForm } from "@/components/signup-form";
 import { SignupPlanSummary } from "@/components/signup-plan-summary";
 import { marketingMetadata } from "@/lib/marketing-seo";
+import { getSession } from "@/lib/session";
 import { publicPlans } from "@alinstra/db";
 import { redirect } from "next/navigation";
 
@@ -29,6 +31,22 @@ export default async function SignupPage({
   const plan = plans.find((row) => row.code === code);
   if (!plan) {
     redirect("/start");
+  }
+
+  const session = await getSession();
+  if (session) {
+    return (
+      <main className="mx-auto grid max-w-5xl gap-10 px-7 py-16 lg:grid-cols-[minmax(0,1.1fr)_minmax(16rem,0.9fr)] lg:items-start">
+        <div className="grid gap-6">
+          <div className="grid gap-2">
+            <h1 className="text-[40px] font-extrabold tracking-[-0.03em]">Create your account</h1>
+            <p className="text-[var(--muted)]">You already have a session in this browser.</p>
+          </div>
+          <SignedInSignupCard email={session.user.email} role={session.user.role} planQuery={code} />
+        </div>
+        <SignupPlanSummary plan={plan} />
+      </main>
+    );
   }
 
   return (

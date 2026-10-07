@@ -50,6 +50,15 @@ export async function signupAction(_prev: SignupFormState, formData: FormData): 
     return { ok: true, checkoutUrl: "/home" };
   }
 
+  const headerList = await headers();
+  const existingSession = await auth.api.getSession({ headers: headerList });
+  if (existingSession?.user) {
+    return {
+      ok: false,
+      error: "You're already signed in. Sign out first to create a new account.",
+    };
+  }
+
   const businessName = field(formData, "businessName").trim();
   const ownerName = field(formData, "ownerName").trim();
   const email = field(formData, "email").trim().toLowerCase();
@@ -70,7 +79,6 @@ export async function signupAction(_prev: SignupFormState, formData: FormData): 
 
   let clientIdForLog: string | null = null;
   try {
-    const headerList = await headers();
     const request = new Request("http://localhost/signup", { headers: headerList });
     const ip = clientIp(request);
     const counter = getCounter();
