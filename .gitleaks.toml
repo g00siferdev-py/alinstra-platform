@@ -15,6 +15,9 @@ regexes = [
   '''(?:0123456789abcdef){1,8}''',
   # Fake provider API keys in packages/providers/src/text.test.ts.
   '''(?:or-)?key-12345678''',
+  # Stripe idempotency fixture that tripped generic-api-key in http.test.ts history.
+  '''price_solo_monthly_9900''',
+  '''idem-solo-monthly-price''',
   # Non-secret placeholders from CI (ci.yml production-build env, Dockerfile build args).
   '''build-time-placeholder[A-Za-z0-9_-]*''',
   '''build-placeholder''',

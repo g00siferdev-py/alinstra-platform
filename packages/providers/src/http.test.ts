@@ -239,7 +239,7 @@ describe("provider HTTP clients", () => {
       amountCents: 9900,
       kind: "recurring",
       productName: "Solo monthly",
-      idempotencyKey: "price_solo_monthly_9900",
+      idempotencyKey: "idem-solo-monthly-price",
     });
     expect(createBody).toContain("tax_behavior=exclusive");
     expect(createBody).toContain("product_data%5Btax_code%5D=txcd_10103001");
