@@ -31,18 +31,21 @@ export function ClientActions({
   email,
   canDiscard,
   canRemove,
+  /** Hide for self-serve clients that already have a client_owner login. */
+  showPortalInvite = true,
 }: {
   clientId: string;
   name: string;
   email: string | null;
   canDiscard: boolean;
   canRemove: boolean;
+  showPortalInvite?: boolean;
 }) {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   return (
     <div className="flex flex-wrap items-center gap-2">
-      {email ? (
+      {showPortalInvite && email ? (
         <Button
           onClick={() => {
             void sendPortalInviteAction(clientId).then((result) => {

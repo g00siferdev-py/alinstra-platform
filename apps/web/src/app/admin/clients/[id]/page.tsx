@@ -1,6 +1,6 @@
 import { ClientActions } from "@/components/client-actions";
 import { ProvisionPanel } from "@/components/provision-panel";
-import { Button, Card, EmptyState, PageHeader, SectionCard } from "@/components/ui";
+import { Button, Card, EmptyState, PageHeader, Pill, SectionCard } from "@/components/ui";
 import { getEnv } from "@alinstra/config";
 import { OutcomeBadge } from "@/components/calls-list";
 import { formatDuration } from "@/lib/call-view";
@@ -29,6 +29,7 @@ import {
 } from "@alinstra/db";
 import { voiceDisplayName } from "@alinstra/providers";
 import { logMessageList } from "@/lib/access-log";
+import { clientStatusDisplay } from "@/lib/client-status-display";
 import { requireAdmin } from "@/lib/session";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -68,6 +69,8 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
     areaCode: env.RETELL_DEFAULT_AREA_CODE || null,
     tollFree: env.RETELL_DEFAULT_TOLL_FREE === "true",
   });
+  const statusDisplay = clientStatusDisplay(client);
+  const hasOwnerLogin = people.some((person) => person.role === "client_owner");
   return (
     <main className="grid gap-6">
       <Link className="text-sm text-[var(--muted)]" href="/admin/clients">
@@ -75,7 +78,16 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
       </Link>
       <PageHeader
         title={client.name}
-        description={`${client.status}${client.wizardSubmittedAt ? " · Wizard submitted" : ""}`}
+        description={
+          statusDisplay.awaitingReview ? (
+            <span className="inline-flex flex-wrap items-center gap-2">
+              <Pill tone="warning">{statusDisplay.label}</Pill>
+              {client.wizardSubmittedAt ? <span>· Wizard submitted</span> : null}
+            </span>
+          ) : (
+            `${statusDisplay.label}${client.wizardSubmittedAt ? " · Wizard submitted" : ""}`
+          )
+        }
         actions={
           <ClientActions
             clientId={client.id}
@@ -83,6 +95,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
             email={client.portalOwnerEmail}
             canDiscard={!client.wizardSubmittedAt}
             canRemove={clientCanBeRemoved(client.status)}
+            showPortalInvite={!hasOwnerLogin}
           />
         }
       />
