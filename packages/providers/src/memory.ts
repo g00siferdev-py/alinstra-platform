@@ -1,4 +1,4 @@
-import { retellTiming, type AgentPublish, type BillingPlatform, type CallTiming, type CreateCheckoutInput, type CreatePortalSessionInput, type EnsurePriceInput, type PriceKind, type PublishedTool, type RecordingDownload, type ReportMeterEventInput, type RetellCallSnapshot, type RetellTiming, type SubscriptionPeriodBounds, type UpdateSubscriptionPricesInput, type VoicePlatform } from "./types";
+import { retellTiming, type AgentPublish, type BillingPlatform, type CallTiming, type CreateCheckoutInput, type CreatePortalSessionInput, type EnsurePriceInput, type ListInvoicesInput, type PriceKind, type PublishedTool, type RecordingDownload, type ReportMeterEventInput, type RetellCallSnapshot, type RetellTiming, type StripeInvoiceSummary, type SubscriptionPeriodBounds, type UpdateSubscriptionPricesInput, type VoicePlatform } from "./types";
 
 type StoredLlm = { clientId: string; prompt: string; tools: PublishedTool[]; beginMessage: string };
 /** Mirrors what httpVoice sends: the agent carries the clamped Retell timing fields. */
@@ -130,7 +130,10 @@ export class MemoryBilling implements BillingPlatform {
   subscriptionItems = new Map<string, { recurringPriceId: string; meteredPriceId: string | null }>();
   portalSessions: Array<{ customerId: string; returnUrl: string; url: string }> = [];
   lastPriceUpdate: UpdateSubscriptionPricesInput | null = null;
-  creates = { customer: 0, price: 0, checkout: 0, meter: 0, meterEvent: 0, portal: 0 };
+  /** Fake invoices keyed by subscription id (tests seed drafts to void on resume). */
+  invoices = new Map<string, StripeInvoiceSummary[]>();
+  voidedInvoiceIds: string[] = [];
+  creates = { customer: 0, price: 0, checkout: 0, meter: 0, meterEvent: 0, portal: 0, voidInvoice: 0 };
 
   async findCustomerId(clientId: string): Promise<string | null> {
     return this.customers.get(clientId) ?? null;
@@ -228,6 +231,21 @@ export class MemoryBilling implements BillingPlatform {
     const start = this.periodStart.get(subscriptionId) ?? new Date();
     const end = this.periodEnd.get(subscriptionId) ?? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
     return { currentPeriodStart: start, currentPeriodEnd: end };
+  }
+
+  async listInvoices(input: ListInvoicesInput): Promise<StripeInvoiceSummary[]> {
+    return (this.invoices.get(input.subscriptionId) ?? []).filter((row) => row.status === input.status);
+  }
+
+  async voidInvoice(invoiceId: string): Promise<void> {
+    this.creates.voidInvoice += 1;
+    this.voidedInvoiceIds.push(invoiceId);
+    for (const [subscriptionId, rows] of this.invoices) {
+      this.invoices.set(
+        subscriptionId,
+        rows.map((row) => (row.id === invoiceId ? { ...row, status: "void" } : row)),
+      );
+    }
   }
 
   async updateSubscriptionPrices(input: UpdateSubscriptionPricesInput): Promise<SubscriptionPeriodBounds> {

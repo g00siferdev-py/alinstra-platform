@@ -155,10 +155,35 @@ function appBillingUrl(): string {
 type PendingOwnerMail = { clientId: string; portalOwnerEmail: string | null; kind: "payment_failed" | "resumed" };
 type PendingPeriod = { clientId: string; prevStart: Date | null; nextStart: Date | null };
 type PendingCheckoutPeriod = { clientId: string; subscriptionId: string; hadPeriod: boolean };
+/** Resume after pause/past_due: void draft invoices outside the tx, then write ChangeLog + optional owner email. */
+type PendingResume = {
+  clientId: string;
+  clientName: string;
+  portalOwnerEmail: string | null;
+  wasPaused: boolean;
+  pastDueSince: Date | null;
+  subscriptionId: string | null;
+  sendOwnerEmail: boolean;
+};
 
 export type ApplyStripeEventDeps = {
   billing?: BillingPlatform;
 };
+
+async function voidDraftInvoicesAfterPause(
+  billing: BillingPlatform,
+  subscriptionId: string,
+  pastDueSince: Date,
+): Promise<string[]> {
+  const drafts = await billing.listInvoices({ subscriptionId, status: "draft" });
+  const voided: string[] = [];
+  for (const invoice of drafts) {
+    if (invoice.created.getTime() <= pastDueSince.getTime()) continue;
+    await billing.voidInvoice(invoice.id);
+    voided.push(invoice.id);
+  }
+  return voided;
+}
 
 export async function applyStripeEvent(
   event: StripeEvent,
@@ -177,10 +202,12 @@ export async function applyStripeEvent(
     mail: PendingOwnerMail | null;
     period: PendingPeriod | null;
     checkoutPeriod: PendingCheckoutPeriod | null;
+    resume: PendingResume | null;
   } = {
     mail: null,
     period: null,
     checkoutPeriod: null,
+    resume: null,
   };
   try {
     await prisma.$transaction(async (tx) => {
@@ -267,16 +294,16 @@ export async function applyStripeEvent(
             where: { id: client.id },
             data: { billingStatus: "paid", pastDueSince: null },
           });
-          await recordChange(tx, {
+          // ChangeLog + owner email happen after draft voids (outside this transaction).
+          pending.resume = {
             clientId: client.id,
-            actor: WEBHOOK_ACTOR,
-            action: wasPaused ? "billing.resumed" : "billing.paid_again",
-            entityType: "client",
-            entityId: client.id,
-            summary: wasPaused ? `Resumed ${client.name} after payment` : `Payment recovered for ${client.name}`,
-            after: { billingStatus: "paid", pastDueSince: null },
-          });
-          pending.mail = { clientId: client.id, portalOwnerEmail: client.portalOwnerEmail, kind: "resumed" };
+            clientName: client.name,
+            portalOwnerEmail: client.portalOwnerEmail,
+            wasPaused,
+            pastDueSince: client.pastDueSince,
+            subscriptionId: client.stripeSubscriptionId,
+            sendOwnerEmail: true,
+          };
         }
       }
       if (event.type === "customer.subscription.updated" || event.type === "customer.subscription.created") {
@@ -285,6 +312,7 @@ export async function applyStripeEvent(
         const client = await tx.client.findFirst({ where: { stripeSubscriptionId: subscriptionId, archivedAt: null } });
         if (!client || client.internal) return;
         const bounds = periodBoundsFromSubscription(object);
+        const subscriptionStatus = typeof object.status === "string" ? object.status : "";
         const cancelAtPeriodEnd = object.cancel_at_period_end === true;
         const data: {
           stripeCurrentPeriodStart?: Date;
@@ -296,39 +324,87 @@ export async function applyStripeEvent(
           data.stripeCurrentPeriodStart = bounds.start;
           data.stripeCurrentPeriodEnd = bounds.end;
         }
-        if (cancelAtPeriodEnd) {
-          data.billingStatus = "cancel_scheduled";
-          data.serviceEndsAt = bounds?.end ?? client.serviceEndsAt ?? now;
-        } else if (client.billingStatus === "cancel_scheduled") {
+
+        if (subscriptionStatus === "unpaid") {
+          // End of Stripe Smart Retries: mark paused, never cancel/archive. Keep pastDueSince.
+          if (client.billingStatus !== "paused") {
+            data.billingStatus = "paused";
+            await tx.client.update({ where: { id: client.id }, data });
+            await recordChange(tx, {
+              clientId: client.id,
+              actor: WEBHOOK_ACTOR,
+              action: "billing.unpaid",
+              entityType: "client",
+              entityId: client.id,
+              summary: `Stripe stopped retrying for ${client.name}; Ava stays paused until they pay`,
+              after: {
+                billingStatus: "paused",
+                pastDueSince: client.pastDueSince?.toISOString() ?? null,
+                stripeStatus: "unpaid",
+              },
+            });
+            notify = {
+              subject: `Stripe stopped retrying for ${client.name}`,
+              text: `Stripe stopped retrying for ${client.name}; Ava stays paused until they pay.`,
+            };
+          } else if (Object.keys(data).length > 0) {
+            await tx.client.update({ where: { id: client.id }, data });
+          }
+        } else if (
+          subscriptionStatus === "active" &&
+          (client.billingStatus === "paused" || client.billingStatus === "past_due")
+        ) {
+          // Manual dashboard fix (or recovery) — same resume path as invoice.paid.
           data.billingStatus = "paid";
           data.serviceEndsAt = null;
-        }
-        if (Object.keys(data).length > 0) {
-          await tx.client.update({ where: { id: client.id }, data });
-        }
-        if (cancelAtPeriodEnd) {
-          await recordChange(tx, {
-            clientId: client.id,
-            actor: WEBHOOK_ACTOR,
-            action: "billing.cancel_scheduled",
-            entityType: "client",
-            entityId: client.id,
-            summary: `Cancel at period end scheduled for ${client.name}`,
-            after: {
-              billingStatus: "cancel_scheduled",
-              serviceEndsAt: data.serviceEndsAt instanceof Date ? data.serviceEndsAt.toISOString() : null,
-            },
+          await tx.client.update({
+            where: { id: client.id },
+            data: { ...data, pastDueSince: null },
           });
-        } else if (client.billingStatus === "cancel_scheduled") {
-          await recordChange(tx, {
+          pending.resume = {
             clientId: client.id,
-            actor: WEBHOOK_ACTOR,
-            action: "billing.cancel_undone",
-            entityType: "client",
-            entityId: client.id,
-            summary: `Cancel undone for ${client.name}`,
-            after: { billingStatus: "paid", serviceEndsAt: null },
-          });
+            clientName: client.name,
+            portalOwnerEmail: client.portalOwnerEmail,
+            wasPaused: client.billingStatus === "paused",
+            pastDueSince: client.pastDueSince,
+            subscriptionId: client.stripeSubscriptionId,
+            sendOwnerEmail: true,
+          };
+        } else {
+          if (cancelAtPeriodEnd) {
+            data.billingStatus = "cancel_scheduled";
+            data.serviceEndsAt = bounds?.end ?? client.serviceEndsAt ?? now;
+          } else if (client.billingStatus === "cancel_scheduled") {
+            data.billingStatus = "paid";
+            data.serviceEndsAt = null;
+          }
+          if (Object.keys(data).length > 0) {
+            await tx.client.update({ where: { id: client.id }, data });
+          }
+          if (cancelAtPeriodEnd) {
+            await recordChange(tx, {
+              clientId: client.id,
+              actor: WEBHOOK_ACTOR,
+              action: "billing.cancel_scheduled",
+              entityType: "client",
+              entityId: client.id,
+              summary: `Cancel at period end scheduled for ${client.name}`,
+              after: {
+                billingStatus: "cancel_scheduled",
+                serviceEndsAt: data.serviceEndsAt instanceof Date ? data.serviceEndsAt.toISOString() : null,
+              },
+            });
+          } else if (client.billingStatus === "cancel_scheduled") {
+            await recordChange(tx, {
+              clientId: client.id,
+              actor: WEBHOOK_ACTOR,
+              action: "billing.cancel_undone",
+              entityType: "client",
+              entityId: client.id,
+              summary: `Cancel undone for ${client.name}`,
+              after: { billingStatus: "paid", serviceEndsAt: null },
+            });
+          }
         }
         pending.period = {
           clientId: client.id,
@@ -380,6 +456,41 @@ export async function applyStripeEvent(
           stripeCurrentPeriodEnd: bounds.currentPeriodEnd,
         },
       });
+    }
+  }
+
+  if (pending.resume) {
+    const resume = pending.resume;
+    let voidedDraftInvoices: string[] = [];
+    // No charge for months Ava was paused: void draft invoices created after pastDueSince.
+    if (resume.wasPaused && resume.pastDueSince && resume.subscriptionId && deps.billing) {
+      voidedDraftInvoices = await voidDraftInvoicesAfterPause(
+        deps.billing,
+        resume.subscriptionId,
+        resume.pastDueSince,
+      );
+    }
+    await recordChange(prisma, {
+      clientId: resume.clientId,
+      actor: WEBHOOK_ACTOR,
+      action: resume.wasPaused ? "billing.resumed" : "billing.paid_again",
+      entityType: "client",
+      entityId: resume.clientId,
+      summary: resume.wasPaused
+        ? `Resumed ${resume.clientName} after payment`
+        : `Payment recovered for ${resume.clientName}`,
+      after: {
+        billingStatus: "paid",
+        pastDueSince: null,
+        ...(voidedDraftInvoices.length > 0 ? { voidedDraftInvoices } : {}),
+      },
+    });
+    if (resume.sendOwnerEmail) {
+      pending.mail = {
+        clientId: resume.clientId,
+        portalOwnerEmail: resume.portalOwnerEmail,
+        kind: "resumed",
+      };
     }
   }
 

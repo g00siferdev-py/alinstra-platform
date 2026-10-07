@@ -30,6 +30,8 @@ Return URL for portal sessions is `/home/billing` on the app.
 Dashboard → Settings → Billing → Subscriptions and emails (or Revenue recovery):
 
 - Turn **Smart Retries** ON.
+- Retries: **Smart Retries**, **8 tries within 2 weeks**.
+- **If all retries for a payment fail** → **Mark the subscription as unpaid** (not cancel, not leave past-due). Cancel would end service behind our back; past-due would keep charging a paused business. Our webhook treats `status: unpaid` as pause Ava and wait for payment.
 - Turn **customer emails for failed payments** ON (Stripe emails the cardholder; we also send our own plain-text owner email with a link to `/home/billing`).
 
 ### Stripe Tax
@@ -131,7 +133,9 @@ No application code change.
 | --- | --- |
 | Payment fails | `invoice.payment_failed` → `billingStatus=past_due`, set `pastDueSince` if empty, admin notice + owner email with `/home/billing` link. Ava **keeps answering**. |
 | Still past due after 7 days | Daily worker job `pause-past-due` at **09:00 America/New_York** → `paused`, ChangeLog, owner email, admin notice. Inbound calls get a short override (`begin_message` only + `max_call_duration_ms=12000` + `end_call_after_silence_ms=3000`) so the call ends on its own after the message; no `general_prompt` / `general_tools`. |
-| Payment succeeds | `invoice.paid` while `past_due` or `paused` → `paid`, clear `pastDueSince`, ChangeLog; if was paused, owner “You're all set” email. |
+| Stripe ends retries (`unpaid`) | `customer.subscription.updated` with `status=unpaid` → if not already `paused`, set `paused` (keep `pastDueSince`), ChangeLog `billing.unpaid`, admin notice. Never cancel or archive. |
+| Payment succeeds | `invoice.paid` (or `subscription.updated` → `active` while `past_due`/`paused`) → `paid`, clear `pastDueSince`, ChangeLog; if was paused, owner “You're all set” email. |
+| Void drafts on resume | When resuming from `paused`, list the subscription’s `draft` invoices and **void** any whose `created` is after `pastDueSince`. Log voided ids on the ChangeLog `after`. Rule: no charge for months Ava was paused. |
 
 Cancel at period end: `customer.subscription.updated` with `cancel_at_period_end=true` → `cancel_scheduled` + `serviceEndsAt`. If cancel is undone → back to `paid`, clear `serviceEndsAt`. `customer.subscription.created` stores the same period bounds as `updated`. On `checkout.session.completed`, if period bounds are still empty we `GET` the subscription once and store them so the first month has a real period. `customer.subscription.deleted` keeps the existing teardown path.
 

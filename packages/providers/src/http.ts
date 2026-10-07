@@ -461,6 +461,33 @@ export function httpBilling(secretKey: string, fetchImpl: FetchLike = fetch): Bi
       const { body } = await send(`/v1/subscriptions/${subscriptionId}?expand[]=items.data.price`, { method: "GET" });
       return subscriptionPeriodBounds(body);
     },
+    async listInvoices(input) {
+      const params = new URLSearchParams({
+        subscription: input.subscriptionId,
+        status: input.status,
+        limit: "100",
+      });
+      const { body } = await send(`/v1/invoices?${params.toString()}`, { method: "GET" });
+      const rows = Array.isArray(body.data) ? body.data : [];
+      return rows.flatMap((row) => {
+        const invoice = row as { id?: unknown; created?: unknown; status?: unknown };
+        if (typeof invoice.id !== "string") return [];
+        const createdSeconds = Number(invoice.created);
+        return [
+          {
+            id: invoice.id,
+            created: Number.isFinite(createdSeconds) ? new Date(createdSeconds * 1000) : new Date(0),
+            status: typeof invoice.status === "string" ? invoice.status : input.status,
+          },
+        ];
+      });
+    },
+    async voidInvoice(invoiceId) {
+      await send(`/v1/invoices/${encodeURIComponent(invoiceId)}/void`, {
+        method: "POST",
+        body: formBody({}),
+      });
+    },
     async updateSubscriptionPrices(input: UpdateSubscriptionPricesInput) {
       const listed = await send(`/v1/subscriptions/${input.subscriptionId}?expand[]=items.data.price`, { method: "GET" });
       const items = Array.isArray((listed.body.items as { data?: unknown[] } | undefined)?.data)

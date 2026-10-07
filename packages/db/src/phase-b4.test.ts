@@ -89,6 +89,119 @@ describe("Phase B Part 4 billing lifecycle", () => {
     expect(result.ownerEmails?.[0]?.subject).toMatch(/all set/i);
   });
 
+  it("pauses on subscription.updated unpaid and keeps pastDueSince", async () => {
+    const client = await seedClient("Unpaid");
+    const pastDueSince = new Date("2026-02-10T00:00:00.000Z");
+    await prisma.client.update({
+      where: { id: client.id },
+      data: { billingStatus: "past_due", pastDueSince },
+    });
+    const result = await applyStripeEvent({
+      id: "evt_sub_unpaid",
+      type: "customer.subscription.updated",
+      data: {
+        object: {
+          id: client.stripeSubscriptionId!,
+          status: "unpaid",
+          cancel_at_period_end: false,
+        },
+      },
+    });
+    const updated = await prisma.client.findUniqueOrThrow({ where: { id: client.id } });
+    expect(updated.billingStatus).toBe("paused");
+    expect(updated.pastDueSince?.toISOString()).toBe(pastDueSince.toISOString());
+    expect(updated.archivedAt).toBeNull();
+    expect(result.notify?.text).toMatch(/stopped retrying/i);
+    const log = await prisma.changeLog.findFirstOrThrow({
+      where: { clientId: client.id, action: "billing.unpaid" },
+      orderBy: { createdAt: "desc" },
+    });
+    expect(log.summary).toMatch(/stopped retrying/i);
+
+    // Already paused: no second ChangeLog / notice.
+    const again = await applyStripeEvent({
+      id: "evt_sub_unpaid_2",
+      type: "customer.subscription.updated",
+      data: { object: { id: client.stripeSubscriptionId!, status: "unpaid" } },
+    });
+    expect(again.notify).toBeUndefined();
+    expect(await prisma.changeLog.count({ where: { clientId: client.id, action: "billing.unpaid" } })).toBe(1);
+  });
+
+  it("voids draft invoices created after pastDueSince when a paused client resumes", async () => {
+    const client = await seedClient("VoidDrafts");
+    const pastDueSince = new Date("2026-03-01T00:00:00.000Z");
+    await prisma.client.update({
+      where: { id: client.id },
+      data: { billingStatus: "paused", pastDueSince },
+    });
+    const billing = new MemoryBilling();
+    billing.invoices.set(client.stripeSubscriptionId!, [
+      {
+        id: "in_before",
+        created: new Date("2026-02-15T00:00:00.000Z"),
+        status: "draft",
+      },
+      {
+        id: "in_during",
+        created: new Date("2026-03-15T00:00:00.000Z"),
+        status: "draft",
+      },
+      {
+        id: "in_open",
+        created: new Date("2026-03-20T00:00:00.000Z"),
+        status: "open",
+      },
+    ]);
+    const result = await applyStripeEvent(
+      {
+        id: "evt_paid_void_drafts",
+        type: "invoice.paid",
+        data: { object: { customer: client.stripeCustomerId! } },
+      },
+      new Date("2026-04-01T00:00:00.000Z"),
+      { billing },
+    );
+    expect(billing.voidedInvoiceIds).toEqual(["in_during"]);
+    expect(result.ownerEmails?.[0]?.subject).toMatch(/all set/i);
+    const log = await prisma.changeLog.findFirstOrThrow({
+      where: { clientId: client.id, action: "billing.resumed" },
+      orderBy: { createdAt: "desc" },
+    });
+    expect(log.after).toMatchObject({ billingStatus: "paid", voidedDraftInvoices: ["in_during"] });
+  });
+
+  it("resumes from subscription.updated active the same as invoice.paid", async () => {
+    const client = await seedClient("ActiveResume");
+    await prisma.client.update({
+      where: { id: client.id },
+      data: { billingStatus: "paused", pastDueSince: new Date("2026-02-01T00:00:00.000Z") },
+    });
+    const result = await applyStripeEvent({
+      id: "evt_sub_active_resume",
+      type: "customer.subscription.updated",
+      data: {
+        object: {
+          id: client.stripeSubscriptionId!,
+          status: "active",
+          cancel_at_period_end: false,
+        },
+      },
+    });
+    const updated = await prisma.client.findUniqueOrThrow({ where: { id: client.id } });
+    expect(updated.billingStatus).toBe("paid");
+    expect(updated.pastDueSince).toBeNull();
+    expect(result.ownerEmails?.[0]?.subject).toMatch(/all set/i);
+
+    // Already paid: no second resume email.
+    const again = await applyStripeEvent({
+      id: "evt_sub_active_again",
+      type: "customer.subscription.updated",
+      data: { object: { id: client.stripeSubscriptionId!, status: "active" } },
+    });
+    expect(again.ownerEmails).toBeUndefined();
+  });
+
   it("schedules and undoes cancel_at_period_end from subscription.updated", async () => {
     const client = await seedClient("Cancel");
     const periodEnd = Math.floor(Date.now() / 1000) + 20 * 24 * 60 * 60;

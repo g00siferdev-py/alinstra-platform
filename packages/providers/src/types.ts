@@ -233,6 +233,18 @@ export type SubscriptionPeriodBounds = {
   currentPeriodEnd: Date;
 };
 
+export type ListInvoicesInput = {
+  subscriptionId: string;
+  status: "draft" | "open" | "paid" | "uncollectible" | "void";
+};
+
+export type StripeInvoiceSummary = {
+  id: string;
+  /** Invoice `created` timestamp from Stripe. */
+  created: Date;
+  status: string;
+};
+
 export interface BillingPlatform {
   findCustomerId(clientId: string): Promise<string | null>;
   createCustomer(input: { clientId: string; name: string; email: string | null; idempotencyKey: string }): Promise<{ customerId: string }>;
@@ -249,6 +261,10 @@ export interface BillingPlatform {
   createPortalSession(input: CreatePortalSessionInput): Promise<{ url: string }>;
   /** GET /v1/subscriptions/{id} — period bounds from subscription items. */
   getSubscription(subscriptionId: string): Promise<SubscriptionPeriodBounds>;
+  /** GET /v1/invoices?subscription=&status= */
+  listInvoices(input: ListInvoicesInput): Promise<StripeInvoiceSummary[]>;
+  /** POST /v1/invoices/{id}/void */
+  voidInvoice(invoiceId: string): Promise<void>;
   /**
    * Swap the subscription's base recurring and metered prices.
    * Lists current items, replaces matching kinds, leaves unrelated items alone.
