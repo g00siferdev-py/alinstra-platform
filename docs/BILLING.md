@@ -41,7 +41,8 @@ Dashboard → Settings → Tax:
 - Turn **Stripe Tax** ON.
 - Set the **origin address** (Alinstra’s business address).
 - Add **tax registrations** only after the accountant confirms which jurisdictions to register in. Checkout already sends `automatic_tax[enabled]=true`, collects billing address, and keeps catalog prices tax-exclusive.
-- Because we create the Stripe Customer before Checkout, Checkout also sends `customer_update[address]=auto` and `customer_update[name]=auto` so the address and business name collected at Checkout are saved onto the Customer (required for Tax on existing customers). We do **not** enable `tax_id_collection` (US businesses are outside Stripe’s tax-ID collection list).
+- Because we create the Stripe Customer before Checkout (named as the **business**), Checkout sends `customer_update[address]=auto` so Tax gets a billing address, but **not** `customer_update[name]=auto` — that would overwrite the Customer name with the cardholder and put the person on invoices. We do **not** enable `tax_id_collection` (US businesses are outside Stripe’s tax-ID collection list).
+- Checkout pins `payment_method_types` to **card** and **Link** only (`CHECKOUT_PAYMENT_METHOD_TYPES` in code), so dashboard dynamic methods (Klarna, Cash App, Amazon Pay) do not appear on a monthly business subscription.
 
 ### Webhook endpoint
 

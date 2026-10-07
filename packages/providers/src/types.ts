@@ -177,6 +177,9 @@ export const METER_EVENT_NAME = "alinstra_minutes";
  */
 export const STRIPE_PRODUCT_TAX_CODE = "txcd_10103001";
 
+/** Checkout payment methods: card + Link only (no Klarna / Cash App / Amazon Pay). Widen later if needed. */
+export const CHECKOUT_PAYMENT_METHOD_TYPES = ["card", "link"] as const;
+
 export type EnsurePriceInput = {
   lookupKey: string;
   amountCents: number;

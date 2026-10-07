@@ -1,4 +1,4 @@
-import { ProviderRequestError, RECORDING_MAX_BYTES, retellTiming, STRIPE_API_VERSION, STRIPE_PRODUCT_TAX_CODE, type AgentPublish, type BillingPlatform, type EnsurePriceInput, type PublishedTool, type ReportMeterEventInput, type RetellCallSnapshot, type UpdateSubscriptionPricesInput, type VoicePlatform } from "./types";
+import { CHECKOUT_PAYMENT_METHOD_TYPES, ProviderRequestError, RECORDING_MAX_BYTES, retellTiming, STRIPE_API_VERSION, STRIPE_PRODUCT_TAX_CODE, type AgentPublish, type BillingPlatform, type EnsurePriceInput, type PublishedTool, type ReportMeterEventInput, type RetellCallSnapshot, type UpdateSubscriptionPricesInput, type VoicePlatform } from "./types";
 
 type FetchLike = (url: string, init?: RequestInit) => Promise<Response>;
 
@@ -462,12 +462,15 @@ export function httpBilling(secretKey: string, fetchImpl: FetchLike = fetch): Bi
         cancel_url: input.cancelUrl,
         "automatic_tax[enabled]": "true",
         billing_address_collection: "required",
-        // Existing Customer: Checkout must write the collected address/name back so Tax can use them.
+        // Address is what Tax needs. Keep Customer.name as the business name for invoices
+        // (do not send customer_update[name]=auto — that overwrites with the cardholder).
         "customer_update[address]": "auto",
-        "customer_update[name]": "auto",
         "metadata[client_id]": input.clientId,
         "subscription_data[metadata][client_id]": input.clientId,
       };
+      CHECKOUT_PAYMENT_METHOD_TYPES.forEach((method, index) => {
+        fields[`payment_method_types[${index}]`] = method;
+      });
       lineItems.forEach((item, index) => {
         fields[`line_items[${index}][price]`] = item.price;
         if (item.quantity) fields[`line_items[${index}][quantity]`] = item.quantity;

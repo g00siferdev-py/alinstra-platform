@@ -1,4 +1,4 @@
-import { retellTiming, STRIPE_PRODUCT_TAX_CODE, type AgentPublish, type BillingPlatform, type CallTiming, type CreateCheckoutInput, type CreatePortalSessionInput, type EnsurePriceInput, type ListInvoicesInput, type PriceKind, type PublishedTool, type RecordingDownload, type ReportMeterEventInput, type RetellCallSnapshot, type RetellTiming, type StripeInvoiceSummary, type SubscriptionPeriodBounds, type UpdateSubscriptionPricesInput, type VoicePlatform } from "./types";
+import { CHECKOUT_PAYMENT_METHOD_TYPES, retellTiming, STRIPE_PRODUCT_TAX_CODE, type AgentPublish, type BillingPlatform, type CallTiming, type CreateCheckoutInput, type CreatePortalSessionInput, type EnsurePriceInput, type ListInvoicesInput, type PriceKind, type PublishedTool, type RecordingDownload, type ReportMeterEventInput, type RetellCallSnapshot, type RetellTiming, type StripeInvoiceSummary, type SubscriptionPeriodBounds, type UpdateSubscriptionPricesInput, type VoicePlatform } from "./types";
 
 type StoredLlm = { clientId: string; prompt: string; tools: PublishedTool[]; beginMessage: string };
 /** Mirrors what httpVoice sends: the agent carries the clamped Retell timing fields. */
@@ -132,7 +132,8 @@ export class MemoryBilling implements BillingPlatform {
     meteredPriceId: string | null;
     clientId: string;
     customerUpdateAddress: "auto";
-    customerUpdateName: "auto";
+    customerUpdateName: false;
+    paymentMethodTypes: readonly string[];
     taxIdCollection: false;
   } | null = null;
   canceled = new Set<string>();
@@ -236,7 +237,8 @@ export class MemoryBilling implements BillingPlatform {
       meteredPriceId: input.meteredPriceId ?? null,
       clientId: input.clientId,
       customerUpdateAddress: "auto",
-      customerUpdateName: "auto",
+      customerUpdateName: false,
+      paymentMethodTypes: [...CHECKOUT_PAYMENT_METHOD_TYPES],
       taxIdCollection: false,
     };
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);

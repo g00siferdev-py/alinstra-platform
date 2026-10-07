@@ -245,7 +245,7 @@ describe("provider HTTP clients", () => {
     expect(createBody).toContain("product_data%5Btax_code%5D=txcd_10103001");
   });
 
-  it("opens Checkout with customer_update auto and without tax_id_collection", async () => {
+  it("opens Checkout with address auto, card+link methods, and without name auto or tax_id_collection", async () => {
     let body = "";
     const billing = httpBilling("sk_test_local", async (_url, init) => {
       body = String(init?.body ?? "");
@@ -265,7 +265,9 @@ describe("provider HTTP clients", () => {
       idempotencyKey: "checkout_client_1",
     });
     expect(body).toContain("customer_update%5Baddress%5D=auto");
-    expect(body).toContain("customer_update%5Bname%5D=auto");
+    expect(body).not.toContain("customer_update%5Bname%5D");
+    expect(body).toContain("payment_method_types%5B0%5D=card");
+    expect(body).toContain("payment_method_types%5B1%5D=link");
     expect(body).toContain("automatic_tax%5Benabled%5D=true");
     expect(body).not.toContain("tax_id_collection");
   });
