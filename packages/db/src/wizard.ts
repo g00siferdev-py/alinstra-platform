@@ -17,6 +17,8 @@ import {
   formatWeeklyHours,
   healthcareRequired,
   INDUSTRIES,
+  LIVE_TRANSFER_TARGETS_ERROR,
+  migrateNotesOnlyTransferTargets,
   parseRecipientEmails,
   parseTransferTargets,
   parseWeeklyHours,
@@ -223,9 +225,19 @@ async function applyStep(
     await tx.client.update({ where: { id: clientId }, data: { coverage: json(coverageSchema.parse(payload.coverage ?? {})) } });
   }
   if (step === 5) {
-    const features = featuresSchema.parse(payload.features ?? {});
+    const features = migrateNotesOnlyTransferTargets(featuresSchema.parse(payload.features ?? {}));
+    if (payload.features) {
+      payload.features = { ...payload.features, ...features };
+    }
     const weeklyHours = parseWeeklyHours(features.weeklyHoursText ?? "");
-    const targets = parseTransferTargets(features.transferTargetsText ?? "");
+    const liveTransfer = features.liveTransfer === true;
+    const targets =
+      liveTransfer || (features.transferTargetsText ?? "").trim()
+        ? parseTransferTargets(features.transferTargetsText ?? "")
+        : [];
+    if (liveTransfer && targets.length === 0) {
+      throw new Error(LIVE_TRANSFER_TARGETS_ERROR);
+    }
     if (features.messageRecipients) parseRecipientEmails(features.messageRecipients);
     await tx.client.update({
       where: { id: clientId },
@@ -236,8 +248,10 @@ async function applyStep(
     });
     if (mode === "edit") {
       await tx.transferTarget.deleteMany({ where: { clientId } });
-      for (const target of targets) {
-        await tx.transferTarget.create({ data: { clientId, ...transferTargetData(target) } });
+      if (liveTransfer) {
+        for (const target of targets) {
+          await tx.transferTarget.create({ data: { clientId, ...transferTargetData(target) } });
+        }
       }
     }
   }
@@ -325,6 +339,9 @@ export async function submitWizard(ctx: Actor, input: { clientId: string; payloa
     throw new Error("Only admin or the client owner can submit a wizard");
   }
   const payload = asPayload(input.payload);
+  if (payload.features) {
+    payload.features = migrateNotesOnlyTransferTargets(payload.features);
+  }
   businessSchema.parse({ timezone: "America/New_York", ...payload.business });
   planSelectionSchema.parse(payload.plan);
   const email = zEmail(payload.portalOwnerEmail);
@@ -344,9 +361,16 @@ export async function submitWizard(ctx: Actor, input: { clientId: string; payloa
     for (let step = 1; step <= 10; step += 1) {
       await applyStep(tx, input.clientId, step, payload);
     }
-    const targets = parseTransferTargets(payload.features?.transferTargetsText ?? "");
+    const liveTransfer = payload.features?.liveTransfer === true;
+    const targets =
+      liveTransfer || (payload.features?.transferTargetsText ?? "").trim()
+        ? parseTransferTargets(payload.features?.transferTargetsText ?? "")
+        : [];
+    if (liveTransfer && targets.length === 0) {
+      throw new Error(LIVE_TRANSFER_TARGETS_ERROR);
+    }
     await tx.transferTarget.deleteMany({ where: { clientId: input.clientId } });
-    if (targets.length > 0) {
+    if (liveTransfer && targets.length > 0) {
       await tx.transferTarget.createMany({
         data: targets.map((target) => ({ clientId: input.clientId, ...transferTargetData(target) })),
       });

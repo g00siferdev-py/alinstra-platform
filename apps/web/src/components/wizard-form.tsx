@@ -3,7 +3,9 @@
 import { continueWizardAction, discardWizardAction, editClientStepAction, previewWizardPromptAction, saveDraftAction, submitWizardAction, type EditStepResult } from "@/app/admin/actions";
 import { useNavigationGuard } from "@/components/navigation-guard";
 import { useToast } from "@/components/toast";
+import { TransferTargetsEditor } from "@/components/transfer-targets-editor";
 import { Button, ErrorText, FileDropzone, Input } from "@/components/ui";
+import { WeeklyHoursEditor } from "@/components/weekly-hours-editor";
 import { CALL_RETENTION_DEFAULT_DAYS, CALL_RETENTION_HEALTHCARE_HINT, CALL_RETENTION_HINT, CALL_RETENTION_MAX_DAYS, CALL_RETENTION_MIN_DAYS } from "@/lib/call-retention";
 import { DEFAULT_VOICE_KEY, VOICE_OPTIONS, voiceDisplayName } from "@alinstra/providers/voices";
 import { useRouter } from "next/navigation";
@@ -136,6 +138,7 @@ export function WizardForm({
   plans,
   documents,
   mode = "create",
+  audience = "admin",
   hasStripeSubscription = false,
   provisioned = false,
   saveEditStep = editClientStepAction,
@@ -149,6 +152,8 @@ export function WizardForm({
   documents: DocumentRow[];
   /** "edit" saves each step straight onto a submitted client; "create" autosaves a draft. */
   mode?: "create" | "edit";
+  /** Owners hide text/recall toggles that are not available yet. */
+  audience?: "admin" | "owner";
   hasStripeSubscription?: boolean;
   provisioned?: boolean;
   /** Defaults to the admin action; the owner edit page passes its own action. */
@@ -160,6 +165,7 @@ export function WizardForm({
   const router = useRouter();
   const toast = useToast();
   const editing = mode === "edit";
+  const ownerFacing = audience === "owner";
   const [step, setStep] = useState(initialStep);
   const [editNote, setEditNote] = useState<{ tone: "ok" | "warn"; text: string } | null>(null);
   const [payload, setPayload] = useState<Payload>(initialPayload);
@@ -172,6 +178,8 @@ export function WizardForm({
   const [pending, setPending] = useState(false);
   const [saveState, setSaveState] = useState<"saving" | "saved" | "error">("saved");
   const [exitNote, setExitNote] = useState<string | null>(null);
+  const [hoursError, setHoursError] = useState(false);
+  const [transferError, setTransferError] = useState(false);
   const saveLock = useRef(false);
   const payloadRef = useRef(payload);
   const stepRef = useRef(step);
@@ -369,6 +377,7 @@ export function WizardForm({
 
   const business = payload.business;
   const current = STEPS[step - 1];
+  const step5Blocked = step === 5 && (hoursError || transferError);
   return (
     <div className="grid gap-4">
       {editing ? (
@@ -517,37 +526,64 @@ export function WizardForm({
             </select>
           </div>
           <div>
-            <FieldLabel label="Messages" hint="Who should get a text or email, and what those messages are for." />
+            <FieldLabel label="Messages" hint="What Ava should collect when she takes a message, for example name, number, address and reason." />
             <Input value={String(payload.features.messages ?? "")} onChange={(event) => setPayload({ ...payload, features: { ...payload.features, messages: event.target.value } })} />
           </div>
-          <div className="flex items-start gap-2 text-sm">
-            <input className="mt-0.5" type="checkbox" checked={Boolean(payload.features.textConfirmations)} onChange={(event) => setPayload({ ...payload, features: { ...payload.features, textConfirmations: event.target.checked } })} />
-            <FieldLabel label="Text confirmations" hint="Send the caller a text confirming what was booked or requested." />
-          </div>
-          <div className="flex items-start gap-2 text-sm">
-            <input className="mt-0.5" type="checkbox" checked={Boolean(payload.features.textReminders)} onChange={(event) => setPayload({ ...payload, features: { ...payload.features, textReminders: event.target.checked } })} />
-            <FieldLabel label="Text reminders" hint="Send a reminder text before an appointment." />
-          </div>
-          <div className="flex items-start gap-2 text-sm">
-            <input className="mt-0.5" type="checkbox" checked={Boolean(payload.features.liveTransfer)} onChange={(event) => setPayload({ ...payload, features: { ...payload.features, liveTransfer: event.target.checked } })} />
-            <FieldLabel label="Live transfer" hint="Allow the receptionist to transfer the caller to a person. Transfers only use the targets below, and only during the hours on the next lines." />
-          </div>
+          {!ownerFacing ? (
+            <>
+              <div className="flex items-start gap-2 text-sm">
+                <input className="mt-0.5" type="checkbox" checked={Boolean(payload.features.textConfirmations)} onChange={(event) => setPayload({ ...payload, features: { ...payload.features, textConfirmations: event.target.checked } })} />
+                <FieldLabel label="Text confirmations" hint="Send the caller a text confirming what was booked or requested. (not available yet)" />
+              </div>
+              <div className="flex items-start gap-2 text-sm">
+                <input className="mt-0.5" type="checkbox" checked={Boolean(payload.features.textReminders)} onChange={(event) => setPayload({ ...payload, features: { ...payload.features, textReminders: event.target.checked } })} />
+                <FieldLabel label="Text reminders" hint="Send a reminder text before an appointment. (not available yet)" />
+              </div>
+            </>
+          ) : null}
           <div>
-            <FieldLabel label="Business hours" hint="One day per line, 24-hour time. Example: mon 09:00-17:00. Days you leave out are closed, and closed hours take a message instead of transferring." />
-            <textarea className="min-h-24 w-full rounded-md border border-[var(--line)] px-3 py-2 text-sm" value={String(payload.features.weeklyHoursText ?? "")} onChange={(event) => setPayload({ ...payload, features: { ...payload.features, weeklyHoursText: event.target.value } })} />
+            <FieldLabel label="Business hours" hint="Days and times Ava treats as open. Transfers only happen during these hours." />
+            <WeeklyHoursEditor
+              weeklyHoursText={String(payload.features.weeklyHoursText ?? "")}
+              knowledgeHours={payload.knowledge.hours}
+              onChange={(weeklyHoursText) =>
+                setPayload((current) => ({
+                  ...current,
+                  features: { ...current.features, weeklyHoursText },
+                }))
+              }
+              onValidityChange={setHoursError}
+            />
           </div>
-          <div>
-            <FieldLabel label="Transfer targets" hint="One per line: Label, +E.164. The transfer tool will not dial any other number." />
-            <textarea className="min-h-20 w-full rounded-md border border-[var(--line)] px-3 py-2 text-sm" value={String(payload.features.transferTargetsText ?? "")} onChange={(event) => setPayload({ ...payload, features: { ...payload.features, transferTargetsText: event.target.value } })} />
-          </div>
+          <TransferTargetsEditor
+            liveTransfer={Boolean(payload.features.liveTransfer)}
+            transferTargetsText={String(payload.features.transferTargetsText ?? "")}
+            transferNotes={String(payload.features.transferNotes ?? "")}
+            contactName={business.contactName}
+            onLiveTransferChange={(liveTransfer) =>
+              setPayload((current) => ({
+                ...current,
+                features: { ...current.features, liveTransfer },
+              }))
+            }
+            onTargetsChange={(transferTargetsText) =>
+              setPayload((current) => ({
+                ...current,
+                features: { ...current.features, transferTargetsText },
+              }))
+            }
+            onValidityChange={setTransferError}
+          />
           <div>
             <FieldLabel label="Message emails" hint="Who is emailed as soon as the receptionist takes a message. Separate addresses with commas." />
             <Input value={String(payload.features.messageRecipients ?? "")} onChange={(event) => setPayload({ ...payload, features: { ...payload.features, messageRecipients: event.target.value } })} />
           </div>
-          <div className="flex items-start gap-2 text-sm">
-            <input className="mt-0.5" type="checkbox" checked={Boolean(payload.features.recallAddOn)} onChange={(event) => setPayload({ ...payload, features: { ...payload.features, recallAddOn: event.target.checked } })} />
-            <FieldLabel label="Recall add-on" hint="Turn on recall reminders. The choice is stored now. Billing for it comes later." />
-          </div>
+          {!ownerFacing ? (
+            <div className="flex items-start gap-2 text-sm">
+              <input className="mt-0.5" type="checkbox" checked={Boolean(payload.features.recallAddOn)} onChange={(event) => setPayload({ ...payload, features: { ...payload.features, recallAddOn: event.target.checked } })} />
+              <FieldLabel label="Recall add-on" hint="Turn on recall reminders. The choice is stored now. Billing for it comes later." />
+            </div>
+          ) : null}
         </div>
       ) : null}
 
@@ -738,7 +774,7 @@ export function WizardForm({
           <div className="flex flex-wrap items-center gap-2">
             {step > 1 ? <Button tone="secondary" onClick={() => { setEditNote(null); setStep((value) => value - 1); }}>Back</Button> : null}
             {step < 11 ? <Button tone="secondary" onClick={() => { setEditNote(null); setStep((value) => value + 1); }}>Next</Button> : null}
-            {step < 11 ? <Button disabled={pending} onClick={() => void saveEdit()}>{pending ? "Saving…" : "Save step"}</Button> : null}
+            {step < 11 ? <Button disabled={pending || step5Blocked} onClick={() => void saveEdit()}>{pending ? "Saving…" : "Save step"}</Button> : null}
             <div className="ml-auto">
               <Button tone="secondary" onClick={() => router.push(editBackHref)}>Back</Button>
             </div>
@@ -752,7 +788,7 @@ export function WizardForm({
           <div className="flex flex-wrap items-center gap-2">
             {step > 1 ? <Button tone="secondary" onClick={() => setStep((current) => current - 1)}>Back</Button> : null}
             <Button tone="secondary" onClick={() => void saveAndExit()}>Save & exit</Button>
-            {step < 11 ? <Button disabled={pending} onClick={() => void continueStep()}>{pending ? "Saving…" : "Continue"}</Button> : null}
+            {step < 11 ? <Button disabled={pending || step5Blocked} onClick={() => void continueStep()}>{pending ? "Saving…" : "Continue"}</Button> : null}
             <div className="ml-auto">
               <Button tone="danger" onClick={discardDraft}>Discard draft</Button>
             </div>

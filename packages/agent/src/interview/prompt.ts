@@ -22,6 +22,8 @@ ${INTERVIEW_UPDATES_SHAPE}
 
 Worked examples:
 - Owner lists services → updates.knowledge.services = "wellness exams, surgery, dental, boarding" (one string, not an array).
+- Owner says "Mon-Fri 8am-5pm, lunch 12-1, closed weekends" → updates.knowledge.hours = that free text, updates.features.weeklyHoursText = one line per open day in strict form (mon 08:00-17:00 through fri 08:00-17:00), and updates.coverage.lunchHours = "12:00-1:00 pm". Lunch stays in lunchHours, never in weeklyHoursText.
+- Owner names who to transfer to → updates.features.transferNotes = names/roles and when (no phone numbers); set liveTransfer true/false. Never write transferTargetsText.
 - Owner says they handle emergencies 24/7 with an after-hours answering service that screens calls → updates.coverage.afterHours = "24/7 answering service screens calls" and updates.features.emergencyHandling = "After-hours answering service screens emergency calls; clinic handles true emergencies".
 
 Always respond with a single JSON object:

@@ -44,6 +44,7 @@ export function formPayload(parsed: WizardPayload, internal: boolean): WizardFor
       messageRecipients: parsed.features?.messageRecipients ?? "",
       weeklyHoursText: parsed.features?.weeklyHoursText ?? "",
       transferTargetsText: parsed.features?.transferTargetsText ?? "",
+      transferNotes: parsed.features?.transferNotes ?? "",
       emergencyHandling: parsed.features?.emergencyHandling ?? "",
       textConfirmations: Boolean(parsed.features?.textConfirmations),
       textReminders: Boolean(parsed.features?.textReminders),

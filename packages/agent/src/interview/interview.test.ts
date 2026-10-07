@@ -14,7 +14,12 @@ import {
 } from "./engine";
 import { contradictionQuestion, mergeIntoDraft } from "./merge";
 import { INTERVIEW_SYSTEM_PROMPT, buildInterviewSystemPrompt, buildInterviewUserPayload } from "./prompt";
-import { forgiveInterviewUpdates, parseModelTurnForgiving, validateInterviewUpdates } from "./validate";
+import {
+  forgiveInterviewUpdates,
+  INTERVIEW_UPDATES_SHAPE,
+  parseModelTurnForgiving,
+  validateInterviewUpdates,
+} from "./validate";
 
 function modelJson(partial: {
   confirmation?: string;
@@ -51,6 +56,10 @@ describe("interview prompt shape", () => {
     expect(INTERVIEW_SYSTEM_PROMPT).toContain("answerStatus");
     expect(INTERVIEW_SYSTEM_PROMPT).not.toContain("askedId");
     expect(INTERVIEW_SYSTEM_PROMPT).toContain("Vary how you start");
+    expect(INTERVIEW_SYSTEM_PROMPT).toContain("weeklyHoursText");
+    expect(INTERVIEW_SYSTEM_PROMPT).toContain("transferNotes");
+    expect(INTERVIEW_UPDATES_SHAPE).not.toContain("transferTargetsText");
+    expect(INTERVIEW_SYSTEM_PROMPT).toContain("Mon-Fri 8am-5pm");
   });
 
   it("tells the model the exact current question and does not suggest next", () => {
@@ -86,27 +95,52 @@ describe("forgiving updates", () => {
     expect(result.droppedPaths).toContain("features.bookingMode");
   });
 
-  it("rejects textConfirmations, textReminders and direct_calendar", () => {
+  it("rejects textConfirmations, textReminders, direct_calendar and transferTargetsText; accepts transferNotes", () => {
     const result = forgiveInterviewUpdates({
       features: {
         textConfirmations: true,
         textReminders: false,
         bookingMode: "direct_calendar",
         liveTransfer: true,
+        transferTargetsText: "Owner, +14235550142",
+        transferNotes: "Owner for sales quotes",
       },
     });
     expect(result.value.features?.liveTransfer).toBe(true);
     expect(result.value.features?.bookingMode).toBeUndefined();
+    expect(result.value.features?.transferNotes).toBe("Owner for sales quotes");
+    expect(result.value.features && "transferTargetsText" in result.value.features).toBe(false);
     expect(result.droppedPaths).toEqual(
       expect.arrayContaining([
         "features.textConfirmations",
         "features.textReminders",
         "features.bookingMode",
+        "features.transferTargetsText",
       ]),
     );
-    expect(validateInterviewUpdates({ features: { textConfirmations: true } }).ok).toBe(true);
-    expect(validateInterviewUpdates({ features: { textConfirmations: true } }).ok &&
-      !("textConfirmations" in ((validateInterviewUpdates({ features: { textConfirmations: true } }) as { value: { features?: object } }).value.features ?? {}))).toBe(true);
+  });
+
+  it("accepts weeklyHoursText only when parseWeeklyHours would pass", () => {
+    const ok = forgiveInterviewUpdates({
+      features: { weeklyHoursText: "mon 08:00-17:00\nfri 08:00-17:00" },
+    });
+    expect(ok.value.features?.weeklyHoursText).toContain("mon 08:00-17:00");
+    const bad = forgiveInterviewUpdates({
+      features: { weeklyHoursText: "mon 17:00-08:00" },
+    });
+    expect(bad.value.features?.weeklyHoursText).toBeUndefined();
+    expect(bad.droppedPaths).toContain("features.weeklyHoursText");
+    expect(bad.droppedReasons.some((r) => r.includes("closing time before opening"))).toBe(true);
+  });
+
+  it("raw fallback never writes weeklyHoursText or transferTargetsText", async () => {
+    const { primaryStringField } = await import("./fields");
+    expect(primaryStringField(["knowledge.hours", "features.weeklyHoursText"])).toBe("knowledge.hours");
+    expect(primaryStringField(["features.transferNotes", "features.liveTransfer"])).toBe(
+      "features.transferNotes",
+    );
+    expect(primaryStringField(["features.weeklyHoursText"])).toBeNull();
+    expect(primaryStringField(["features.transferTargetsText" as never])).toBeNull();
   });
 });
 
@@ -125,6 +159,7 @@ describe("capabilities", () => {
     const state = initialInterviewState("general", { planCode: "solo" });
     expect(state.collected.features?.bookingMode).toBe("request_only");
     expect(state.answeredQuestions).toContain("gen.booking");
+    expect(state.autoAnsweredQuestions).toContain("gen.booking");
     expect(state.openQuestions).not.toContain("gen.booking");
     expect(state.currentQuestionId).toBe("gen.hours");
     expect(state.askCounts["gen.hours"]).toBe(1);
@@ -273,26 +308,35 @@ describe("interviewTurn", () => {
     expect(result.state.answeredQuestions).toContain("gen.hours");
   });
 
-  it("surfaces hours vs tech-line contradictions", async () => {
+  it("surfaces hours vs tech-line contradictions once, then flags hours_conflict", async () => {
+    const updates = {
+      knowledge: { hours: "Office open until 5pm, closed after hours" },
+      coverage: { afterHours: "Tech line on-call until 10pm for emergencies" },
+      features: { emergencyHandling: "Dispatch on-call tech until 10pm" },
+    };
     const text = memoryText([
-      modelJson({
-        confirmation: "Noted the tech line.",
-        updates: {
-          knowledge: { hours: "Office open until 5pm, closed after hours" },
-          coverage: { afterHours: "Tech line on-call until 10pm for emergencies" },
-          features: { emergencyHandling: "Dispatch on-call tech until 10pm" },
-        },
-        answerStatus: "answered",
-      }),
+      modelJson({ confirmation: "Noted the tech line.", updates, answerStatus: "answered" }),
+      modelJson({ confirmation: "Still the same hours.", updates, answerStatus: "answered" }),
     ]);
     const state = initialInterviewState("hvac");
-    const result = await interviewTurn({
+    const first = await interviewTurn({
       state,
       userMessage: "Office until 5, but techs until 10.",
       text,
     });
-    expect(result.reply).toMatch(/confirm|which|tech|on-call|schedule/i);
-    expect(contradictionQuestion(result.state.collected)).toMatch(/confirm|which/i);
+    expect(first.reply).toMatch(/confirm|which|tech|on-call|schedule/i);
+    expect(contradictionQuestion(first.state.collected)).toMatch(/confirm|which/i);
+    expect(first.state.askedContradictions?.length).toBe(1);
+    expect(first.state.needsReviewQuestions).not.toContain("hours_conflict");
+
+    const second = await interviewTurn({
+      state: first.state,
+      userMessage: "Yes those are the hours.",
+      text,
+    });
+    expect(second.state.needsReviewQuestions).toContain("hours_conflict");
+    expect(second.reply).not.toBe(first.reply);
+    expect(second.state.askedContradictions?.length).toBe(1);
   });
 
   it("stops with a friendly message when the token budget is exceeded", async () => {
@@ -333,7 +377,7 @@ describe("interviewTurn", () => {
       }),
       modelJson({
         confirmation: "Transfers noted.",
-        updates: { features: { transferTargetsText: "Owner for sales", liveTransfer: true } },
+        updates: { features: { transferNotes: "Owner for sales", liveTransfer: true } },
       }),
       modelJson({
         confirmation: "Missed calls noted.",
@@ -443,6 +487,83 @@ describe("interviewTurn", () => {
     expect(result.state.currentQuestionId).toBe("gen.services");
   });
 
+  it("treats whole-message skip cues only; real answers stay answered", async () => {
+    const answered = memoryText([
+      modelJson({ confirmation: "Callback plan noted.", answerStatus: "answered", updates: {} }),
+      modelJson({ confirmation: "Passing calls noted.", answerStatus: "answered", updates: {} }),
+    ]);
+    const afterHours = initialInterviewState("general");
+    afterHours.currentQuestionId = "gen.after_hours";
+    afterHours.askCounts = { "gen.after_hours": 1 };
+    afterHours.answeredQuestions = ["gen.hours", "gen.services", "gen.faqs", "gen.transfers", "gen.nobody_picks_up", "gen.booking"];
+    afterHours.autoAnsweredQuestions = ["gen.booking"];
+    afterHours.openQuestions = afterHours.openQuestions.filter(
+      (id) => !afterHours.answeredQuestions.includes(id),
+    );
+    const nextBiz = await interviewTurn({
+      state: afterHours,
+      userMessage: "Next business day we call them back",
+      text: answered,
+    });
+    expect(nextBiz.state.skippedQuestions).not.toContain("gen.after_hours");
+    expect(nextBiz.state.answeredQuestions).toContain("gen.after_hours");
+    expect(nextBiz.state.collected.coverage?.afterHours).toMatch(/Next business day/i);
+
+    const transfers = initialInterviewState("general");
+    transfers.currentQuestionId = "gen.transfers";
+    transfers.askCounts = { "gen.transfers": 1 };
+    transfers.answeredQuestions = ["gen.hours", "gen.services", "gen.faqs", "gen.booking"];
+    transfers.autoAnsweredQuestions = ["gen.booking"];
+    transfers.openQuestions = transfers.openQuestions.filter(
+      (id) => !transfers.answeredQuestions.includes(id),
+    );
+    const passing = await interviewTurn({
+      state: transfers,
+      userMessage: "Passing calls to me is fine",
+      text: answered,
+    });
+    expect(passing.state.skippedQuestions).not.toContain("gen.transfers");
+    expect(passing.state.answeredQuestions).toContain("gen.transfers");
+
+    for (const cue of ["skip", "Pass.", "skip for now"] as const) {
+      const skipText = memoryText([
+        modelJson({ confirmation: "Okay.", answerStatus: "answered" }),
+      ]);
+      const state = initialInterviewState("general");
+      const result = await interviewTurn({ state, userMessage: cue, text: skipText });
+      expect(result.state.skippedQuestions).toContain("gen.hours");
+      expect(result.state.turnLog?.[0]?.answerStatus).toBe("skipped");
+    }
+  });
+
+  it("progress line omits auto-answered booking; summary keeps booking sentence", async () => {
+    const text = memoryText([
+      modelJson({ confirmation: "Hmm.", answerStatus: "off_topic", followUp: null }),
+    ]);
+    const state = initialInterviewState("general");
+    state.answeredQuestions = ["gen.hours", "gen.services", "gen.faqs", "gen.booking"];
+    state.autoAnsweredQuestions = ["gen.booking"];
+    state.currentQuestionId = "gen.transfers";
+    state.askCounts = { "gen.transfers": 1 };
+    state.collected = {
+      knowledge: { hours: "9-5", services: "lawn", faqs: "price" },
+      features: { bookingMode: "request_only" },
+    };
+    const result = await interviewTurn({
+      state,
+      userMessage: "You seem to be stuck!",
+      text,
+    });
+    expect(result.reply).toMatch(/So far:/i);
+    expect(result.reply).not.toMatch(/So far:[^.]*\bbooking\b/i);
+    expect(result.reply).toMatch(/transfers/i);
+
+    const done = initialInterviewState("general");
+    done.answeredQuestions = ["gen.hours", "gen.booking"];
+    done.autoAnsweredQuestions = ["gen.booking"];
+    expect(summaryReply(done)).toMatch(/Appointment requests: Ava takes them/i);
+  });
+
   it("done summary lists filled items and names skipped ones", async () => {
     const state = initialInterviewState("general");
     state.collected = {
@@ -450,7 +571,7 @@ describe("interviewTurn", () => {
       coverage: { afterHours: "callback", holdOverflow: "message" },
       features: {
         bookingMode: "request_only",
-        transferTargetsText: "Owner",
+        transferNotes: "Owner",
         emergencyHandling: "Call 911 for life threat",
         messageRecipients: "Owner email",
       },

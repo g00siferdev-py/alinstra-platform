@@ -51,6 +51,7 @@ export default async function OwnerEditStepPage({ params }: { params: Promise<{ 
       <WizardForm
         clientId={client.id}
         mode="edit"
+        audience="owner"
         initialStep={step}
         initialUpdatedAt={client.updatedAt.toISOString()}
         initialPayload={formPayload(payload, client.internal)}

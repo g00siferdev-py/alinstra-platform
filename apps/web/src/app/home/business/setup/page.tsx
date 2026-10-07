@@ -6,6 +6,7 @@ import { redirectUnpaidSelfServeOwner } from "@/lib/self-serve-gate";
 import {
   clients,
   emptyWizardPayload,
+  latestFinishedInterviewForClient,
   plans,
   wizardDrafts,
   wizardPayloadSchema,
@@ -18,17 +19,23 @@ export default async function OwnerSetupPage() {
   if (session.user.role !== "client_owner" || !session.user.clientId) notFound();
   await redirectUnpaidSelfServeOwner();
   const ctx = { role: "client_owner" as const, clientId: session.user.clientId };
+  const actor = { id: session.user.id, role: "client_owner" as const, clientId: session.user.clientId };
   const client = await clients(ctx).getById(session.user.clientId);
   if (!client) notFound();
   if (client.wizardSubmittedAt) redirect("/home/business");
 
-  const [draft, planRows] = await Promise.all([
+  const [draft, planRows, finishedInterview] = await Promise.all([
     wizardDrafts(ctx).getByClientId(client.id),
     plans(ctx).list(),
+    latestFinishedInterviewForClient(actor, client.id),
   ]);
   if (!draft) notFound();
   const parsed = wizardPayloadSchema.safeParse(draft.payload);
   const payload = parsed.success ? parsed.data : emptyWizardPayload();
+  const interviewState =
+    finishedInterview?.state && typeof finishedInterview.state === "object"
+      ? (finishedInterview.state as { needsReviewQuestions?: string[] })
+      : null;
 
   return (
     <main className="mx-auto grid max-w-2xl gap-6">
@@ -49,6 +56,7 @@ export default async function OwnerSetupPage() {
           name: plan.name,
           monthlyPriceCents: plan.monthlyPriceCents,
         }))}
+        needsReviewQuestions={interviewState?.needsReviewQuestions ?? []}
       />
     </main>
   );

@@ -154,17 +154,24 @@ export {
 export {
   assertTransferNumber,
   clientIsHealthcare,
+  formatTransferPhoneDisplay,
   formatTransferTargets,
   formatWeeklyHours,
+  LIVE_TRANSFER_TARGETS_ERROR,
   maskCaller,
+  migrateNotesOnlyTransferTargets,
   needsOwnNumberForwarding,
   normalizePublicPhone,
   normalizeTransferNumber,
   officeOpen,
+  parseTransferTargets,
+  parseWeeklyHours,
   phoneModeOf,
   plainCallerName,
   retellPrompt,
+  TRANSFER_NUMBER_ERROR,
   type PhoneMode,
+  type WeeklyHours,
 } from "./domain";
 export { recordEmailChange, type Actor } from "./changes";
 export {
@@ -259,6 +266,7 @@ export {
   discardInterviewSession,
   finishInterviewSession,
   getInterviewSession,
+  latestFinishedInterviewForClient,
   listInterviewSessions,
   postInterviewMessage,
   resolveTextInterviewConfig,
@@ -376,6 +384,8 @@ export {
 export { callTimeline, timelineBarHeight, type TimelineSegment } from "./call-timeline";
 export {
   banksFor,
+  HOURS_CONFLICT_MESSAGE,
+  HOURS_CONFLICT_REVIEW,
   INTERVIEW_SYSTEM_PROMPT,
   listLoadedBanks,
   resolveInterviewIndustry,

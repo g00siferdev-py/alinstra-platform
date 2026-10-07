@@ -35,7 +35,8 @@ export type InterviewCollected = {
     messages?: string;
     messageRecipients?: string;
     weeklyHoursText?: string;
-    transferTargetsText?: string;
+    /** Who to transfer to and when (names/roles only). Interview never writes transferTargetsText. */
+    transferNotes?: string;
     bookingMode?: "request_only";
     liveTransfer?: boolean;
     emergencyHandling?: string;
@@ -83,7 +84,7 @@ export type InterviewTurnLogEntry = {
   finishReason: string | null;
   parseOk: boolean;
   droppedPaths: string[];
-  /** Reasons only — e.g. `transferTargetsText: expected string, got array`. Never values. */
+  /** Reasons only — e.g. `weeklyHoursText: closing time before opening`. Never values. */
   droppedReasons?: string[];
   model: string;
   tokensIn: number;
@@ -107,8 +108,12 @@ export type InterviewState = {
   skippedQuestions: string[];
   /** Bank item ids marked satisfied. */
   answeredQuestions: string[];
-  /** Skipped required items that need a form answer before go-live. */
+  /** Skipped required items that need a form answer before go-live. May include `hours_conflict`. */
   needsReviewQuestions: string[];
+  /** Question ids auto-answered by the engine (e.g. booking defaults) — omitted from progressLine. */
+  autoAnsweredQuestions?: string[];
+  /** Contradiction texts already asked once; repeats become hours_conflict needs-review. */
+  askedContradictions?: string[];
   /** Question the engine is currently asking. */
   currentQuestionId: string | null;
   /** How many times each bank item has been asked. Cap is 2. */

@@ -15,9 +15,9 @@ export function mergeCollected(base: InterviewCollected, patch: InterviewCollect
   }
 
   const features = mergeSection(base.features, patch.features);
-  if (features?.transferTargetsText !== undefined) {
-    // Labels/situations only — strip any numbers the model or owner typed in chat.
-    features.transferTargetsText = stripPhoneNumbers(features.transferTargetsText) ?? undefined;
+  if (features?.transferNotes !== undefined) {
+    // Names/roles only — strip any numbers the model or owner typed in chat.
+    features.transferNotes = stripPhoneNumbers(features.transferNotes) ?? undefined;
   }
   if (features?.messages !== undefined) {
     features.messages = stripPhoneNumbers(features.messages) ?? features.messages;

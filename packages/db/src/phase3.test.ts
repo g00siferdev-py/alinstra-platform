@@ -348,6 +348,12 @@ describe("phase 3 provisioning", () => {
     expect(() => parseTransferTargets("Premium, +19005550100")).toThrow(/US or Canada/);
     expect(() => parseTransferTargets("Info, +14159760100")).toThrow(/US or Canada/);
     expect(parseTransferTargets("Desk, +14155550100")).toEqual([{ label: "Desk", e164: "+14155550100" }]);
+    expect(() => parseTransferTargets("+14235551234")).toThrow(/add who this number is for/);
+    expect(parseTransferTargets("Me, (423) 555-1234")).toEqual([{ label: "Me", e164: "+14235551234" }]);
+    expect(parseTransferTargets("Owner, 423-555-1234")).toEqual([{ label: "Owner", e164: "+14235551234" }]);
+    expect(parseTransferTargets("Daniel +14235551234")).toEqual([{ label: "Daniel", e164: "+14235551234" }]);
+    expect(parseTransferTargets("Owner: 4235551234")).toEqual([{ label: "Owner", e164: "+14235551234" }]);
+    expect(() => parseTransferTargets("Just me (owner) for quotes")).toThrow(/add a phone number/);
     const client = await seedClient({ name: "Named" });
     const saved = await recordTakenMessage(client.id, { callerName: "Pat\nBcc: evil", callbackNumber: "4155550100", message: "Call me" }, null);
     expect(plainCallerName("Pat\nBcc: evil")).toBe("Pat Bcc: evil");

@@ -36,14 +36,17 @@ const STRING_FIELDS = new Set<BankFieldPath>([
   "coverage.holdOverflow",
   "features.messages",
   "features.messageRecipients",
-  "features.transferTargetsText",
+  "features.transferNotes",
   "features.emergencyHandling",
   "voice.greeting",
   "voice.assistantName",
   "voice.tone",
 ]);
 
-/** First string field on the bank item — used for same-thing copy and raw fallback. */
+/**
+ * First free-text string field on the bank item — used for same-thing copy and raw fallback.
+ * Excludes structured fields like weeklyHoursText (raw fallback must never write those).
+ */
 export function primaryStringField(fields: BankFieldPath[]): BankFieldPath | null {
   return fields.find((field) => STRING_FIELDS.has(field)) ?? null;
 }

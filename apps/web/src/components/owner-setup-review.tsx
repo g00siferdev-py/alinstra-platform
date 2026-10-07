@@ -2,7 +2,10 @@
 
 import { ownerSaveWizardDraftAction, ownerSubmitWizardAction } from "@/app/home/actions";
 import { resendVerificationAction } from "@/app/(marketing)/signup/actions";
+import { TransferTargetsEditor } from "@/components/transfer-targets-editor";
 import { Button, Card, ErrorText } from "@/components/ui";
+import { WeeklyHoursEditor } from "@/components/weekly-hours-editor";
+import { HOURS_CONFLICT_MESSAGE, HOURS_CONFLICT_REVIEW } from "@alinstra/db";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { WizardFormPayload } from "@/components/wizard-form";
@@ -30,22 +33,27 @@ export function OwnerSetupReview({
   initialUpdatedAt,
   initialPayload,
   plans,
+  needsReviewQuestions = [],
 }: {
   clientId: string;
   emailVerified: boolean;
   initialUpdatedAt: string;
   initialPayload: WizardFormPayload;
   plans: PlanRow[];
+  needsReviewQuestions?: string[];
 }) {
   const router = useRouter();
-  const [payload] = useState(initialPayload);
+  const [payload, setPayload] = useState(initialPayload);
   const [updatedAt, setUpdatedAt] = useState(initialUpdatedAt);
   const [pending, setPending] = useState(false);
   const [resending, setResending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  const [hoursError, setHoursError] = useState(false);
+  const [transferError, setTransferError] = useState(false);
 
   const plan = plans.find((row) => row.id === payload.plan?.planId);
+  const showHoursConflict = needsReviewQuestions.includes(HOURS_CONFLICT_REVIEW);
 
   async function submit() {
     setPending(true);
@@ -116,6 +124,7 @@ export function OwnerSetupReview({
         {line("After hours", payload.coverage?.afterHours, { required: true })}
         {line("Emergencies", typeof payload.features?.emergencyHandling === "string" ? payload.features.emergencyHandling : undefined, { required: true })}
         {line("Messages go to", String(payload.features?.messageRecipients ?? ""), { required: true })}
+        {showHoursConflict ? <ErrorText>{HOURS_CONFLICT_MESSAGE}</ErrorText> : null}
         <p className="text-sm text-[var(--muted)]">
           Need changes?{" "}
           <a className="font-semibold underline" href="/home/business/interview">
@@ -125,10 +134,51 @@ export function OwnerSetupReview({
         </p>
       </Card>
 
+      <Card className="grid gap-3">
+        <h2 className="text-lg font-extrabold">Business hours</h2>
+        <WeeklyHoursEditor
+          weeklyHoursText={String(payload.features?.weeklyHoursText ?? "")}
+          knowledgeHours={payload.knowledge?.hours}
+          onChange={(weeklyHoursText) =>
+            setPayload((current) => ({
+              ...current,
+              features: { ...current.features, weeklyHoursText },
+            }))
+          }
+          onValidityChange={setHoursError}
+        />
+      </Card>
+
+      <Card className="grid gap-3">
+        <h2 className="text-lg font-extrabold">Transfers</h2>
+        <TransferTargetsEditor
+          liveTransfer={Boolean(payload.features?.liveTransfer)}
+          transferTargetsText={String(payload.features?.transferTargetsText ?? "")}
+          transferNotes={String(payload.features?.transferNotes ?? "")}
+          contactName={payload.business?.contactName}
+          onLiveTransferChange={(liveTransfer) =>
+            setPayload((current) => ({
+              ...current,
+              features: { ...current.features, liveTransfer },
+            }))
+          }
+          onTargetsChange={(transferTargetsText) =>
+            setPayload((current) => ({
+              ...current,
+              features: { ...current.features, transferTargetsText },
+            }))
+          }
+          onValidityChange={setTransferError}
+        />
+      </Card>
+
       {error ? <ErrorText>{error}</ErrorText> : null}
       {note ? <p className="text-sm text-[var(--success-text)]">{note}</p> : null}
 
-      <Button disabled={pending || !emailVerified} onClick={() => void submit()}>
+      <Button
+        disabled={pending || !emailVerified || hoursError || transferError}
+        onClick={() => void submit()}
+      >
         {pending ? "Submitting…" : emailVerified ? "Submit for review" : "Confirm your email to submit"}
       </Button>
     </div>

@@ -6,6 +6,24 @@ const shortText = z.string().max(500).optional();
 
 const MULTILINE_STRING_FIELDS = new Set(["faqs", "policies", "staff"]);
 
+/** Mirrors packages/db parseWeeklyHours — agent must not depend on db. */
+const DAY_LINE = /^(mon|tue|wed|thu|fri|sat|sun)\s+([01]\d|2[0-3]):([0-5]\d)-([01]\d|2[0-3]):([0-5]\d)$/i;
+
+function weeklyHoursDropReason(text: string): string | null {
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line) continue;
+    const match = DAY_LINE.exec(line);
+    if (!match?.[1] || !match[2] || !match[3] || !match[4] || !match[5]) {
+      return "expected one day per line, such as mon 09:00-17:00";
+    }
+    const start = Number(match[2]) * 60 + Number(match[3]);
+    const end = Number(match[4]) * 60 + Number(match[5]);
+    if (end <= start) return "closing time before opening";
+  }
+  return null;
+}
+
 const businessFields = z
   .object({
     name: shortText,
@@ -44,7 +62,7 @@ const featuresFields = z
     messages: shortText,
     messageRecipients: shortText,
     weeklyHoursText: optionalText,
-    transferTargetsText: optionalText,
+    transferNotes: shortText,
     bookingMode: z.enum(["request_only"]).optional(),
     liveTransfer: z.boolean().optional(),
     emergencyHandling: optionalText,
@@ -111,8 +129,8 @@ export const INTERVIEW_UPDATES_SHAPE = `{
   "features": {
     "messages": "string",
     "messageRecipients": "string",
-    "weeklyHoursText": "string",
-    "transferTargetsText": "string (labels/situations only, no phone numbers)",
+    "weeklyHoursText": "string (one line per open day: mon 08:00-17:00)",
+    "transferNotes": "string (who/when to transfer; names/roles only, no phone numbers)",
     "bookingMode": "request_only",
     "liveTransfer": "boolean",
     "emergencyHandling": "string"
@@ -271,7 +289,7 @@ export function forgiveInterviewUpdates(raw: unknown): ForgivingUpdatesResult {
       const path = `${section}.${field}`;
       const zodField = shape[field];
       if (!zodField) {
-        // Interview cannot set wizard-only fields (textConfirmations, textReminders, direct_calendar, …).
+        // Interview cannot set wizard-only fields (textConfirmations, transferTargetsText, …).
         drop(path, "unknown or disallowed field");
         continue;
       }
@@ -285,6 +303,13 @@ export function forgiveInterviewUpdates(raw: unknown): ForgivingUpdatesResult {
       if (!single.success) {
         drop(path, `expected ${expectedTypeForField(section, field)}, got ${describeValueType(fieldValue)}`);
         continue;
+      }
+      if (section === "features" && field === "weeklyHoursText" && typeof single.data === "string") {
+        const reason = weeklyHoursDropReason(single.data);
+        if (reason) {
+          drop(path, reason);
+          continue;
+        }
       }
       kept[field] = single.data;
     }

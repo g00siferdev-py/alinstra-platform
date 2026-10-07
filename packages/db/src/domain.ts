@@ -143,6 +143,8 @@ export const featuresSchema = z.object({
   messageRecipients: optionalText,
   weeklyHoursText: optionalText,
   transferTargetsText: optionalText,
+  /** Interview-captured who/when notes (names/roles). JSON only — no migration. */
+  transferNotes: optionalText,
   bookingMode: z.preprocess(emptyToUndefined, z.enum(["direct_calendar", "request_only"]).optional()),
   textConfirmations: z.boolean().optional(),
   textReminders: z.boolean().optional(),
@@ -272,6 +274,8 @@ export function emptyWizardPayload(): WizardPayload {
 }
 
 export const TRANSFER_NUMBER_ERROR = "Transfer numbers must be US or Canada numbers, like +14235550142.";
+export const LIVE_TRANSFER_TARGETS_ERROR =
+  "Add at least one phone number, or choose 'take a message instead'.";
 
 export function assertTransferNumber(e164: string): void {
   const area = e164.slice(2, 5);
@@ -291,6 +295,13 @@ export function normalizeTransferNumber(input: string): string | null {
   } catch {
     return null;
   }
+}
+
+/** Display form for NANP E.164: +14235550142 → (423) 555-0142. */
+export function formatTransferPhoneDisplay(e164: string): string {
+  const match = /^\+1(\d{3})(\d{3})(\d{4})$/.exec(e164.trim());
+  if (!match) return e164;
+  return `(${match[1]}) ${match[2]}-${match[3]}`;
 }
 
 export function plainCallerName(value: string): string {
@@ -331,19 +342,62 @@ export function formatWeeklyHours(hours: WeeklyHours | null | undefined): string
   return DAY_KEYS.flatMap((day) => (hours[day] ? [`${day} ${hours[day].start}-${hours[day].end}`] : [])).join("\n");
 }
 
+/**
+ * Forgiving transfer-target parser.
+ * Accepts `Label, number`, `Label: number`, `Label - number`, and `Label number`
+ * (label = everything before the first digit or `+`).
+ */
 export function parseTransferTargets(text: string): Array<{ label: string; e164: string }> {
   const rows: Array<{ label: string; e164: string }> = [];
+  let lineNum = 0;
   for (const raw of text.split(/\r?\n/)) {
     const line = raw.trim();
     if (!line) continue;
-    const comma = line.lastIndexOf(",");
-    const label = (comma === -1 ? "" : line.slice(0, comma)).trim();
-    const e164 = (comma === -1 ? line : line.slice(comma + 1)).trim();
-    if (!label) throw new Error(TRANSFER_NUMBER_ERROR);
-    assertTransferNumber(e164);
-    rows.push({ label, e164 });
+    lineNum += 1;
+    // Number starts at +… or (NXX)… or a bare digit — so "(423) 555-1234" keeps the paren.
+    const numStart = line.search(/\+|\(\d|\d/);
+    if (numStart === -1) {
+      throw new Error(`Line ${lineNum}: add a phone number.`);
+    }
+    const labelRaw = line.slice(0, numStart).replace(/[,:\-\s]+$/u, "").trim();
+    const numberPart = line.slice(numStart).trim();
+    if (!labelRaw || numStart === 0) {
+      throw new Error(`Line ${lineNum}: add who this number is for, like "Daniel, (423) 555-0142".`);
+    }
+    const digits = numberPart.replace(/\D/g, "");
+    const withCountry = digits.length === 10 ? `1${digits}` : digits;
+    const candidate = `+${withCountry}`;
+    if (NANP_E164.test(candidate)) {
+      const area = candidate.slice(2, 5);
+      const exchange = candidate.slice(5, 8);
+      if (area === "900" || exchange === "900" || exchange === "976") {
+        throw new Error(TRANSFER_NUMBER_ERROR);
+      }
+      rows.push({ label: labelRaw, e164: candidate });
+      continue;
+    }
+    throw new Error(`Line ${lineNum}: "${numberPart}" isn't a full US or Canada number.`);
   }
   return rows;
+}
+
+/**
+ * Old interview drafts may hold notes-only text in transferTargetsText.
+ * Move that into transferNotes and clear targets so submit/editor are not blocked.
+ */
+export function migrateNotesOnlyTransferTargets<T extends {
+  transferTargetsText?: string | null;
+  transferNotes?: string | null;
+}>(features: T): T {
+  const text = features.transferTargetsText?.trim() ?? "";
+  if (!text) return features;
+  const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  if (lines.length === 0) return features;
+  const anyNumber = lines.some((line) => /[+\d]/.test(line));
+  if (anyNumber) return features;
+  const existing = features.transferNotes?.trim() ?? "";
+  const notes = existing ? (existing.includes(text) ? existing : `${existing}\n${text}`) : text;
+  return { ...features, transferNotes: notes, transferTargetsText: "" };
 }
 
 export function formatTransferTargets(rows: Array<{ label: string; e164: string }>): string {

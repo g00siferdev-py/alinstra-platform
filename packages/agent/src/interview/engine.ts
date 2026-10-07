@@ -31,9 +31,13 @@ import { parseModelTurnForgiving, type ForgivingTurnResult } from "./validate";
 
 const MAX_TOKENS = 2000;
 const HUMAN_FALLBACK = "Sorry, I lost my place for a second. Could you say that again?";
-const SKIP_RE = /^(skip|next|pass)\b/i;
+/** Whole-message skip cues only — must not match real answers like "Next business day…". */
+const SKIP_RE = /^(skip(\s+(it|this|that|for now))?|next question|pass)[.!]?$/i;
 const SAME_THING_RE = /^(same( thing)?|same as (before|above|that)|ditto)[.!]?$/i;
 const STUCK_RE = /\b(stuck|already asked|same thing over|asking me the same)\b/i;
+export const HOURS_CONFLICT_REVIEW = "hours_conflict";
+export const HOURS_CONFLICT_MESSAGE =
+  "Hours and after-hours/on-call times don't match — check them";
 
 export type InterviewBudget = {
   inputTokens: number;
@@ -56,6 +60,9 @@ function applyBookingDefaults(state: InterviewState): void {
   if (!state.answeredQuestions.includes("gen.booking")) {
     state.answeredQuestions = [...state.answeredQuestions, "gen.booking"];
   }
+  if (!state.autoAnsweredQuestions?.includes("gen.booking")) {
+    state.autoAnsweredQuestions = [...(state.autoAnsweredQuestions ?? []), "gen.booking"];
+  }
   state.openQuestions = refreshOpenQuestions(state);
 }
 
@@ -75,6 +82,8 @@ export function initialInterviewState(
     skippedQuestions: [],
     answeredQuestions: [],
     needsReviewQuestions: [],
+    autoAnsweredQuestions: [],
+    askedContradictions: [],
     currentQuestionId: firstId,
     askCounts: firstId ? { [firstId]: 1 } : {},
     planCode: options.planCode ?? null,
@@ -97,6 +106,8 @@ export function normalizeInterviewState(state: InterviewState): InterviewState {
     skippedQuestions: [...state.skippedQuestions],
     answeredQuestions: [...state.answeredQuestions],
     needsReviewQuestions: [...(state.needsReviewQuestions ?? [])],
+    autoAnsweredQuestions: [...(state.autoAnsweredQuestions ?? [])],
+    askedContradictions: [...(state.askedContradictions ?? [])],
     askCounts: { ...(state.askCounts ?? {}) },
     planCode: state.planCode ?? null,
     tokenUsage: { ...state.tokenUsage },
@@ -175,7 +186,9 @@ function previousAnsweredItem(state: InterviewState, currentId: string | null): 
 
 function progressLine(state: InterviewState): string {
   const items = banksFor(state.industry);
+  const auto = new Set(state.autoAnsweredQuestions ?? []);
   const covered = [...state.answeredQuestions]
+    .filter((id) => !auto.has(id))
     .map((id) => {
       const item = items.find((row) => row.id === id);
       return item ? topicLabel(item.id, item.question) : null;
@@ -563,11 +576,20 @@ export async function interviewTurn(input: {
   };
 
   if (contradiction) {
-    state.stage = "clarify";
-    state.transcript.push({ role: "assistant", content: contradiction });
-    state.lastAssistantReply = contradiction;
-    pushTurnLog(state, { ...baseLog, capabilityFlag: detectsCapabilityClaim(contradiction) || capabilityFlag });
-    return { state, reply: contradiction, done: false };
+    const asked = state.askedContradictions ?? [];
+    if (asked.includes(contradiction)) {
+      if (!state.needsReviewQuestions.includes(HOURS_CONFLICT_REVIEW)) {
+        state.needsReviewQuestions = [...state.needsReviewQuestions, HOURS_CONFLICT_REVIEW];
+      }
+      // Continue the normal flow — do not re-ask.
+    } else {
+      state.askedContradictions = [...asked, contradiction];
+      state.stage = "clarify";
+      state.transcript.push({ role: "assistant", content: contradiction });
+      state.lastAssistantReply = contradiction;
+      pushTurnLog(state, { ...baseLog, capabilityFlag: detectsCapabilityClaim(contradiction) || capabilityFlag });
+      return { state, reply: contradiction, done: false };
+    }
   }
 
   // After skip → advance immediately

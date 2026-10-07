@@ -55,6 +55,8 @@ export {
   contradictionQuestion,
   detectsCapabilityClaim,
   forgiveInterviewUpdates,
+  HOURS_CONFLICT_MESSAGE,
+  HOURS_CONFLICT_REVIEW,
   initialInterviewState,
   interviewGreeting,
   interviewTurn,

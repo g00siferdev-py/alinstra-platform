@@ -242,6 +242,15 @@ export async function activeInterviewForClient(ctx: Actor, clientId: string) {
   });
 }
 
+/** Latest finished interview for a client (owner setup review needs-review lines). */
+export async function latestFinishedInterviewForClient(ctx: Actor, clientId: string) {
+  await loadClientForInterview(ctx, clientId);
+  return prisma.interviewSession.findFirst({
+    where: { clientId, status: INTERVIEW_STATUS.finished },
+    orderBy: { finishedAt: "desc" },
+  });
+}
+
 export type PostInterviewMessageResult =
   | {
       ok: true;

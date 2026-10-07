@@ -10,7 +10,7 @@ export const generalBank: QuestionBank = {
       question:
         "What are your regular business hours? Include lunch breaks and any holiday closures Ava should know about.",
       required: true,
-      fields: ["knowledge.hours", "coverage.lunchHours", "coverage.holidays"],
+      fields: ["knowledge.hours", "features.weeklyHoursText", "coverage.lunchHours", "coverage.holidays"],
       done: (c) => textFilled(c.knowledge?.hours, 8),
       followUp: (c) =>
         textFilled(c.knowledge?.hours, 8) && !textFilled(c.coverage?.lunchHours) && !textFilled(c.coverage?.holidays)
@@ -43,8 +43,8 @@ export const generalBank: QuestionBank = {
       question:
         "Who should Ava transfer a live call to, and in what situations? Name the person or desk only — we will collect phone numbers later in the form, not in chat.",
       required: true,
-      fields: ["features.transferTargetsText", "features.liveTransfer"],
-      done: (c) => textFilled(c.features?.transferTargetsText, 3) || c.features?.liveTransfer === false,
+      fields: ["features.transferNotes", "features.liveTransfer"],
+      done: (c) => textFilled(c.features?.transferNotes, 3) || c.features?.liveTransfer === false,
     },
     {
       id: "gen.nobody_picks_up",
