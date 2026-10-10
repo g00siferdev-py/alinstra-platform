@@ -1,12 +1,12 @@
 import { btnPrimary, btnSecondary } from "@/components/marketing/button-classes";
-import { ASSISTANT_NAME, MARKETING_EMAIL, PRODUCT_NAME } from "@/lib/brand";
+import { ASSISTANT_NAME, COMPANY_TAGLINE, MARKETING_EMAIL, PRODUCT_NAME } from "@/lib/brand";
 import { marketingPhoneDisplay, marketingTelHref } from "@/lib/marketing-phone";
 import { marketingMetadata } from "@/lib/marketing-seo";
 import { publicSiteConfig } from "@alinstra/db";
 
 export const metadata = marketingMetadata({
   title: "About",
-  description: "Alinstra Technologies builds practical AI for small businesses, starting with the phone. Based in Morristown, Tennessee.",
+  description: COMPANY_TAGLINE,
   path: "/about",
 });
 
@@ -18,7 +18,8 @@ export default async function AboutPage() {
 
   return (
     <main className="mx-auto grid max-w-[1160px] gap-8 px-7 py-16">
-      <h1 className="text-[40px] font-extrabold tracking-[-0.03em] md:text-5xl">About</h1>
+      <h1 className="text-[40px] font-extrabold tracking-[-0.03em] md:text-5xl">Alinstra Technologies</h1>
+      <p className="max-w-3xl text-lg text-[var(--muted)]">{COMPANY_TAGLINE}</p>
       <p className="max-w-3xl text-lg text-[var(--body)]">
         <strong className="font-extrabold text-[var(--ink)]">Alinstra Technologies</strong> builds practical AI for small
         businesses, starting with the phone.

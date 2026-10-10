@@ -2,7 +2,7 @@ import { btnPrimary, btnSecondary } from "@/components/marketing/button-classes"
 import { MarketingWaveform } from "@/components/marketing/marketing-waveform";
 import { PlanCards } from "@/components/marketing/plan-cards";
 import { IconTile, Pill, WaveformMark } from "@/components/ui";
-import { ASSISTANT_NAME, FOUNDING_OFFER, PRODUCT_NAME } from "@/lib/brand";
+import { ASSISTANT_NAME, COMPANY_TAGLINE, FOUNDING_OFFER, PRODUCT_NAME } from "@/lib/brand";
 import { cheapestPlan, foundingWaivedPlanNames } from "@/lib/marketing-plans";
 import { isTollFree, marketingPhoneDisplay, marketingTelHref } from "@/lib/marketing-phone";
 import { HOME_DESCRIPTION, marketingMetadata } from "@/lib/marketing-seo";
@@ -28,6 +28,7 @@ export const metadata = marketingMetadata({
   title: "Alinstra",
   description: HOME_DESCRIPTION,
   path: "/",
+  ogDescription: COMPANY_TAGLINE,
 });
 
 const INDUSTRIES = ["HVAC", "Veterinary", "Home services", "Salons", "Auto shops", "Offices"];
@@ -235,9 +236,9 @@ export default async function MarketingHomePage() {
               </IconTile>
               <Pill tone="neutral">Step 2</Pill>
             </div>
-            <h3 className="text-lg font-extrabold">Forward your missed calls.</h3>
+            <h3 className="text-lg font-extrabold">Forward your calls, or get a new number.</h3>
             <p className="text-sm text-[var(--muted)]">
-              Keep your number. Your carrier sends the calls you can&apos;t pick up to {ASSISTANT_NAME}.
+              Keep the number you have and let your carrier send the calls you can&apos;t pick up to {ASSISTANT_NAME}. Or, if you&apos;re just starting out, we give you a new local number you can put on the truck and the business cards.
             </p>
             <div className="mt-auto flex flex-wrap items-center justify-center gap-2 rounded-[14px] bg-[var(--surface-subtle)] p-3.5 text-[13px] font-semibold">
               <span className="rounded-lg border border-[var(--line)] bg-white px-2.5 py-1.5">(423) 555-0100</span>

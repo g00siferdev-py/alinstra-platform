@@ -4,6 +4,7 @@ import { clientIp, getCounter } from "@alinstra/auth";
 import { log } from "@alinstra/config";
 import { createLead, leadAdminNotice } from "@alinstra/db";
 import { enqueueSendAdminNotice } from "@alinstra/queue";
+import { launchState } from "@/lib/brand";
 import { normalizePlanInterest } from "@/lib/marketing-plan-interest";
 import { headers } from "next/headers";
 
@@ -51,7 +52,7 @@ export async function submitLeadAction(_prev: LeadFormState, formData: FormData)
       industry,
       missedCalls: field(formData, "missedCalls"),
       notes: field(formData, "notes"),
-      source: "marketing",
+      source: launchState() === "prelaunch" ? "prelaunch" : "marketing",
       planInterest,
     });
     try {

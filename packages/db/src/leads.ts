@@ -77,10 +77,14 @@ export async function createLead(input: CreateLeadInput) {
   });
 }
 
-export async function listLeads(ctx: TenantContext) {
+export async function listLeads(ctx: TenantContext, filter?: { source?: string }) {
   assertTenantContext(ctx);
   if (ctx.role !== "admin") throw new Error("Only an admin can list leads.");
-  return prisma.lead.findMany({ orderBy: { createdAt: "desc" } });
+  const source = filter?.source?.trim();
+  return prisma.lead.findMany({
+    where: source ? { source } : undefined,
+    orderBy: { createdAt: "desc" },
+  });
 }
 
 export async function markLeadContacted(ctx: Actor, id: string) {
@@ -154,7 +158,9 @@ export function leadAdminNotice(lead: {
   missedCalls: string;
   notes: string | null;
   planInterest?: string | null;
+  source?: string | null;
 }): { subject: string; text: string } {
+  const plan = lead.planInterest?.trim() || "no plan";
   const lines = [
     `Business: ${lead.business}`,
     `Name: ${lead.name}`,
@@ -162,11 +168,14 @@ export function leadAdminNotice(lead: {
     `Email: ${lead.email}`,
     `Industry: ${leadIndustryLabel(lead.industry)}`,
     `Missed calls / week: ${leadMissedCallsLabel(lead.missedCalls)}`,
+    `Plan: ${plan}`,
   ];
-  if (lead.planInterest) lines.push(`Plan interest: ${lead.planInterest}`);
+  if (lead.source) lines.push(`Source: ${lead.source}`);
   if (lead.notes) lines.push(`Notes: ${lead.notes}`);
+  const appUrl = (process.env["APP_URL"] ?? "https://alinstra.com").replace(/\/$/, "");
+  lines.push(`Review: ${appUrl}/admin/leads`);
   return {
-    subject: `New lead: ${lead.business}`,
+    subject: `New lead: ${lead.business} (${plan})`,
     text: lines.join("\n"),
   };
 }

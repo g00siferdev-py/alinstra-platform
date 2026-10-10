@@ -23,9 +23,10 @@ describe("leads", () => {
     });
     expect(lead.business).toBe("North HVAC");
     const notice = leadAdminNotice(lead);
-    expect(notice.subject).toBe("New lead: North HVAC");
+    expect(notice.subject).toBe("New lead: North HVAC (no plan)");
     expect(notice.text).toContain("Pat Owner");
     expect(notice.text).toContain("HVAC & home services");
+    expect(notice.text).toContain("/admin/leads");
   });
 
   it("lists newest first for admin and marks contacted", async () => {

@@ -1,7 +1,7 @@
 import { MarketingAuthLink } from "@/components/marketing/auth-link";
 import { btnPrimary } from "@/components/marketing/button-classes";
 import { WaveformMark } from "@/components/ui";
-import { ASSISTANT_NAME, MARKETING_EMAIL, MARKETING_LOCATION } from "@/lib/brand";
+import { ASSISTANT_NAME, COMPANY_TAGLINE, MARKETING_EMAIL, MARKETING_LOCATION } from "@/lib/brand";
 import { marketingPhoneDisplay, marketingTelHref } from "@/lib/marketing-phone";
 import Link from "next/link";
 
@@ -62,6 +62,9 @@ export function MarketingFooter({ email, phone }: { email: string; phone?: strin
             </span>
             <span className="font-extrabold text-[var(--ink)]">Alinstra</span>
           </div>
+          <p className="text-sm text-[var(--muted)]">
+            Alinstra Technologies LLC — {COMPANY_TAGLINE}.
+          </p>
           <p className="text-sm text-[var(--muted)]">
             Practical AI for small businesses, starting with the phone. {MARKETING_LOCATION}.
           </p>

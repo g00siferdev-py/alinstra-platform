@@ -1,6 +1,7 @@
 import { SignedInSignupCard } from "@/components/signed-in-signup-card";
 import { SignupForm } from "@/components/signup-form";
 import { SignupPlanSummary } from "@/components/signup-plan-summary";
+import { launchState } from "@/lib/brand";
 import { marketingMetadata } from "@/lib/marketing-seo";
 import { getSession } from "@/lib/session";
 import { publicPlans } from "@alinstra/db";
@@ -22,6 +23,10 @@ export default async function SignupPage({
   const query = await searchParams;
   const raw = Array.isArray(query.plan) ? query.plan[0] : query.plan;
   const code = (raw ?? "").trim().toLowerCase();
+
+  if (launchState() === "prelaunch") {
+    redirect(code ? `/start?plan=${encodeURIComponent(code)}` : "/start");
+  }
 
   if (!code || code === "enterprise") {
     redirect(code === "enterprise" ? "/start?plan=enterprise" : "/start");

@@ -5,16 +5,18 @@ export function marketingMetadata(input: {
   title: string;
   description: string;
   path: string;
+  ogDescription?: string;
 }): Metadata {
   const url = `${SITE_URL}${input.path === "/" ? "" : input.path}`;
   const title = input.title.includes("Alinstra") ? input.title : `${input.title} · Alinstra`;
+  const ogDescription = input.ogDescription ?? input.description;
   return {
     title,
     description: input.description,
     alternates: { canonical: url },
     openGraph: {
       title,
-      description: input.description,
+      description: ogDescription,
       url,
       siteName: "Alinstra",
       type: "website",

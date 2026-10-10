@@ -7,9 +7,16 @@ import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
-export default async function AdminLeadsPage() {
+export default async function AdminLeadsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ source?: string | string[] }>;
+}) {
   await requireAdmin();
-  const leads = await listLeads({ role: "admin" });
+  const query = await searchParams;
+  const rawSource = Array.isArray(query.source) ? query.source[0] : query.source;
+  const source = rawSource === "prelaunch" ? "prelaunch" : undefined;
+  const leads = await listLeads({ role: "admin" }, source ? { source } : undefined);
 
   return (
     <main className="grid gap-6">
@@ -17,9 +24,14 @@ export default async function AdminLeadsPage() {
         title="Leads"
         description="Newest first from the marketing start form."
         actions={
-          <Link href="/admin/clients/new">
-            <Button variant="secondary">Create client</Button>
-          </Link>
+          <div className="flex flex-wrap items-center gap-2">
+            <Link href={source === "prelaunch" ? "/admin/leads" : "/admin/leads?source=prelaunch"}>
+              <Button variant={source === "prelaunch" ? "primary" : "secondary"}>Prelaunch</Button>
+            </Link>
+            <Link href="/admin/clients/new">
+              <Button variant="secondary">Create client</Button>
+            </Link>
+          </div>
         }
       />
       {leads.length === 0 ? (
@@ -47,6 +59,7 @@ export default async function AdminLeadsPage() {
                         {lead.planInterest ? (
                           <Pill tone="info">Plan: {planInterestLabel(lead.planInterest)}</Pill>
                         ) : null}
+                        <Pill tone="neutral">Source: {lead.source}</Pill>
                       </div>
                       <p>
                         {lead.name} · {lead.phone} · {lead.email}

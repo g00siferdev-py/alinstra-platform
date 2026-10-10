@@ -42,7 +42,7 @@ Chips row: Made for any business that runs on the phone: HVAC · Veterinary · H
 Eyebrow: HOW IT WORKS — **Live in three simple steps.**
 1. **Tell us about your business.** Hours, services, who to transfer to, what to say when you're closed. Takes about twenty minutes.
    Mini chat: "What are your hours on Saturday?" / "9 to 1. Closed Sundays."
-2. **Forward your missed calls.** Keep your number. Your carrier sends the calls you can't pick up to Ava.
+2. **Forward your calls, or get a new number.** Keep the number you have and let your carrier send the calls you can't pick up to Ava. Or, if you're just starting out, we give you a new local number you can put on the truck and the business cards.
    Mini: Your number (423) 555-0100 → Ava answers
 3. **Get every message instantly.** Caller, callback number, and what they need, in your email the moment the call ends.
    Mini email: New message: Maria G. — AC stopped cooling · call back (423) 555-0198 · just now
@@ -129,7 +129,8 @@ Try Ava right now, or get set up in about twenty minutes.
 [Get started] [Call Ava: (888) 387-1525]
 
 ### Footer
-Alinstra — Practical AI for small businesses, starting with the phone. Morristown, Tennessee.
+Alinstra Technologies LLC — Empowering businesses with the power of AI.
+Practical AI for small businesses, starting with the phone. Morristown, Tennessee.
 Product: Pricing · Who it's for · Call Ava · Log in
 Company: About · hello@alinstra.com · Get started
 Legal: Privacy · Terms · AI disclosure
@@ -177,6 +178,9 @@ Front desk slammed, three on hold, the phone keeps ringing. Ava takes the refill
 
 ## ABOUT
 
+**Alinstra Technologies**
+Empowering businesses with the power of AI.
+
 **Alinstra Technologies** builds practical AI for small businesses, starting with the phone.
 We're based in Morristown, Tennessee. [Product] is our first product. It exists because every small business owner we know has the same story: the call that came in while they were under a sink, on a ladder, or with a patient, and the customer who went to the next name on the list.
 We don't cold call, we don't make AI robocalls, and we tell callers the truth when they ask if Ava is a person.
@@ -189,7 +193,7 @@ We don't cold call, we don't make AI robocalls, and we tell callers the truth wh
 **Get in touch.**
 Questions, Enterprise, or not sure which plan? Tell us about your business and we'll get back to you within one business day.
 Fields: business name, your name, phone, email, industry, roughly how many calls you miss a week.
-Plan CTAs on Home and `/pricing` go to `/signup?plan=<code>`. General "Get started" / "Ask about pricing" and Enterprise go to `/start` (Enterprise may include `?plan=enterprise`). When the visitor arrives with a plan chip (`/start?plan=…`), show "Plan: Solo" (etc.) above the form and save it on the lead.
+When `LAUNCH_STATE` is unset or `prelaunch`, plan CTAs on Home and `/pricing` go to `/start?plan=<code>` and `/signup` redirects to `/start`. When `LAUNCH_STATE=live`, plan CTAs go to `/signup?plan=<code>`. General "Get started" / "Ask about pricing" and Enterprise go to `/start` (Enterprise may include `?plan=enterprise`). When the visitor arrives with a plan chip (`/start?plan=…`), show "Plan: Solo" (etc.) above the form and save it on the lead.
 After submit: "Thanks. We'll call you within one business day to walk through setup, and you'll be live within 24 hours of that call."
 
 ---

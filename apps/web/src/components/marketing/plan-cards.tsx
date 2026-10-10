@@ -1,6 +1,6 @@
 import { btnPrimary, btnSecondary } from "@/components/marketing/button-classes";
 import { Pill } from "@/components/ui";
-import { FOUNDING_OFFER } from "@/lib/brand";
+import { FOUNDING_OFFER, planCtaHref } from "@/lib/brand";
 import {
   formatTypicalCallsLine,
   planChangesLine,
@@ -76,7 +76,7 @@ export function PlanCards({ plans }: { plans: PublicPlan[] }) {
                 )}
               </p>
               <Link
-                href={`/signup?plan=${plan.code}`}
+                href={planCtaHref(plan.code)}
                 className={`${recommended ? btnPrimary : btnSecondary} w-full justify-center`}
               >
                 {meta.ctaLabel}
