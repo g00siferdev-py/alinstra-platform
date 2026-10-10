@@ -23,7 +23,7 @@ Alinstra answers a client's phone calls with an AI receptionist. The sensitive m
 | Caller phone number (full) | `call_record.callerE164Cipher` | Yes | Same as transcript | Admin; owner; staff with `canViewCalls` (staff otherwise see the masked form) |
 | Raw webhook events | `call_record.rawEventsCipher` | Yes | Same as transcript | Admin only (raw view) |
 | Caller number (masked), duration, outcome, sentiment, cost, flags, recording status | `call_record.*` (plain) | No, by design (no full number, no content) | Duration, outcome, sentiment and cost are kept after the purge for reporting. Flags are cleared by the purge | Admin; owner; staff |
-| Messages left for the business: caller name, callback number, body | `client_message.callerNameCipher`, `callbackNumberCipher`, `bodyCipher` | Yes | **No automatic purge today.** Kept until the client is deleted. Decision needed (see section 8) | Admin; owner; staff |
+| Messages left for the business: caller name, callback number, body | `client_message.callerNameCipher`, `callbackNumberCipher`, `bodyCipher` | Yes | Client's `callRetentionDays` (default 90, range 7 to 365). The nightly `purge-calls` job deletes the row. Same 30-day archived-client rule as call content | Admin; owner; staff |
 | Callback number (masked, e.g. `(423) ***-0198`) | `client_message.callbackMasked` | No, by design | Same as the message | Admin; owner; staff |
 | Legacy plaintext message columns (`callerName`, `callbackNumber`, `body`) | `client_message` | **No.** Null for new rows; older rows stay plaintext until the encrypt backfill has run on that environment | Same as the message | Same |
 | Staff transfer numbers | `transfer_target.e164Cipher` (+ `e164Masked` for lists) | Yes (legacy `e164` is plaintext until the backfill runs) | Until the owner or admin removes it | Admin; owner (masked in lists); decrypted only to sync the agent and to place a transfer |
@@ -191,7 +191,7 @@ The controls above are covered by tests in the repo: tenant isolation (`packages
 
 ## 8. Open items (decisions for Daniel and counsel)
 
-1. **Messages have no retention.** Call content is purged; `client_message` rows (encrypted) are not. Decide whether messages follow `callRetentionDays`, get their own setting, or are kept until the client deletes them. State the answer to clients in the DPA.
+1. **Messages follow call retention.** `client_message` rows are deleted by the nightly purge once they are older than the client's `callRetentionDays` (default 90). State that in the DPA.
 2. **Message emails still reach Resend in plaintext.** The Redis job now carries only the message id; the worker decrypts before send. Resend and the recipient's mailbox still hold the text. Options: send a "you have a new message, open the portal" email with no body; or accept and disclose it.
 3. **Recordings and uploaded documents are not app-encrypted** in R2 (provider-managed encryption only). Encrypting objects before upload would remove that gap but changes playback and the worker; not scheduled.
 4. **Retell, Resend, Sentry and OpenRouter retention** must be confirmed against each vendor's current terms, and each vendor's DPA signed where one exists.

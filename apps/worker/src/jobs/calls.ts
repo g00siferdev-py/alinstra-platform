@@ -85,7 +85,13 @@ export async function runStoreRecording(retellCallId: string, deps: CallsDeps = 
  */
 export async function runPurgeCalls(deps: PurgeCallsDeps = callsDeps(), now = new Date()): Promise<PurgeReport> {
   const report = await purgeExpiredCalls({ deleteObject: (key) => deps.storage.delete(key) }, now);
-  log("info", "call purge finished", { clients: report.clients, purged: report.purged, recordingsDeleted: report.recordingsDeleted, failures: report.failures.length });
+  log("info", "call purge finished", {
+    clients: report.clients,
+    purged: report.purged,
+    recordingsDeleted: report.recordingsDeleted,
+    messagesPurged: report.messagesPurged,
+    failures: report.failures.length,
+  });
 
   // Read-access audit log (Phase S part 2): keep 400 days. A failure here must not block the requeue below.
   try {

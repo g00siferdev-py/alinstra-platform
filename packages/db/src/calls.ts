@@ -539,7 +539,13 @@ export async function recordingForPlayback(viewer: CallViewer, callId: string): 
 
 export type PurgeDeps = { deleteObject: (key: string) => Promise<void> };
 
-export type PurgeReport = { clients: number; purged: number; recordingsDeleted: number; failures: Array<{ callRecordId: string; error: string }> };
+export type PurgeReport = {
+  clients: number;
+  purged: number;
+  recordingsDeleted: number;
+  messagesPurged: number;
+  failures: Array<{ callRecordId: string; error: string }>;
+};
 
 function purgeCutoff(client: { callRetentionDays: number; archivedAt: Date | null; serviceEndsAt: Date | null }, now: Date): Date {
   const retention = new Date(now.getTime() - client.callRetentionDays * 86_400_000);
@@ -557,7 +563,7 @@ function purgeCutoff(client: { callRetentionDays: number; archivedAt: Date | nul
  */
 export async function purgeExpiredCalls(deps: PurgeDeps, now = new Date()): Promise<PurgeReport> {
   const clientRows = await prisma.client.findMany({ select: { id: true, name: true, callRetentionDays: true, archivedAt: true, serviceEndsAt: true } });
-  const report: PurgeReport = { clients: 0, purged: 0, recordingsDeleted: 0, failures: [] };
+  const report: PurgeReport = { clients: 0, purged: 0, recordingsDeleted: 0, messagesPurged: 0, failures: [] };
   for (const client of clientRows) {
     const cutoff = purgeCutoff(client, now);
     const due = await prisma.callRecord.findMany({
@@ -592,6 +598,10 @@ export async function purgeExpiredCalls(deps: PurgeDeps, now = new Date()): Prom
         report.failures.push({ callRecordId: call.id, error: error instanceof Error ? error.message : "purge failed" });
       }
     }
+    const removedMessages = await prisma.clientMessage.deleteMany({
+      where: { clientId: client.id, createdAt: { lte: cutoff } },
+    });
+    report.messagesPurged += removedMessages.count;
     report.clients += 1;
     report.purged += purgedHere;
     await prisma.$transaction(async (tx) => {

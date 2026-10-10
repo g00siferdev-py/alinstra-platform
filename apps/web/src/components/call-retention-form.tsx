@@ -33,6 +33,7 @@ export function CallRetentionForm({ days }: { days: number }) {
     >
       <Label htmlFor="call-retention-days">Call retention (days)</Label>
       <p className="text-xs text-[var(--muted)]">{CALL_RETENTION_HINT}</p>
+      <p className="text-xs text-[var(--muted)]">Messages are kept {days} days.</p>
       <div className="flex flex-wrap items-center gap-2">
         <Input
           id="call-retention-days"
