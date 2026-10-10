@@ -143,7 +143,7 @@ describe("production secret guard", () => {
     expect(getEnv().MARKETING_PHONE).toBe("");
   });
 
-  it("refuses a production cutover env that is still on Stripe test mode", () => {
+  it("refuses a production cutover env that is missing required settings", () => {
     const base: ProductionEnvCheck = {
       APP_ENV: "production",
       STRIPE_SECRET_KEY: "sk_live_ok",
@@ -154,6 +154,7 @@ describe("production secret guard", () => {
       APP_URL: "https://alinstra.com",
       TEXT_API_KEY: "or-live",
       MARKETING_PHONE: "+18883871525",
+      LAUNCH_STATE: "",
     };
     const reported: Error[] = [];
     expect(() => assertProductionEnv(base, { report: (error) => reported.push(error) })).not.toThrow();
@@ -163,9 +164,9 @@ describe("production secret guard", () => {
       assertProductionEnv({ ...base, STRIPE_SECRET_KEY: "sk_test_local", APP_ENV: "staging" }),
     ).not.toThrow();
 
-    expect(() => assertProductionEnv({ ...base, STRIPE_SECRET_KEY: "sk_test_local" }, { report: (error) => reported.push(error) })).toThrow(
-      /STRIPE_SECRET_KEY/,
-    );
+    expect(() =>
+      assertProductionEnv({ ...base, STRIPE_SECRET_KEY: "" }, { report: (error) => reported.push(error) }),
+    ).toThrow(/STRIPE_SECRET_KEY must be set/);
     expect(reported[0]?.message).toMatch(/Refusing to start/);
 
     expect(() => assertProductionEnv({ ...base, APP_URL: "https://staging.alinstra.com" })).toThrow(/APP_URL/);
@@ -178,6 +179,41 @@ describe("production secret guard", () => {
         { keyEnv: { ENCRYPTION_KEY: realKey } },
       ),
     ).toThrow(/ENCRYPTION_ACTIVE_KEY/);
+  });
+
+  it("requires live Stripe keys only when LAUNCH_STATE is live", () => {
+    const base: ProductionEnvCheck = {
+      APP_ENV: "production",
+      STRIPE_SECRET_KEY: "sk_test_local",
+      STRIPE_WEBHOOK_SECRET: "whsec_test",
+      BACKUP_PASSPHRASE: "passphrase-at-least",
+      ENCRYPTION_KEY: realKey,
+      ENCRYPTION_ACTIVE_KEY: "1",
+      APP_URL: "https://alinstra.com",
+      TEXT_API_KEY: "or-live",
+      MARKETING_PHONE: "+18883871525",
+      LAUNCH_STATE: "",
+    };
+    expect(() => assertProductionEnv(base)).not.toThrow();
+    expect(() => assertProductionEnv({ ...base, LAUNCH_STATE: "live" })).toThrow(
+      /LAUNCH_STATE=live requires a live STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET/,
+    );
+    expect(() =>
+      assertProductionEnv({
+        ...base,
+        LAUNCH_STATE: "live",
+        STRIPE_SECRET_KEY: "sk_live_ok",
+        STRIPE_WEBHOOK_SECRET: "whsec_live",
+      }),
+    ).not.toThrow();
+    expect(() =>
+      assertProductionEnv({
+        ...base,
+        LAUNCH_STATE: "live",
+        STRIPE_SECRET_KEY: "sk_live_ok",
+        STRIPE_WEBHOOK_SECRET: "",
+      }),
+    ).toThrow(/LAUNCH_STATE=live requires a live STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET/);
   });
 
   it("defaults text interview env and accepts overrides", () => {

@@ -51,8 +51,8 @@ Set `APP_ENV=production` on both services. Set `PG_MAJOR` to the Postgres major 
 | `BACKUP_PASSPHRASE` | no | yes | **New**. Keep your offline copy. See `docs/RESTORE.md` |
 | `BACKUP_S3_BUCKET` | no | optional | Blank uses `S3_BUCKET` under `backups/` |
 | `PG_MAJOR` | no | yes | The Postgres major version from the Railway card |
-| `STRIPE_SECRET_KEY` | yes | yes | Stripe **live** dashboard → Developers → API keys → `sk_live_…`. Not `sk_test_`. |
-| `STRIPE_WEBHOOK_SECRET` | yes | no | New live endpoint (section 4) |
+| `STRIPE_SECRET_KEY` | yes | yes | Test-mode `sk_test_…` is fine until section 9. Must be `sk_live_…` before `LAUNCH_STATE=live`. |
+| `STRIPE_WEBHOOK_SECRET` | yes | no | Test-mode endpoint secret for now (point a test-mode webhook at `https://alinstra.com/api/stripe/webhook`); replaced by the live endpoint secret in section 4. |
 | `RETELL_API_KEY` | yes | yes | Same Retell workspace as staging |
 | `DANIEL_TRANSFER_NUMBER` | yes | yes | E.164 transfer number already used for client zero |
 | `RETELL_DEFAULT_AREA_CODE` | yes | yes | Copy from staging if you use a local default |
@@ -65,7 +65,7 @@ Set `APP_ENV=production` on both services. Set `PG_MAJOR` to the Postgres major 
 | `TEXT_BUDGET_INPUT_TOKENS` / `TEXT_BUDGET_OUTPUT_TOKENS` | yes | no | Optional. Defaults are 60000 and 12000 |
 | `LAUNCH_STATE` | unset | unset | Leave blank until section 9 |
 
-`assertProductionEnv` refuses to start when `APP_ENV=production` if the Stripe key is `sk_test_`, the webhook secret is missing, `APP_URL` is not `https://alinstra.com` or `https://www.alinstra.com`, `TEXT_API_KEY` or `MARKETING_PHONE` is empty, or the active encryption key is missing. The worker also refuses to start without `BACKUP_PASSPHRASE`.
+`assertProductionEnv` refuses to start when `APP_ENV=production` if `STRIPE_SECRET_KEY` is empty, `APP_URL` is not `https://alinstra.com` or `https://www.alinstra.com`, `TEXT_API_KEY` or `MARKETING_PHONE` is empty, or the active encryption key is missing. The Stripe-live requirement applies when `LAUNCH_STATE=live`: the key must be `sk_live_…` and `STRIPE_WEBHOOK_SECRET` must be set. The worker also refuses to start without `BACKUP_PASSPHRASE`.
 
 ## 3. First deploy
 
@@ -79,7 +79,7 @@ Set `APP_ENV=production` on both services. Set `PG_MAJOR` to the Postgres major 
 
 ## 4. Stripe live
 
-Do this only after the LLC bank account is connected and the accountant has signed off on tax registration. Until then leave the live keys unset only if you are not booting `APP_ENV=production` yet — production will not start on `sk_test_`. The site keeps sending Get started to `/start` until section 9.
+Do this only after the LLC bank account is connected and the accountant has signed off on tax registration. Production boots on test-mode Stripe keys while `LAUNCH_STATE` is unset. Nothing can reach Checkout in prelaunch. The site keeps sending Get started to `/start` until section 9.
 
 In the Stripe dashboard, switch to **live** mode and repeat `docs/BILLING.md` §1:
 
@@ -125,6 +125,6 @@ Use the same Retell workspace. Client zero's agent and number already exist ther
 
 ## 9. Going live later
 
-1. Stripe live is verified (section 4, including a real webhook delivery).
+1. Stripe live is verified (section 4, including a real webhook delivery). Put `sk_live_…` and the live webhook secret on the services first; the guard refuses `LAUNCH_STATE=live` on test keys.
 2. Set `LAUNCH_STATE=live` on the production `web` service. Marketing pages read this on each request, so you do not need a new build. Redeploy only if Railway does not restart the process when the variable changes.
 3. On the real site, confirm plan buttons go to `/signup?plan=…`, `/signup` no longer redirects to `/start`, and the pages still do not say "coming soon", "launching", "reserve", "text", or "most popular".

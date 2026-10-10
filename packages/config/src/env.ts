@@ -41,6 +41,8 @@ const envSchema = z.object({
   RETELL_API_KEY: z.string().default(""),
   STRIPE_SECRET_KEY: z.string().default(""),
   STRIPE_WEBHOOK_SECRET: z.string().default(""),
+  /** `live` sells through Checkout. Unset or anything else is prelaunch. */
+  LAUNCH_STATE: z.string().default(""),
   DANIEL_TRANSFER_NUMBER: z.string().default(""),
   RETELL_DEFAULT_AREA_CODE: z.string().default(""),
   RETELL_DEFAULT_TOLL_FREE: z.string().default("false"),
@@ -109,6 +111,7 @@ export type ProductionEnvCheck = {
   APP_URL: string;
   TEXT_API_KEY: string;
   MARKETING_PHONE: string;
+  LAUNCH_STATE: string;
 };
 
 function activeEncryptionKeyMissing(
@@ -122,9 +125,10 @@ function activeEncryptionKeyMissing(
 }
 
 /**
- * Refuses to boot a production deployment that still has test-mode or missing
- * cutover settings. Staging and local return immediately. Worker also requires
- * BACKUP_PASSPHRASE. Logs and reports before throwing.
+ * Refuses to boot a production deployment that is missing cutover settings.
+ * Live Stripe keys are required only when LAUNCH_STATE=live. Staging and local
+ * return immediately. Worker also requires BACKUP_PASSPHRASE. Logs and reports
+ * before throwing.
  */
 export function assertProductionEnv(
   env: ProductionEnvCheck,
@@ -137,8 +141,12 @@ export function assertProductionEnv(
   if (env.APP_ENV !== "production") return;
   if (process.env.NEXT_PHASE === "phase-production-build") return;
   const problems: string[] = [];
-  if (env.STRIPE_SECRET_KEY.startsWith("sk_test_") || !env.STRIPE_WEBHOOK_SECRET) {
-    problems.push("STRIPE_SECRET_KEY must be a live key and STRIPE_WEBHOOK_SECRET must be set");
+  if (env.LAUNCH_STATE === "live") {
+    if (!env.STRIPE_SECRET_KEY.startsWith("sk_live_") || !env.STRIPE_WEBHOOK_SECRET) {
+      problems.push("LAUNCH_STATE=live requires a live STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET");
+    }
+  } else if (!env.STRIPE_SECRET_KEY) {
+    problems.push("STRIPE_SECRET_KEY must be set");
   }
   if (options?.worker && !env.BACKUP_PASSPHRASE) {
     problems.push("BACKUP_PASSPHRASE must be set on the worker");
