@@ -8,6 +8,13 @@ export async function register(): Promise<void> {
     setDecryptFailureReporter((fields) => {
       Sentry.captureMessage("cipher.decrypt_failed", { level: "error", tags: { area: "cipher" }, extra: fields });
     });
+    const { assertProductionEnv, getEnv } = await import("@alinstra/config");
+    const env = getEnv();
+    assertProductionEnv(env, {
+      report: (error) => {
+        Sentry.captureException(error);
+      },
+    });
     log("info", "encryption.keyring", { keys: configuredKeyIds().join(","), active: activeKeyId() });
   }
   if (process.env.NEXT_RUNTIME === "edge") {

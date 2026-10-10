@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { afterEach, describe, expect, it } from "vitest";
-import { getEnv, resetEnvCache } from "./env";
+import { assertProductionEnv, getEnv, resetEnvCache, type ProductionEnvCheck } from "./env";
 
 const snapshot = { ...process.env };
 
@@ -141,6 +141,43 @@ describe("production secret guard", () => {
       MARKETING_PHONE: undefined,
     });
     expect(getEnv().MARKETING_PHONE).toBe("");
+  });
+
+  it("refuses a production cutover env that is still on Stripe test mode", () => {
+    const base: ProductionEnvCheck = {
+      APP_ENV: "production",
+      STRIPE_SECRET_KEY: "sk_live_ok",
+      STRIPE_WEBHOOK_SECRET: "whsec_live",
+      BACKUP_PASSPHRASE: "passphrase-at-least",
+      ENCRYPTION_KEY: realKey,
+      ENCRYPTION_ACTIVE_KEY: "1",
+      APP_URL: "https://alinstra.com",
+      TEXT_API_KEY: "or-live",
+      MARKETING_PHONE: "+18883871525",
+    };
+    const reported: Error[] = [];
+    expect(() => assertProductionEnv(base, { report: (error) => reported.push(error) })).not.toThrow();
+    expect(reported).toHaveLength(0);
+
+    expect(() =>
+      assertProductionEnv({ ...base, STRIPE_SECRET_KEY: "sk_test_local", APP_ENV: "staging" }),
+    ).not.toThrow();
+
+    expect(() => assertProductionEnv({ ...base, STRIPE_SECRET_KEY: "sk_test_local" }, { report: (error) => reported.push(error) })).toThrow(
+      /STRIPE_SECRET_KEY/,
+    );
+    expect(reported[0]?.message).toMatch(/Refusing to start/);
+
+    expect(() => assertProductionEnv({ ...base, APP_URL: "https://staging.alinstra.com" })).toThrow(/APP_URL/);
+    expect(() => assertProductionEnv({ ...base, TEXT_API_KEY: "", MARKETING_PHONE: "" })).toThrow(/TEXT_API_KEY/);
+    expect(() => assertProductionEnv(base, { worker: true })).not.toThrow();
+    expect(() => assertProductionEnv({ ...base, BACKUP_PASSPHRASE: "" }, { worker: true })).toThrow(/BACKUP_PASSPHRASE/);
+    expect(() =>
+      assertProductionEnv(
+        { ...base, ENCRYPTION_ACTIVE_KEY: "2" },
+        { keyEnv: { ENCRYPTION_KEY: realKey } },
+      ),
+    ).toThrow(/ENCRYPTION_ACTIVE_KEY/);
   });
 
   it("defaults text interview env and accepts overrides", () => {

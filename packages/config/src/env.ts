@@ -1,5 +1,6 @@
 import { loadKeyring } from "@alinstra/crypto";
 import { z } from "zod";
+import { log } from "./log";
 
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
@@ -94,6 +95,69 @@ function assertProductionSecrets(env: Env): void {
   ) {
     throw new Error("Refusing to start: production file storage must be a private S3 bucket");
   }
+}
+
+const PRODUCTION_APP_URLS = new Set(["https://alinstra.com", "https://www.alinstra.com"]);
+
+export type ProductionEnvCheck = {
+  APP_ENV: string;
+  STRIPE_SECRET_KEY: string;
+  STRIPE_WEBHOOK_SECRET: string;
+  BACKUP_PASSPHRASE: string;
+  ENCRYPTION_KEY: string;
+  ENCRYPTION_ACTIVE_KEY: string;
+  APP_URL: string;
+  TEXT_API_KEY: string;
+  MARKETING_PHONE: string;
+};
+
+function activeEncryptionKeyMissing(
+  env: ProductionEnvCheck,
+  keyEnv: Record<string, string | undefined>,
+): boolean {
+  if (!env.ENCRYPTION_KEY) return true;
+  const active = (env.ENCRYPTION_ACTIVE_KEY || "1").replace(/^k/, "");
+  if (active === "1") return false;
+  return !keyEnv[`ENCRYPTION_KEY_V${active}`];
+}
+
+/**
+ * Refuses to boot a production deployment that still has test-mode or missing
+ * cutover settings. Staging and local return immediately. Worker also requires
+ * BACKUP_PASSPHRASE. Logs and reports before throwing.
+ */
+export function assertProductionEnv(
+  env: ProductionEnvCheck,
+  options?: {
+    worker?: boolean;
+    report?: (error: Error) => void;
+    keyEnv?: Record<string, string | undefined>;
+  },
+): void {
+  if (env.APP_ENV !== "production") return;
+  if (process.env.NEXT_PHASE === "phase-production-build") return;
+  const problems: string[] = [];
+  if (env.STRIPE_SECRET_KEY.startsWith("sk_test_") || !env.STRIPE_WEBHOOK_SECRET) {
+    problems.push("STRIPE_SECRET_KEY must be a live key and STRIPE_WEBHOOK_SECRET must be set");
+  }
+  if (options?.worker && !env.BACKUP_PASSPHRASE) {
+    problems.push("BACKUP_PASSPHRASE must be set on the worker");
+  }
+  const keyEnv = options?.keyEnv ?? process.env;
+  if (activeEncryptionKeyMissing(env, keyEnv)) {
+    problems.push("ENCRYPTION_KEY must be set and ENCRYPTION_ACTIVE_KEY must point at a configured key");
+  }
+  const appUrl = env.APP_URL.replace(/\/$/, "");
+  if (!PRODUCTION_APP_URLS.has(appUrl)) {
+    problems.push("APP_URL must be https://alinstra.com or https://www.alinstra.com");
+  }
+  if (!env.TEXT_API_KEY) problems.push("TEXT_API_KEY must be set");
+  if (!env.MARKETING_PHONE) problems.push("MARKETING_PHONE must be set");
+  if (problems.length === 0) return;
+  const error = new Error(`Refusing to start: ${problems.join("; ")}`);
+  log("error", "production.env.refused", { message: error.message });
+  options?.report?.(error);
+  throw error;
 }
 
 let cached: Env | undefined;

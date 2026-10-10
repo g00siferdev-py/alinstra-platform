@@ -1,4 +1,4 @@
-import { getEnv, log, scrubSentryEvent, type SentryLikeEvent } from "@alinstra/config";
+import { assertProductionEnv, getEnv, log, scrubSentryEvent, type SentryLikeEvent } from "@alinstra/config";
 import { activeKeyId, configuredKeyIds } from "@alinstra/crypto";
 import { sendEmail } from "@alinstra/email";
 import { EXTRACT_TIMEOUT_MS, setDecryptFailureReporter } from "@alinstra/db";
@@ -53,6 +53,13 @@ Sentry.init({
 
 setDecryptFailureReporter((fields) => {
   Sentry.captureMessage("cipher.decrypt_failed", { level: "error", tags: { area: "cipher" }, extra: fields });
+});
+
+assertProductionEnv(env, {
+  worker: true,
+  report: (error) => {
+    Sentry.captureException(error);
+  },
 });
 
 log("info", "encryption.keyring", { keys: configuredKeyIds().join(","), active: activeKeyId() });
