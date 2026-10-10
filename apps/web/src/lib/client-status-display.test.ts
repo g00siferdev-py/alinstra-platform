@@ -9,7 +9,14 @@ describe("clientStatusDisplay", () => {
         billingStatus: "paid",
         wizardSubmittedAt: new Date("2026-10-01"),
       }),
-    ).toEqual({ label: "Awaiting your review", awaitingReview: true });
+    ).toEqual({ label: "Held for review", awaitingReview: true });
+    expect(
+      clientStatusDisplay({
+        status: "held_for_review",
+        billingStatus: "paid",
+        wizardSubmittedAt: new Date("2026-10-01"),
+      }),
+    ).toEqual({ label: "Held for review", awaitingReview: true });
     expect(
       clientStatusDisplay({
         status: "lead",

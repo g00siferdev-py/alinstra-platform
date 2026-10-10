@@ -112,6 +112,8 @@ Full caller numbers, transcripts, message text and transfer numbers are not writ
 
 Encrypted nightly dumps, 30 days, in R2 (section 2.2). Restore steps and drill: [RESTORE.md](./RESTORE.md). The Services page shows the last successful backup and turns red after 36 hours. Backups hold ciphertext columns as ciphertext; restoring needs the same `ENCRYPTION_KEY*` values as the app that wrote them.
 
+Automatic go-live (when the admin setting is on) provisions a paid client as the audit actor `system:auto-go-live`. The content screen sends only the business name, description, services, and FAQ answers to the configured text model. A model error, timeout, or unparseable reply holds the client; the owner is not shown the reason. Approving, declining, pausing, and resuming are written to `change_log`.
+
 ## 5. Breach runbook
 
 A breach means personal data was, or may have been, accessed, copied, altered or lost by someone who should not have it: a leaked key or credential, a compromised admin or client account, a misdelivered email, a vendor incident, a stolen laptop, a bug that showed one client another's data.

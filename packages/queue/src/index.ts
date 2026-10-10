@@ -34,6 +34,15 @@ export const provisionClient = z.object({
   clientId: z.string().min(1),
 });
 
+export const autoGoLive = z.object({
+  clientId: z.string().min(1),
+});
+
+export const approveAutoGoLiveJob = z.object({
+  clientId: z.string().min(1),
+  actorId: z.string().min(1),
+});
+
 export const sendAccountEmail = z.object({
   to: z.string().email(),
   subject: z.string().min(1).max(200),
@@ -61,6 +70,8 @@ export type SendSignInNotice = z.infer<typeof sendSignInNotice>;
 
 export type SyncAgent = z.infer<typeof syncAgent>;
 export type ProvisionClient = z.infer<typeof provisionClient>;
+export type AutoGoLive = z.infer<typeof autoGoLive>;
+export type ApproveAutoGoLiveJob = z.infer<typeof approveAutoGoLiveJob>;
 export type SendAccountEmail = z.infer<typeof sendAccountEmail>;
 export type SendMessageEmail = z.infer<typeof sendMessageEmail>;
 
@@ -211,6 +222,31 @@ export async function enqueueSyncAgent(data: SyncAgent): Promise<void> {
   } catch (error) {
     if (!alreadyQueued(error)) throw error;
   }
+}
+
+export async function enqueueAutoGoLive(data: AutoGoLive): Promise<void> {
+  const payload = autoGoLive.parse(data);
+  try {
+    await provisionJobs().add("auto-go-live", payload, {
+      jobId: `auto-go-live-${payload.clientId}`,
+      attempts: 3,
+      backoff: { type: "exponential", delay: 2000 },
+      removeOnComplete: true,
+      removeOnFail: 50,
+    });
+  } catch (error) {
+    if (!alreadyQueued(error)) throw error;
+  }
+}
+
+export async function enqueueApproveAutoGoLive(data: ApproveAutoGoLiveJob): Promise<void> {
+  const payload = approveAutoGoLiveJob.parse(data);
+  await provisionJobs().add("approve-auto-go-live", payload, {
+    attempts: 3,
+    backoff: { type: "exponential", delay: 2000 },
+    removeOnComplete: true,
+    removeOnFail: 50,
+  });
 }
 
 export async function enqueueProvisionClient(data: ProvisionClient): Promise<void> {

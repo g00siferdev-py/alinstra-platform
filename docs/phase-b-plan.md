@@ -29,7 +29,7 @@ Phase B: self-serve signup, Stripe billing, usage metering, and reports
   - If the payment is still failed after 7 days, Ava **pauses** until it's paid.
   - Payment recovered → resume automatically.
 - **Stripe Tax on:** automatic tax in Checkout, billing address collected, prices tax-exclusive.
-- **Founding offer:** setup fee waived on Starter, Professional and Premium for the first ten paying businesses (`FOUNDING_OFFER` in `brand.ts`). Solo always pays its $99 setup.
+- **Founding offer:** setup fee waived on Starter, Professional and Premium for the first ten paying businesses (`FOUNDING_OFFER` in `brand.ts`). Solo pays its own setup (now $49; this plan originally said $99).
 - **Internal clients** (`client.internal`, e.g. Alinstra itself) are never billed or metered.
 
 ## Ground rules

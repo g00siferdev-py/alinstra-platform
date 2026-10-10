@@ -6,17 +6,37 @@ import { clientCanBeRemoved, clients, plans } from "@alinstra/db";
 import { requireAdmin } from "@/lib/session";
 import Link from "next/link";
 
-export default async function ClientsPage() {
+export default async function ClientsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ view?: string | string[] }>;
+}) {
   await requireAdmin();
+  const query = await searchParams;
+  const rawView = Array.isArray(query.view) ? query.view[0] : query.view;
+  const view = rawView === "held" || rawView === "auto" ? rawView : undefined;
   const [rows, planRows] = await Promise.all([clients({ role: "admin" }).list(), plans({ role: "admin" }).list()]);
   const planName = new Map(planRows.map((plan) => [plan.id, plan.name]));
-  const sorted = [...rows].sort((a, b) => clientStatusSortRank(a) - clientStatusSortRank(b));
+  const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const sorted = [...rows]
+    .filter((client) => {
+      if (view === "held") return client.status === "held_for_review" || clientStatusDisplay(client).awaitingReview;
+      if (view === "auto") return Boolean(client.autoGoLiveAt && client.autoGoLiveAt.getTime() >= weekAgo);
+      return true;
+    })
+    .sort((a, b) => clientStatusSortRank(a) - clientStatusSortRank(b));
   return (
     <main className="grid gap-6">
       <PageHeader
         title="Clients"
         actions={
           <>
+            <Link href={view === "held" ? "/admin/clients" : "/admin/clients?view=held"}>
+              <Button variant={view === "held" ? "primary" : "secondary"}>Held for review</Button>
+            </Link>
+            <Link href={view === "auto" ? "/admin/clients" : "/admin/clients?view=auto"}>
+              <Button variant={view === "auto" ? "primary" : "secondary"}>Auto go-live (last 7 days)</Button>
+            </Link>
             <CreateClientZeroButton />
             <Link href="/admin/clients/new">
               <Button>Add client</Button>
@@ -42,7 +62,7 @@ export default async function ClientsPage() {
                 </p>
                 {statusDisplay.awaitingReview ? (
                   <Pill tone="warning" className="mt-2">
-                    Awaiting your review
+                    Held for review
                   </Pill>
                 ) : null}
                 {client.wizardSubmittedAt && !statusDisplay.awaitingReview ? (

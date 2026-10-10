@@ -118,6 +118,8 @@ Run sync in **test** after deploy, and again in **live** after you switch keys.
 
 No application code change.
 
+When Auto go-live is on, a paid owner who submits the setup interview is provisioned by the worker as `system:auto-go-live` if every check passes, including a live-mode Stripe payment. The content screen sends the business name, description, services, and FAQ answers to the same text model as the interview and holds the client if the model says no, errors, times out, or returns something that is not the expected JSON. Test-mode payments never buy a number unless `AUTO_GO_LIVE_ALLOW_TEST=1`, which production refuses.
+
 ---
 
 ## 4. How overage appears on invoices

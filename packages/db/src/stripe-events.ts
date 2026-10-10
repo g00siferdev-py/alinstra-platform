@@ -56,7 +56,7 @@ export async function inboundCallPayload(toNumber: string, now = new Date()): Pr
   const client = await prisma.client.findFirst({ where: { phoneE164: toNumber, archivedAt: null } });
   if (!client) return { dynamic_variables: { office_open: "no", allowed_targets: "" } };
 
-  if (client.billingStatus === "paused") {
+  if (client.billingStatus === "paused" || client.adminPausedAt) {
     return {
       dynamic_variables: { office_open: "no", allowed_targets: "" },
       agent_override: {
@@ -226,6 +226,7 @@ export async function applyStripeEvent(
             paidAt: client.paidAt ?? now,
             pastDueSince: null,
             stripeSubscriptionId: subscriptionId ?? client.stripeSubscriptionId,
+            stripeLivemode: typeof object.livemode === "boolean" ? object.livemode : client.stripeLivemode,
             status: live ? "live" : client.status,
             liveAt: live ? client.liveAt ?? now : client.liveAt,
           },

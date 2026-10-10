@@ -155,6 +155,7 @@ describe("production secret guard", () => {
       TEXT_API_KEY: "or-live",
       MARKETING_PHONE: "+18883871525",
       LAUNCH_STATE: "",
+      AUTO_GO_LIVE_ALLOW_TEST: "",
     };
     const reported: Error[] = [];
     expect(() => assertProductionEnv(base, { report: (error) => reported.push(error) })).not.toThrow();
@@ -193,8 +194,10 @@ describe("production secret guard", () => {
       TEXT_API_KEY: "or-live",
       MARKETING_PHONE: "+18883871525",
       LAUNCH_STATE: "",
+      AUTO_GO_LIVE_ALLOW_TEST: "",
     };
     expect(() => assertProductionEnv(base)).not.toThrow();
+    expect(() => assertProductionEnv({ ...base, AUTO_GO_LIVE_ALLOW_TEST: "1" })).toThrow(/AUTO_GO_LIVE_ALLOW_TEST/);
     expect(() => assertProductionEnv({ ...base, LAUNCH_STATE: "live" })).toThrow(
       /LAUNCH_STATE=live requires a live STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET/,
     );

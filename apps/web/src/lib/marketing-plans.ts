@@ -1,5 +1,5 @@
 import { ASSISTANT_NAME } from "@/lib/brand";
-import { formatPlanCents, type PublicPlan } from "@alinstra/db";
+import { formatOverageCents, type PublicPlan } from "@alinstra/db";
 
 export type PlanMarketing = {
   tagline: string;
@@ -92,7 +92,7 @@ export function planOverageLine(
   plan: Pick<PublicPlan, "overagePerMinuteCents" | "includedMinutes">,
   allPlans: Array<Pick<PublicPlan, "overagePerMinuteCents">>,
 ): string {
-  const rate = `${formatPlanCents(plan.overagePerMinuteCents)} a minute after ${plan.includedMinutes.toLocaleString("en-US")}`;
+  const rate = `${formatOverageCents(plan.overagePerMinuteCents)} a minute after ${plan.includedMinutes.toLocaleString("en-US")}`;
   if (allPlans.length <= 1) return rate;
   const lowest = Math.min(...allPlans.map((row) => row.overagePerMinuteCents));
   const isStrictLowest =

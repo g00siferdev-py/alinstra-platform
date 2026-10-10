@@ -5,8 +5,11 @@ export function clientStatusDisplay(client: {
   wizardSubmittedAt: Date | string | null;
 }): { label: string; awaitingReview: boolean } {
   const submitted = Boolean(client.wizardSubmittedAt);
+  if (client.status === "held_for_review") {
+    return { label: "Held for review", awaitingReview: true };
+  }
   if (client.status === "lead" && client.billingStatus === "paid" && submitted) {
-    return { label: "Awaiting your review", awaitingReview: true };
+    return { label: "Held for review", awaitingReview: true };
   }
   if (client.status === "lead" && client.billingStatus === "paid" && !submitted) {
     return { label: "Paid · setting up", awaitingReview: false };

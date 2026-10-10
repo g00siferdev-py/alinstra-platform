@@ -1,7 +1,8 @@
 import { ServiceCheck } from "@/components/service-check";
 import { Card, PageHeader, Pill } from "@/components/ui";
 import { getEnv, type Env } from "@alinstra/config";
-import { getBackupSnapshot } from "@alinstra/db";
+import { autoGoLiveEnabled, getBackupSnapshot } from "@alinstra/db";
+import { AutoGoLiveSetting } from "@/components/auto-go-live-controls";
 import { BackupsCard } from "./backups-card";
 import { requireAdmin } from "@/lib/session";
 import Link from "next/link";
@@ -84,6 +85,7 @@ export default async function ServicesPage() {
   await requireAdmin();
   const env = getEnv();
   const backups = await getBackupSnapshot();
+  const autoGoLive = await autoGoLiveEnabled();
   return (
     <main className="grid gap-6">
       <Link className="text-sm text-[var(--muted)]" href="/home">
@@ -93,6 +95,9 @@ export default async function ServicesPage() {
         title="Services"
         description="Where each outside service lives and whether this deployment has its keys. Values are never shown here; change them in Railway."
       />
+      <Card>
+        <AutoGoLiveSetting enabled={autoGoLive} />
+      </Card>
       <BackupsCard snapshot={backups} />
       {SERVICES.map((service) => (
         <Card key={service.name} className="grid gap-3">

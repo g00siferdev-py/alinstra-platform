@@ -185,6 +185,14 @@ model Client {
   agentSyncError                  String?
   syncedConfigId                  String?
   liveAt                          DateTime?
+  /// True when the paid Checkout or invoice was Stripe live mode. Null until a payment event records it.
+  stripeLivemode                  Boolean?
+  /// Last automatic go-live decision: checks, pass/hold, and reasons. Null until a job runs.
+  goLiveReview                    Json?
+  /// Set when auto go-live provisioning succeeds. Used for the daily cap and the 7-day admin filter.
+  autoGoLiveAt                    DateTime?
+  /// Admin pause (same caller experience as a billing pause). Null means not paused by an admin.
+  adminPausedAt                   DateTime?
   /// Days a call's transcript, recording, and caller number are kept before the nightly purge. 7–365.
   callRetentionDays               Int       @default(90)
   /// Owner monthly report email on the 1st (default on). Counts only; no caller content.
@@ -214,6 +222,7 @@ model Client {
   @@index([status])
   @@index([archivedAt])
   @@index([billingStatus, pastDueSince])
+  @@index([autoGoLiveAt])
   @@map("client")
 }
 

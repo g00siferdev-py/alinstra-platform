@@ -176,7 +176,7 @@ describe("Phase B Part 2 checkout and self-serve", () => {
 
     const overview = await adminOverview(admin);
     const todo = overview.todos.find((item) => item.kind === "self_serve_review");
-    expect(todo?.title).toBe("New self-serve signup awaiting review");
+    expect(todo?.title).toBe("Held for review");
     expect(todo?.detail).toContain("Awaiting Review LLC");
   });
 

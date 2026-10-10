@@ -43,6 +43,10 @@ const envSchema = z.object({
   STRIPE_WEBHOOK_SECRET: z.string().default(""),
   /** `live` sells through Checkout. Unset or anything else is prelaunch. */
   LAUNCH_STATE: z.string().default(""),
+  /** Rolling 24h cap on automatic go-lives. Default 15. */
+  AUTO_GO_LIVE_DAILY_CAP: z.coerce.number().int().positive().default(15),
+  /** Set to 1 only outside production to allow auto go-live on Stripe test-mode payments. */
+  AUTO_GO_LIVE_ALLOW_TEST: z.string().default(""),
   DANIEL_TRANSFER_NUMBER: z.string().default(""),
   RETELL_DEFAULT_AREA_CODE: z.string().default(""),
   RETELL_DEFAULT_TOLL_FREE: z.string().default("false"),
@@ -112,6 +116,7 @@ export type ProductionEnvCheck = {
   TEXT_API_KEY: string;
   MARKETING_PHONE: string;
   LAUNCH_STATE: string;
+  AUTO_GO_LIVE_ALLOW_TEST: string;
 };
 
 function activeEncryptionKeyMissing(
@@ -161,6 +166,9 @@ export function assertProductionEnv(
   }
   if (!env.TEXT_API_KEY) problems.push("TEXT_API_KEY must be set");
   if (!env.MARKETING_PHONE) problems.push("MARKETING_PHONE must be set");
+  if (env.AUTO_GO_LIVE_ALLOW_TEST === "1") {
+    problems.push("AUTO_GO_LIVE_ALLOW_TEST must not be set in production");
+  }
   if (problems.length === 0) return;
   const error = new Error(`Refusing to start: ${problems.join("; ")}`);
   log("error", "production.env.refused", { message: error.message });

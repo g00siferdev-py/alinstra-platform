@@ -5,7 +5,7 @@
 ## 0. Why
 
 On Oct 6, Daniel ran the full self-serve flow on staging with Stripe test mode. What worked:
-- signup → Checkout → $99 + $99 setup + Tennessee tax (Knoxville 9.25%: $18.32, total **$216.32**) → `paid` through the webhook;
+- signup → Checkout → the then-current Solo price of $99 + $99 setup + Tennessee tax (Knoxville 9.25%: $18.32, total **$216.32**) → `paid` through the webhook; Solo's standard price is now $49/month + $49 setup.
 - the setup chat → submit → admin review;
 - all webhook deliveries returned 200.
 
@@ -63,10 +63,10 @@ These things need fixing:
 
 - Hide **Send portal invite** when the client has a `client_owner` user (a self-serve signup). Keep it for admin-created clients.
 - **Display-only** status label, everywhere we show client status (the client page header and the `/admin/clients` list). Don't change the DB enum.
-  - `status === "lead"`, `billingStatus === "paid"` and `wizardSubmittedAt` set → **"Awaiting your review"**, using the warning-soft pill.
+  - `status === "lead"`, `billingStatus === "paid"` and `wizardSubmittedAt` set → **"Held for review"** (this was "Awaiting your review"), using the warning-soft pill.
   - `lead` and paid without a submitted wizard → **"Paid · setting up"**.
   - Everything else is unchanged.
-- Sort the `/admin/clients` list so "Awaiting your review" clients come first.
+- Sort the `/admin/clients` list so "Held for review" clients come first.
 
 ## 6. Provisioning confirm step
 
@@ -92,7 +92,7 @@ These things need fixing:
 2. The no-DB production build.
 3. Screenshots at 1280:
    - `/signup?plan=solo` while signed in;
-   - the admin client page for a paid self-serve client (no invite button, "Awaiting your review");
+   - the admin client page for a paid self-serve client (no invite button, "Held for review");
    - the provisioning confirm row.
 4. Push the branch and confirm **GitHub CI is green on all three jobs**. Include the run result.
 5. Report: branch, commit, test count, CI result, screenshots, and anything you couldn't do. Daniel will re-run `stripe:sync` on staging after merge, and the report should remind him.

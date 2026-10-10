@@ -1,3 +1,4 @@
+import { GoLiveReviewActions, PauseAvaButton } from "@/components/auto-go-live-controls";
 import { ClientActions } from "@/components/client-actions";
 import { ProvisionPanel } from "@/components/provision-panel";
 import { Button, Card, EmptyState, PageHeader, Pill, SectionCard } from "@/components/ui";
@@ -20,6 +21,7 @@ import {
   numberPurchaseFor,
   plans,
   PROVISION_STEPS,
+  readGoLiveReview,
   provisioningRuns,
   provisionStepLabel,
   TEARDOWN_STEPS,
@@ -33,6 +35,43 @@ import { clientStatusDisplay } from "@/lib/client-status-display";
 import { requireAdmin } from "@/lib/session";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+
+function GoLiveCheckCard({
+  clientId,
+  status,
+  review,
+  paused,
+}: {
+  clientId: string;
+  status: string;
+  review: unknown;
+  paused: boolean;
+}) {
+  const parsed = readGoLiveReview(review);
+  const held = status === "held_for_review";
+  if (!parsed && !held && status !== "live") return null;
+  return (
+    <Card className="grid gap-3">
+      <h2 className="text-base font-extrabold text-[var(--ink)]">Go-live checks</h2>
+      {parsed ? (
+        <ul className="grid gap-1 text-sm">
+          {parsed.checks.map((check) => (
+            <li key={check.id} className="grid gap-0.5">
+              <span className="font-semibold">{check.label}</span>
+              <span className={check.pass ? "text-[var(--success-text)]" : "text-[var(--warning-text)]"}>
+                {check.pass ? "Pass" : `Hold${check.reason ? ` · ${check.reason}` : ""}`}
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-sm text-[var(--muted)]">No automatic check has run for this client.</p>
+      )}
+      <GoLiveReviewActions clientId={clientId} held={held} />
+      {status === "live" ? <PauseAvaButton clientId={clientId} paused={paused} /> : null}
+    </Card>
+  );
+}
 
 function orderedSteps(steps: Array<{ name: string; status: string; error: string | null }>, kind: string | null) {
   const order: readonly string[] = kind === "teardown" ? TEARDOWN_STEPS : PROVISION_STEPS;
@@ -130,6 +169,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
         voiceName={voiceDisplayName(clientVoice.voiceId)}
         appEnv={env.APP_ENV}
       />
+      <GoLiveCheckCard clientId={client.id} status={client.status} review={client.goLiveReview} paused={Boolean(client.adminPausedAt)} />
       {client.wizardSubmittedAt ? (
         <Card className="grid gap-3">
           <h2 className="text-base font-extrabold text-[var(--ink)]">Edit</h2>

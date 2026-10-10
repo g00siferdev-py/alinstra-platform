@@ -8,6 +8,7 @@ import {
 
 describe("marketing-plans helpers", () => {
   it("computes typicalCallsRange from minutes", () => {
+    expect(typicalCallsRange(100)).toEqual({ low: 35, high: 50 });
     expect(typicalCallsRange(150)).toEqual({ low: 50, high: 75 });
     expect(typicalCallsRange(300)).toEqual({ low: 100, high: 150 });
     expect(typicalCallsRange(1000)).toEqual({ low: 330, high: 500 });
@@ -27,9 +28,12 @@ describe("marketing-plans helpers", () => {
       { overagePerMinuteCents: 30, includedMinutes: 1000 },
       { overagePerMinuteCents: 25, includedMinutes: 2500 },
     ];
-    expect(planOverageLine(all[3]!, all)).toBe("Our lowest rate: $0.25 a minute after 2,500");
-    expect(planOverageLine(all[0]!, all)).toBe("$0.40 a minute after 150");
-    expect(planOverageLine(all[3]!, [all[3]!])).toBe("$0.25 a minute after 2,500");
+    expect(planOverageLine(all[3]!, all)).toBe("Our lowest rate: 25¢ a minute after 2,500");
+    expect(planOverageLine(all[0]!, all)).toBe("40¢ a minute after 150");
+    expect(planOverageLine(all[3]!, [all[3]!])).toBe("25¢ a minute after 2,500");
+    expect(planOverageLine({ overagePerMinuteCents: 75, includedMinutes: 100 }, [{ overagePerMinuteCents: 75 }, { overagePerMinuteCents: 35 }])).toBe(
+      "75¢ a minute after 100",
+    );
   });
 
   it("falls back for unknown codes and keeps Solo without founding waiver", () => {

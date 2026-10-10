@@ -383,8 +383,14 @@ export function InterviewChat({
               });
             }}
           >
-            Finish and review
+            {audience === "owner" && done ? "Launch Ava" : "Finish and review"}
           </Button>
+          {audience === "owner" && done ? (
+            <p className="w-full text-sm text-[var(--muted)]">
+              Ava starts answering within a few minutes. You can change anything later from your dashboard.
+            </p>
+          ) : null}
+          {done ? <p className="w-full text-xs text-[var(--muted)]">{INTERVIEW_DISCLAIMER}</p> : null}
           <a href={exitHref}>
             <Button type="button" variant="secondary" disabled={sending || actionPending}>
               Save and exit

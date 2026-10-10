@@ -50,7 +50,7 @@ Phase L: landing page refresh, Solo plan, Enterprise card
     - `cheapestPlan(plans)` for the stat bar.
   - Bullet order on each card: `everythingIn` (bold), then `staticFeatures`, then the changes line, then the overage line.
 - In `brand.ts`, add `export const FOUNDING_OFFER = { active: true, audience: "our first ten businesses" } as const;`
-  - While it's active, plans with `foundingWaiver` show the setup fee struck through plus a "Waived" success pill. Solo always shows "Setup $99 one time".
+  - While it's active, plans with `foundingWaiver` show the setup fee struck through plus a "Waived" success pill. Solo always shows its own setup (now $49 one time; this plan originally said $99).
   - The pricing header pill names the waived plans from the data ("…setup fee waived on Starter, Professional, and Premium for our first ten businesses").
   - When it's inactive, the pill disappears and no fees are struck.
 - `apps/web/src/components/marketing/plan-cards.tsx` (server component):
@@ -71,7 +71,7 @@ Build it in this order. Every word comes from `docs/marketing-copy.md`.
    - Give the hero panel extra bottom padding so the stat bar can overlap it.
 2. **Stat bar.**
    - A white card about 1040px wide, pulled up about 52px over the hero, with a large soft shadow and 4 cells split by divider lines.
-   - The 4th cell is computed: "$99/mo" / "Plans start with Solo", from `cheapestPlan`.
+   - The 4th cell is computed from `cheapestPlan` (now "$49/mo" / "Plans start with Solo"; this plan originally said $99).
    - Below it, a centered chips row: "Made for any business that runs on the phone:" + the INDUSTRIES chips + "See who it's for →".
 3. **How it works.**
    - Centered eyebrow and heading.

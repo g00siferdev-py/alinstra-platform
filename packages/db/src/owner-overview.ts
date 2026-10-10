@@ -21,6 +21,10 @@ export type OwnerOverview = {
   paidAt: Date | null;
   wizardSubmittedAt: Date | null;
   hasInterviewDraft: boolean;
+  status: string;
+  phoneE164: string | null;
+  adminPaused: boolean;
+  heldForReview: boolean;
 };
 
 function startOfWeek(now: Date): Date {
@@ -84,6 +88,8 @@ export async function ownerOverview(ctx: TenantContext, clientId: string, now = 
   let receptionistStatus: OwnerOverview["receptionistStatus"] = "not_set_up";
   if (client.status === "live") {
     receptionistStatus = "live";
+  } else if (client.status === "held_for_review") {
+    receptionistStatus = "in_review";
   } else if (client.wizardSubmittedAt) {
     const connecting =
       Boolean(client.phoneE164) ||
@@ -109,5 +115,9 @@ export async function ownerOverview(ctx: TenantContext, clientId: string, now = 
     paidAt: client.paidAt,
     wizardSubmittedAt: client.wizardSubmittedAt,
     hasInterviewDraft: Boolean(activeInterview) || Boolean(client.wizardSubmittedAt === null),
+    status: client.status,
+    phoneE164: client.phoneE164,
+    adminPaused: Boolean(client.adminPausedAt),
+    heldForReview: client.status === "held_for_review",
   };
 }

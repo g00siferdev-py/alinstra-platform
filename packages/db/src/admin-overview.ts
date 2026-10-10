@@ -281,7 +281,7 @@ export async function adminOverview(ctx: Actor, now = new Date()): Promise<Admin
     todos.push({
       id: `ss-${client.id}`,
       kind: "self_serve_review",
-      title: "New self-serve signup awaiting review",
+      title: "Held for review",
       detail: `${client.name} submitted their setup and is waiting for review.`,
       href: `/admin/clients/${client.id}`,
     });

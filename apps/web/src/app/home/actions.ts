@@ -13,12 +13,13 @@ import {
   setCallAccess,
   setCallRetention,
   setMonthlyReportEmail,
+  shouldEnqueueAutoGoLive,
   submitChangeRequest,
   submitWizard,
   type Actor,
   type QuickUpdateInput,
 } from "@alinstra/db";
-import { enqueueSendAdminNotice, enqueueSyncAgent } from "@alinstra/queue";
+import { enqueueAutoGoLive, enqueueSendAdminNotice, enqueueSyncAgent } from "@alinstra/queue";
 import { requireUser } from "@/lib/session";
 import { revalidatePath } from "next/cache";
 
@@ -218,6 +219,9 @@ export async function ownerSubmitWizardAction(input: {
     const actor = ownerActor(session);
     if (input.clientId !== actor.clientId) throw new Error("Wrong client.");
     await submitWizard(actor, input);
+    if (await shouldEnqueueAutoGoLive(input.clientId)) {
+      await enqueueAutoGoLive({ clientId: input.clientId });
+    }
     revalidatePath("/home");
     revalidatePath("/home/business");
     return { ok: true as const };

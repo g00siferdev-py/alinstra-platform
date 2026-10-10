@@ -182,8 +182,11 @@ export function OwnerSetupReview({
         disabled={pending || !emailVerified || hoursError || transferError}
         onClick={() => void submit()}
       >
-        {pending ? "Submitting…" : emailVerified ? "Submit for review" : "Confirm your email to submit"}
+        {pending ? "Submitting…" : emailVerified ? "Launch Ava" : "Confirm your email to submit"}
       </Button>
+      <p className="text-sm text-[var(--muted)]">
+        Ava starts answering within a few minutes. You can change anything later from your dashboard.
+      </p>
     </div>
   );
 }

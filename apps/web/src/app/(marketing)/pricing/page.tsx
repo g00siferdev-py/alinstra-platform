@@ -126,7 +126,7 @@ export default async function PricingPage() {
             {FOUNDING_OFFER.active && waivedNames.length > 0 ? (
               <p className="text-[var(--body)]">
                 <strong className="font-extrabold text-[var(--ink)]">Founding offer:</strong> setup fee waived on{" "}
-                {joinNames(waivedNames)} for the first ten businesses. Solo keeps its $99 setup.{" "}
+                {joinNames(waivedNames)} for the first ten businesses. Solo keeps its $49 setup.{" "}
                 <Link href="/start">Start</Link>
               </p>
             ) : null}

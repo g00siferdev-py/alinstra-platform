@@ -3,6 +3,7 @@ export { resetTestDatabase } from "./reset-test-database";
 export { clients, createClient, users } from "./repositories";
 export {
   formatIncludedChanges,
+  formatOverageCents,
   formatOveragePerMinute,
   formatPlanCents,
   PLAN_SEEDS,
@@ -15,6 +16,23 @@ export {
   type PublicPlan,
 } from "./plans";
 export { publicSiteConfig, resetPublicSiteConfigCache, type PublicSiteConfig } from "./public-site";
+export {
+  approveAutoGoLive,
+  AUTO_GO_LIVE_SETTING_KEY,
+  autoGoLiveEnabled,
+  declineAutoGoLive,
+  pauseClientByAdmin,
+  readGoLiveReview,
+  resumeClientByAdmin,
+  runAutoGoLive,
+  setAutoGoLive,
+  shouldEnqueueAutoGoLive,
+  SYSTEM_GO_LIVE_ACTOR,
+  type AutoGoLiveDeps,
+  type GoLiveCheck,
+  type GoLiveReview,
+} from "./auto-go-live";
+export { avaLiveWelcomeText, CARRIER_FORWARDING_LINKS, OWNER_HELD_MESSAGE } from "./go-live-copy";
 export {
   createLead,
   leadAdminNotice,

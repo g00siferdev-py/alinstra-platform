@@ -1,10 +1,14 @@
 import {
   adminOverview,
   callLinksFor,
+  CARRIER_FORWARDING_LINKS,
   clientMessages,
   formatLocalTime,
+  formatPhone,
   listCalls,
+  OWNER_HELD_MESSAGE,
   ownerOverview,
+  publicSiteConfig,
   type Actor,
   type TenantContext,
 } from "@alinstra/db";
@@ -278,8 +282,12 @@ export default async function HomePage() {
       role === "client_owner" &&
       overview.selfServe &&
       Boolean(overview.paidAt || overview.billingStatus === "paid") &&
-      !overview.wizardSubmittedAt;
+      !overview.wizardSubmittedAt &&
+      overview.status !== "live" &&
+      !overview.heldForReview;
 
+    const site = role === "client_owner" ? await publicSiteConfig() : null;
+    const avaPhone = overview.phoneE164 ?? overview.publicPhone;
     const recentMessages = messageRows.slice(0, 6);
     // Audit trail: one row for the list, with how many messages were shown.
     await logMessageList(session.user, clientId, recentMessages.length);
@@ -332,6 +340,44 @@ export default async function HomePage() {
               </li>
             </ol>
           </SectionCard>
+        ) : null}
+
+        {role === "client_owner" && overview.heldForReview ? (
+          <Card className="grid gap-2">
+            <h2 className="text-lg font-extrabold text-[var(--ink)]">We&apos;re checking your setup</h2>
+            <p className="text-sm text-[var(--muted)]">{OWNER_HELD_MESSAGE}</p>
+          </Card>
+        ) : null}
+
+        {role === "client_owner" && overview.status === "live" && avaPhone ? (
+          <Card className="grid gap-4">
+            <h2 className="text-lg font-extrabold text-[var(--ink)]">Ava is live</h2>
+            <p className="text-3xl font-extrabold tracking-tight text-[var(--ink)]">{formatPhone(avaPhone)}</p>
+            <a href={`tel:${avaPhone}`}>
+              <Button>Call Ava now</Button>
+            </a>
+            <div className="grid gap-2 text-sm text-[var(--body)]">
+              <p className="font-bold text-[var(--ink)]">Keep your number</p>
+              <p>
+                Set up conditional call forwarding with your carrier so unanswered or busy calls go to Ava&apos;s number.
+              </p>
+              <ul className="flex flex-wrap gap-3 font-semibold">
+                {CARRIER_FORWARDING_LINKS.map((link) => (
+                  <li key={link.name}>
+                    <a href={link.href} target="_blank" rel="noreferrer">
+                      {link.name}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+              <p className="font-bold text-[var(--ink)]">Use Ava&apos;s number as your business line</p>
+              <p>Put it on the truck, the cards, and your Google Business Profile.</p>
+              <p>
+                Need a hand? Reply to your welcome email
+                {site?.phone ? <> or call {formatPhone(site.phone)}</> : null}.
+              </p>
+            </div>
+          </Card>
         ) : null}
 
         {role === "client_owner" && !session.user.emailVerified ? <EmailConfirmBanner /> : null}

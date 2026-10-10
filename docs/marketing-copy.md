@@ -2,7 +2,7 @@
 
 Status: draft 1 reviewed by Daniel Oct 4. Draft 2 (Oct 5) adds the redesigned home page (approved mockup: "Final · Landing page" on the design canvas, copy in `docs/design/landing-mockup.html`), the Solo plan, and the Enterprise contact card. `[Product]` is the receptionist product name; render it from the `PRODUCT_NAME` constant. "Ava" is the default persona name callers hear (`ASSISTANT_NAME`).
 
-Open questions: whether "A backup receptionist, not a replacement" should be the headline rather than the subline; whether the founding offer stays "first ten businesses"; Solo overage rate ($0.40/min proposed).
+Open questions: whether "A backup receptionist, not a replacement" should be the headline rather than the subline; whether the founding offer stays "first ten businesses". Solo is $49/month, $49 setup, 100 minutes, 75¢ overage.
 
 Honesty constraints:
 - Messages are delivered by **email**. Text-message delivery is not built; never say "text."
@@ -34,7 +34,7 @@ Notification cards:
 - **2 rings** — That's how fast Ava picks up
 - **24/7** — Nights, weekends, and holidays
 - **20 min** — One setup chat. No forms.
-- **$99/mo** — Plans start with Solo  *(computed from the cheapest active plan)*
+- **$49/mo** — Plans start with Solo  *(computed from the cheapest active plan)*
 
 Chips row: Made for any business that runs on the phone: HVAC · Veterinary · Home services · Salons · Auto shops · Offices · [See who it's for →]
 
@@ -75,14 +75,14 @@ Founding pill: Founding offer: setup fee waived on Starter, Professional, and Pr
 
 Cards (see PRICING below for numbers):
 - **Solo** (pill: Self-serve) — For owner-operators who want to sound like a real business. CTA [Start Solo]
-  Answers 24/7 in two rings · Messages and appointment requests by email · Urgent transfers during business hours · Guided 20-minute setup chat · 1 update to Ava's info each month · $0.40 a minute after 150
+  Answers 24/7 in two rings · Messages and appointment requests by email · Urgent transfers during business hours · Guided 20-minute setup chat · 1 update to Ava's info each month · 75¢ a minute after 100
 - **Starter** — For one location missing a handful of calls a week. CTA [Get started]
   **Everything in Solo** · Hands-on setup review, plus a setup call if you want one · 1 update to Ava's info each month · $0.35 a minute after 300
 - **Professional** (badge: Recommended) — For busy offices and after-hours emergencies. CTA [Get started] (primary)
   **Everything in Starter** · Calendar booking once your calendar is connected · 2 updates to Ava's info each month · $0.30 a minute after 1,000
 - **Premium** — For high call volume and frequent changes. CTA [Get started]
   **Everything in Professional** · Unlimited updates to Ava's info · Our lowest rate: $0.25 a minute after 2,500
-Each card also shows "N minutes included / About X to Y typical calls" (2–3 minutes per call) and the setup line ("Setup $99 one time" on Solo; struck-through fee + "Waived" pill on the others while the founding offer is on). Plan CTAs go to `/signup?plan=<code>`.
+Each card also shows "N minutes included / About X to Y typical calls" (2–3 minutes per call) and the setup line ("Setup $49 one time" on Solo; struck-through fee + "Waived" pill on the others while the founding offer is on). Plan CTAs go to `/signup?plan=<code>`.
 
 Enterprise card (dark): **Enterprise** (pill: Custom pricing) — Several locations, heavy call volume, or special requirements? We'll build a plan around you. [Contact us] → `/start?plan=enterprise`
 
@@ -141,17 +141,17 @@ Legal: Privacy · Terms · AI disclosure
 ## PRICING (cards and table render live from the Plan table)
 
 **Simple plans. No per-call surprises.**
-Start on your own with Solo, or let our team set you up. Every plan includes a person reviewing Ava before she goes live, a dedicated local number (or use your own), instant message delivery by email, transcripts and recordings, and the owner portal.
+Start on your own with Solo, or let our team set you up. Every plan includes a dedicated local number (or use your own), instant message delivery by email, transcripts and recordings, and the owner portal. Solo can go live after an automatic check; the other plans still get a person in the loop.
 
 | | Solo | Starter | Professional | Premium |
 |---|---|---|---|---|
-| Monthly | $99 | $199 | $399 | $699 |
-| Included minutes | 150 | 300 | 1,000 | 2,500 |
-| Overage | $0.40/min | $0.35/min | $0.30/min | $0.25/min |
-| Setup | $99 (self-serve) | $299 | $499 | $799 |
+| Monthly | $49 | $199 | $399 | $699 |
+| Included minutes | 100 | 300 | 1,000 | 2,500 |
+| Overage | 75¢/min | 35¢/min | 30¢/min | 25¢/min |
+| Setup | $49 (self-serve) | $299 | $499 | $799 |
 | Included changes/month | 1 | 1 | 2 | Unlimited |
 
-**Founding offer:** setup fee waived on Starter, Professional, and Premium for the first ten businesses. Solo keeps its $99 setup. [Start]
+**Founding offer:** setup fee waived on Starter, Professional, and Premium for the first ten businesses. Solo keeps its $49 setup. [Start]
 Not sure which plan? Just you and your truck? Solo. Most single-location businesses that miss 5 to 15 calls a week fit Starter. A busy clinic or a company with after-hours emergencies usually wants Professional.
 Minutes count only while Ava is on the line. A typical message takes two to three minutes.
 Billed monthly. Cancel anytime; service runs to the end of your paid month. Sales tax added where required.

@@ -9,6 +9,8 @@ import {
   extractKnowledgeText,
   KNOWLEDGE_QUEUE,
   PROVISION_QUEUE,
+  approveAutoGoLiveJob,
+  autoGoLive,
   provisionClient,
   scheduleBackupDb,
   schedulePurgeCalls,
@@ -130,6 +132,17 @@ const provision = new Worker(
   async (job) => {
     if (job.name === "provision-client") {
       await runProvision(provisionClient.parse(job.data).clientId);
+      return;
+    }
+    if (job.name === "auto-go-live") {
+      const { runAutoGoLiveJob } = await import("./jobs/auto-go-live");
+      await runAutoGoLiveJob(autoGoLive.parse(job.data).clientId);
+      return;
+    }
+    if (job.name === "approve-auto-go-live") {
+      const { runApproveAutoGoLiveJob } = await import("./jobs/auto-go-live");
+      const payload = approveAutoGoLiveJob.parse(job.data);
+      await runApproveAutoGoLiveJob(payload.clientId, payload.actorId);
       return;
     }
     if (job.name === "sync-agent") {

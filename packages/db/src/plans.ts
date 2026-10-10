@@ -7,10 +7,10 @@ export const PLAN_SEEDS = [
   {
     code: "solo",
     name: "Solo",
-    monthlyPriceCents: 9900,
-    includedMinutes: 150,
-    overagePerMinuteCents: 40,
-    setupFeeCents: 9900,
+    monthlyPriceCents: 4900,
+    includedMinutes: 100,
+    overagePerMinuteCents: 75,
+    setupFeeCents: 4900,
     includedChangesPerMonth: 1,
     sortOrder: 0,
   },
@@ -56,7 +56,15 @@ export async function seedPlans(): Promise<void> {
         recallMonthlyCents: 2500,
         recallPerBookingCents: 600,
       },
-      update: {},
+      update:
+        plan.code === "solo"
+          ? {
+              monthlyPriceCents: plan.monthlyPriceCents,
+              includedMinutes: plan.includedMinutes,
+              overagePerMinuteCents: plan.overagePerMinuteCents,
+              setupFeeCents: plan.setupFeeCents,
+            }
+          : {},
     });
   }
 }
@@ -164,8 +172,14 @@ export function formatPlanCents(cents: number): string {
   return `$${dollars.toFixed(2)}`;
 }
 
+/** Sub-dollar overage reads as cents (75¢), not $0.75. */
+export function formatOverageCents(cents: number): string {
+  if (Number.isInteger(cents) && cents > 0 && cents < 100) return `${cents}¢`;
+  return formatPlanCents(cents);
+}
+
 export function formatOveragePerMinute(cents: number): string {
-  return `${formatPlanCents(cents)}/min`;
+  return `${formatOverageCents(cents)}/min`;
 }
 
 export function formatIncludedChanges(value: number | null): string {

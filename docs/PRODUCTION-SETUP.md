@@ -33,6 +33,8 @@ Set `APP_ENV=production` on both services. Set `PG_MAJOR` to the Postgres major 
 | `ENCRYPTION_KEY` | yes | yes | **New**. Keep your offline copy. Staging's key must never be reused. |
 | `ENCRYPTION_ACTIVE_KEY` | yes | yes | `1` until you rotate (see `docs/KEY-ROTATION.md`) |
 | `ADMIN_EMAIL` | yes | yes | The address that receives lead and billing notices |
+| `AUTO_GO_LIVE_DAILY_CAP` | no | worker | Optional. Max automatic go-lives per rolling 24 hours. Default 15 |
+| `AUTO_GO_LIVE_ALLOW_TEST` | never in production | never in production | Must stay unset. `1` would let Stripe test-mode payments buy Retell numbers |
 | `ADMIN_INITIAL_PASSWORD` | web only, until seed | no | One-time, 12+ characters. Delete after two-factor is enrolled |
 | `DATABASE_URL` | yes | yes | Railway Postgres → **Connect** → the private URL |
 | `REDIS_URL` | yes | yes | Railway Redis → **Connect** |
@@ -122,6 +124,7 @@ Use the same Retell workspace. Client zero's agent and number already exist ther
 2. Submit `/start` on `https://alinstra.com`. The admin inbox (`ADMIN_EMAIL`) should get one "New lead" email, and `/admin/leads` should show Source `prelaunch`.
 3. Sign in as admin.
 4. Sentry (environment `production`) should have no startup errors.
+5. Turn on Auto go-live in Admin → Services once Stripe is live. Leave it off until then. `AUTO_GO_LIVE_ALLOW_TEST` must never be set in production.
 
 ## 9. Going live later
 

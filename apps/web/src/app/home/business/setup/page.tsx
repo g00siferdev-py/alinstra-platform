@@ -43,8 +43,8 @@ export default async function OwnerSetupPage() {
         Home
       </Link>
       <PageHeader
-        title="Review and submit"
-        description="Check what the interview captured, then send it to our team for review."
+        title="Review and launch"
+        description="Check what the interview captured. Launch Ava when it looks right."
       />
       <OwnerSetupReview
         clientId={client.id}

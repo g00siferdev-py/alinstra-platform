@@ -46,10 +46,10 @@ describe("publicPlans", () => {
     expect(plans.map((plan) => plan.code)).toEqual(["solo", "starter", "professional", "premium"]);
     expect(plans[0]).toMatchObject({
       name: "Solo",
-      monthlyPriceCents: 9900,
-      includedMinutes: 150,
-      overagePerMinuteCents: 40,
-      setupFeeCents: 9900,
+      monthlyPriceCents: 4900,
+      includedMinutes: 100,
+      overagePerMinuteCents: 75,
+      setupFeeCents: 4900,
       includedChangesPerMonth: 1,
       sortOrder: 0,
     });
@@ -64,7 +64,8 @@ describe("publicPlans", () => {
     expect(plans[3]?.includedChangesPerMonth).toBeNull();
     expect(formatPlanCents(19900)).toBe("$199");
     expect(formatPlanCents(35)).toBe("$0.35");
-    expect(formatOveragePerMinute(35)).toBe("$0.35/min");
+    expect(formatOveragePerMinute(35)).toBe("35¢/min");
+    expect(formatOveragePerMinute(75)).toBe("75¢/min");
     expect(formatIncludedChanges(1)).toBe("1");
     expect(formatIncludedChanges(null)).toBe("Unlimited");
   });
