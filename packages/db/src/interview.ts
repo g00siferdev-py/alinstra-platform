@@ -273,6 +273,7 @@ export async function postInterviewMessage(
     clientMessageId: string;
     text: TextPlatform;
     budget: { inputTokens: number; outputTokens: number };
+    onDelta?: (confirmation: string) => void;
   },
 ): Promise<PostInterviewMessageResult> {
   const session = await getInterviewSession(ctx, input.sessionId);
@@ -299,6 +300,7 @@ export async function postInterviewMessage(
     userMessage: input.message,
     text: input.text,
     budget: input.budget,
+    onDelta: input.onDelta,
   });
 
   const lastLog = result.state.turnLog?.[result.state.turnLog.length - 1];

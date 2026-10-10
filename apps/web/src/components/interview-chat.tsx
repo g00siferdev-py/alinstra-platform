@@ -46,6 +46,65 @@ export const INTERVIEW_DISCLAIMER =
 
 type ThinkingPhase = "thinking" | "still" | "slow";
 
+async function streamOrSend(
+  sessionId: string,
+  message: string,
+  clientMessageId: string,
+  audience: InterviewChatAudience,
+  onToken: (chunk: string) => void,
+): Promise<InterviewSendResult> {
+  try {
+    const response = await fetch("/api/interview/turn", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ sessionId, message, clientMessageId }),
+    });
+    if (response.ok && response.body) {
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let pending = "";
+      let doneEvent: InterviewSendResult | null = null;
+      while (true) {
+        const chunk = await reader.read();
+        if (chunk.done) break;
+        pending += decoder.decode(chunk.value, { stream: true });
+        const lines = pending.split("\n");
+        pending = lines.pop() ?? "";
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed.startsWith("data:")) continue;
+          const event = JSON.parse(trimmed.slice("data:".length).trim()) as {
+            type?: string;
+            text?: string;
+            ok?: boolean;
+            reply?: string;
+            done?: boolean;
+            transcript?: InterviewChatTurn[];
+            captured?: Record<string, unknown>;
+            conflict?: boolean;
+            error?: string;
+          };
+          if (event.type === "token" && event.text) onToken(event.text);
+          if (event.type === "done") {
+            doneEvent = event.ok
+              ? { ok: true, reply: event.reply, done: event.done, transcript: event.transcript, captured: event.captured }
+              : { ok: false, error: event.error, conflict: event.conflict, transcript: event.transcript, captured: event.captured, done: event.done };
+          }
+        }
+      }
+      if (doneEvent) return doneEvent;
+    }
+  } catch {
+    // Fall through to the buffered server action.
+  }
+  const result =
+    audience === "admin"
+      ? await adminSendInterviewMessage(sessionId, message, clientMessageId)
+      : await ownerSendInterviewMessage(sessionId, message, clientMessageId);
+  if (!result) return { ok: false, error: "Could not send that." };
+  return result;
+}
+
 function ThinkingBubble({ phase }: { phase: ThinkingPhase }) {
   const label =
     phase === "slow"
@@ -114,6 +173,7 @@ export function InterviewChat({
   const [sending, setSending] = useState(false);
   const [sendFailed, setSendFailed] = useState(false);
   const [thinkingPhase, setThinkingPhase] = useState<ThinkingPhase>("thinking");
+  const [pendingReply, setPendingReply] = useState("");
   const lastSentRef = useRef<string | null>(null);
   const lastClientMessageIdRef = useRef<string | null>(null);
   const sendGenerationRef = useRef(0);
@@ -166,11 +226,16 @@ export function InterviewChat({
     lastSentRef.current = text;
     lastClientMessageIdRef.current = clientMessageId;
     setSending(true);
+    setPendingReply("");
     setSendFailed(false);
     setError(null);
     const generation = ++sendGenerationRef.current;
     try {
-      const result = await send(sessionId, text, clientMessageId);
+      const result = sendMessage
+        ? await send(sessionId, text, clientMessageId)
+        : await streamOrSend(sessionId, text, clientMessageId, audience, (chunk) => {
+            setPendingReply((current) => current + chunk);
+          });
       if (generation !== sendGenerationRef.current) return;
       if (!result.ok) {
         if (result.conflict && result.transcript) {
@@ -191,9 +256,11 @@ export function InterviewChat({
       }
       if (result.captured) setCaptured(result.captured);
       if (result.done) setDone(true);
+      setPendingReply("");
       setSending(false);
     } catch {
       if (generation !== sendGenerationRef.current) return;
+      setPendingReply("");
       setSendFailed(true);
       setSending(false);
     }
@@ -262,7 +329,14 @@ export function InterviewChat({
               </div>
             );
           })}
-          {sending ? <ThinkingBubble phase={thinkingPhase} /> : null}
+          {sending && pendingReply ? (
+            <div className="flex justify-start">
+              <div className="max-w-[90%] rounded-2xl bg-[var(--surface-subtle)] px-3.5 py-2.5 text-sm whitespace-pre-wrap text-[var(--ink)]">
+                {pendingReply}
+              </div>
+            </div>
+          ) : null}
+          {sending && !pendingReply ? <ThinkingBubble phase={thinkingPhase} /> : null}
           <div ref={transcriptEndRef} />
         </div>
 

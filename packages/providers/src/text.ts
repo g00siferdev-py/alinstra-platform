@@ -1,3 +1,4 @@
+import { confirmationSoFar, consumeSseBuffer, openAiContentDelta } from "./sse";
 import {
   DEFAULT_TEXT_API_BASE,
   DEFAULT_TEXT_MODEL,
@@ -325,7 +326,99 @@ export function httpText(options: HttpTextOptions): TextPlatform {
     return { text: lastText, inputTokens: totalIn, outputTokens: totalOut, model, finishReason: lastFinish };
   }
 
+  async function completeStream(
+    input: TextCompleteInput,
+    onDelta?: (confirmation: string) => void,
+  ): Promise<TextCompleteResult> {
+    const system = input.json
+      ? `${input.system}\n\nRespond with a single JSON object only. No markdown fences, no commentary.`
+      : input.system;
+    const url = `${baseUrl}/chat/completions`;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const headers: Record<string, string> = {
+        authorization: `Bearer ${apiKey}`,
+        "content-type": "application/json",
+      };
+      if (openRouter) {
+        headers["HTTP-Referer"] = "https://alinstra.com";
+        headers["X-Title"] = "Alinstra";
+      }
+      const body: Record<string, unknown> = {
+        model: primaryModel,
+        messages: [{ role: "system", content: system }, ...input.messages],
+        max_tokens: input.maxTokens,
+        temperature: 0.4,
+        stream: true,
+      };
+      if (input.json) body.response_format = { type: "json_object" };
+      const response = await fetchImpl(url, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+      if (!response.ok || !response.body) {
+        throw new ProviderRequestError(`Text API stream failed (${response.status})`, response.status || 500);
+      }
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let pending = "";
+      let assembled = "";
+      let shown = "";
+      let inputTokens = 0;
+      let outputTokens = 0;
+      let finishReason: string | null = null;
+      while (true) {
+        const chunk = await reader.read();
+        if (chunk.done) break;
+        pending += decoder.decode(chunk.value, { stream: true });
+        const pulled = consumeSseBuffer(pending);
+        pending = pulled.rest;
+        for (const data of pulled.data) {
+          if (data !== "[DONE]") {
+            try {
+              const json = JSON.parse(data) as {
+                usage?: { prompt_tokens?: number; completion_tokens?: number };
+                choices?: Array<{ finish_reason?: string | null }>;
+              };
+              if (json.usage?.prompt_tokens) inputTokens = json.usage.prompt_tokens;
+              if (json.usage?.completion_tokens) outputTokens = json.usage.completion_tokens;
+              const reason = json.choices?.[0]?.finish_reason;
+              if (typeof reason === "string") finishReason = reason;
+            } catch {
+              // Partial JSON is ignored; content deltas are handled below.
+            }
+          }
+          assembled += openAiContentDelta(data);
+          const confirmation = confirmationSoFar(assembled);
+          if (confirmation.length > shown.length) {
+            onDelta?.(confirmation.slice(shown.length));
+            shown = confirmation;
+          }
+        }
+      }
+      return {
+        text: assembled,
+        inputTokens,
+        outputTokens,
+        model: primaryModel,
+        finishReason,
+      };
+    } catch (error) {
+      if (error instanceof ProviderRequestError) throw error;
+      if (error instanceof Error && error.name === "AbortError") {
+        throw new ProviderRequestError("Text API request timed out", 408);
+      }
+      throw error;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   return {
+    completeStream,
     async complete(input) {
       const system = input.json
         ? `${input.system}\n\nRespond with a single JSON object only. No markdown fences, no commentary.`

@@ -287,13 +287,23 @@ async function completeOnce(
   text: TextPlatform,
   system: string,
   framed: { role: "user" | "assistant"; content: string }[],
+  onDelta?: (confirmation: string) => void,
 ): Promise<TextCompleteResult> {
-  return text.complete({
+  const request = {
     system,
     messages: framed,
     maxTokens: MAX_TOKENS,
-    json: true,
-  });
+    json: true as const,
+  };
+  if (text.completeStream) {
+    try {
+      return await text.completeStream(request, onDelta);
+    } catch (error) {
+      if (error instanceof ProviderRequestError && error.status === 408) throw error;
+      return text.complete(request);
+    }
+  }
+  return text.complete(request);
 }
 
 function joinReply(confirmation: string | null | undefined, next: string): string {
@@ -349,6 +359,7 @@ export async function interviewTurn(input: {
   userMessage: string;
   text: TextPlatform;
   budget?: InterviewBudget;
+  onDelta?: (confirmation: string) => void;
 }): Promise<InterviewTurnResult> {
   const budget = input.budget ?? { ...DEFAULT_TEXT_TOKEN_BUDGET };
   const state = normalizeInterviewState(input.state);
@@ -378,7 +389,7 @@ export async function interviewTurn(input: {
 
   let completion: TextCompleteResult;
   try {
-    completion = await completeOnce(input.text, system, framed);
+    completion = await completeOnce(input.text, system, framed, input.onDelta);
   } catch (error) {
     const classified = classifyInterviewError(error);
     const reply = "I had trouble reaching the interview assistant. Try that answer again in a moment.";

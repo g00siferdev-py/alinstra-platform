@@ -1,4 +1,4 @@
-import { memoryText, ProviderRequestError } from "@alinstra/providers";
+import { memoryText, ProviderRequestError, type TextPlatform } from "@alinstra/providers";
 import { describe, expect, it } from "vitest";
 import { banksFor } from "./banks";
 import {
@@ -193,6 +193,49 @@ describe("interviewTurn", () => {
     expect(result.state.tokenUsage.inputTokens).toBeGreaterThan(0);
     expect(result.state.turnLog?.[0]?.parseOk).toBe(true);
     expect(result.state.currentQuestionId).toBe("gen.services");
+  });
+
+  it("produces the same session state for a streamed turn and a buffered turn", async () => {
+    const payload = modelJson({
+      confirmation: "Open weekdays 9 to 5.",
+      updates: { knowledge: { hours: "Mon-Fri 9:00-17:00" } },
+      answerStatus: "answered",
+    });
+    const resultFor = {
+      text: payload,
+      inputTokens: 12,
+      outputTokens: 6,
+      model: "memory-text",
+    };
+    function platform(stream: boolean): TextPlatform {
+      return {
+        async complete() {
+          return resultFor;
+        },
+        completeStream: stream
+          ? async (_input, onDelta) => {
+              onDelta?.("Open ");
+              onDelta?.("weekdays 9 to 5.");
+              return resultFor;
+            }
+          : undefined,
+      };
+    }
+    const userMessage = "We're open Monday through Friday, 9 to 5.";
+    const buffered = await interviewTurn({
+      state: initialInterviewState("general"),
+      userMessage,
+      text: platform(false),
+    });
+    const streamed = await interviewTurn({
+      state: initialInterviewState("general"),
+      userMessage,
+      text: platform(true),
+    });
+    expect(streamed.state.collected).toEqual(buffered.state.collected);
+    expect(streamed.state.answeredQuestions).toEqual(buffered.state.answeredQuestions);
+    expect(streamed.state.currentQuestionId).toEqual(buffered.state.currentQuestionId);
+    expect(streamed.reply).toBe(buffered.reply);
   });
 
   it("saves services returned as an array and still shows the confirmation plus next question", async () => {

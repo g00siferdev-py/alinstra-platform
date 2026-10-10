@@ -317,6 +317,15 @@ export type TextCompleteResult = {
 
 export interface TextPlatform {
   complete(input: TextCompleteInput): Promise<TextCompleteResult>;
+  /**
+   * Optional. Yields the confirmation sentence as it is generated, then resolves
+   * with the same result `complete` would. Throw to fall back to `complete`
+   * (used for models that cannot stream).
+   */
+  completeStream?(
+    input: TextCompleteInput,
+    onDelta?: (confirmation: string) => void,
+  ): Promise<TextCompleteResult>;
 }
 
 /** Default per-interview token budgets. Interview engine enforces these. */
